@@ -11,6 +11,8 @@ import numpy as np
 
 # --- הגדרות ---
 CHANNEL_ID = 'UC_HwfTAcjBESKZRJq6BTCpg'
+# המזהה של רשימת ההעלאות
+UPLOADS_PLAYLIST_ID = 'UU_HwfTAcjBESKZRJq6BTCpg' 
 SHEET_NAME = 'נתוני יוטיוב'
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
@@ -34,15 +36,14 @@ def format_duration(seconds):
     else:
         return f"{int(s)}s"
 
-# --- פונקציה חדשה: מציאת ה-ID האמיתי של ההעלאות ---
 def get_uploads_playlist_id(youtube):
     print(f"Getting uploads ID for channel: {CHANNEL_ID}")
-    request = youtube.channels().list(
-        part="contentDetails",
-        id=CHANNEL_ID
-    )
-    response = request.execute()
     try:
+        request = youtube.channels().list(
+            part="contentDetails",
+            id=CHANNEL_ID
+        )
+        response = request.execute()
         uploads_id = response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
         print(f"Found Uploads Playlist ID: {uploads_id}")
         return uploads_id
@@ -53,21 +54,19 @@ def get_uploads_playlist_id(youtube):
 def fetch_videos():
     youtube = get_youtube_service()
     
-    # שלב 1: משיכת ה-ID הנכון
     uploads_playlist_id = get_uploads_playlist_id(youtube)
     if not uploads_playlist_id:
-        print("CRITICAL ERROR: Could not find playlist ID. Exiting.")
         return pd.DataFrame()
 
     il_timezone = pytz.timezone('Asia/Jerusalem')
     current_time_il = datetime.now(il_timezone).strftime('%Y-%m-%d %H:%M')
     
-    # הגדרת זמן חיתוך (30 יום אחורה)
+    # חיתוך ל-30 יום
     cutoff_date = datetime.now(pytz.utc) - timedelta(days=30)
     
     videos = []
     next_page_token = None
-    video_count = 0
+    should_stop = False # דגל עצירה חדש
     
     print("Starting to fetch videos...")
     
@@ -82,21 +81,22 @@ def fetch_videos():
         
         video_ids_to_fetch = []
         
-        # סינון ראשוני לפי תאריך
         for item in response['items']:
             pub_date_str = item['contentDetails']['videoPublishedAt']
             pub_date = datetime.strptime(pub_date_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
             
+            # בדיקת עצירה
             if pub_date < cutoff_date:
-                print(f"Reached old videos ({pub_date_str}). Stopping fetch.")
-                next_page_token = None 
+                print(f"Reached limit ({pub_date_str}). Stopping.")
+                should_stop = True
                 break
             
             video_ids_to_fetch.append(item['contentDetails']['videoId'])
         
+        # אם אין סרטונים במנה הזו, או שהדגל הורם - יוצאים
         if not video_ids_to_fetch:
             break
-            
+
         print(f"Fetching stats for batch of {len(video_ids_to_fetch)} videos...")
 
         stats_request = youtube.videos().list(
@@ -106,6 +106,7 @@ def fetch_videos():
         stats_response = stats_request.execute()
         
         for item in stats_response['items']:
+            # לוגיקת נתונים
             duration_iso = item['contentDetails']['duration']
             try:
                 duration_seconds = isodate.parse_duration(duration_iso).total_seconds()
@@ -152,11 +153,15 @@ def fetch_videos():
                 'video_url': video_url,
                 'last_updated': current_time_il
             })
-            video_count += 1
             
-        if not next_page_token and 'nextPageToken' in response:
+        # בדיקה אם צריך לעצור את הלולאה הראשית
+        if should_stop:
+            break
+            
+        # מעבר לעמוד הבא
+        if 'nextPageToken' in response:
              next_page_token = response['nextPageToken']
-        elif not next_page_token:
+        else:
              break
     
     print(f"Total videos fetched: {len(videos)}")
@@ -176,7 +181,6 @@ def update_google_sheet(new_data_df):
     existing_data = worksheet.get_all_records()
     existing_df = pd.DataFrame(existing_data)
     
-    # אם הטבלה ריקה (כמו המצב שלך עכשיו)
     if existing_df.empty:
         print("Sheet is empty. Writing fresh data...")
         final_df = new_data_df
