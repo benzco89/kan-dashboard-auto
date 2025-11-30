@@ -54,7 +54,6 @@ def analyze_with_gemini(df_recent):
     total_views = df_recent['views'].sum()
     total_videos = len(df_recent)
     avg_views = int(total_views / total_videos) if total_videos > 0 else 0
-    top_video = df_recent.loc[df_recent['views'].idxmax()]
     
     # הכנת הדאטה לניתוח
     # משאירים את video_type כדי שיידע לזהות שורטס
@@ -81,7 +80,7 @@ def analyze_with_gemini(df_recent):
     אל תעבוד לפי "רשימת מכולת" (סעיף 1, 2, 3), אלא כתוב טקסט זורם שמחולק לפסקאות הגיוניות.
 
     דגשים קריטיים לכתיבה:
-    1. **תתחיל במספרים:** אל תגיד "בינוני" או "טוב". תגיד "פתחנו את הבוקר עם 350K צפיות, שזה נתון סולידי/חלש/מטורף".
+    1. **תתחיל במספרים:** אל תגיד "בינוני" או "טוב". תגיד "פתחנו את הבוקר עם X צפיות, שזה נתון סולידי/חלש/מטורף".
     2. **דבר על התוכן:** איזה נושא תפס? למה? חבר בין כתבות דומות (למשל: "הכלכלה בלטה מעל הביטחון").
     3. **זיהוי פורמט:** אם אתה מזכיר סרטון והוא Short - חובה לכתוב בסוגריים: *(שורטס)*. אם זו כתבה רגילה, תתייחס אליה כ"כתבה".
     4. **קרדיט לכתבים:** אם יש כתב שכיכב (לפי התיאור), תן לו מילה טובה.
@@ -90,15 +89,6 @@ def analyze_with_gemini(df_recent):
     סגנון: דבר אלינו כמו עורך חדשות. מקצועי, חד, משתמש במונחים כמו "אייטם", "חשיפה", "ויראלי".
     """
 
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"שגיאה בניתוח: {e}"    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"שגיאה בניתוח: {e}"    
     try:
         response = model.generate_content(prompt)
         return response.text
