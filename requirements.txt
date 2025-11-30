@@ -1,0 +1,6 @@
+pandas
+google-api-python-client
+gspread
+oauth2client
+isodate
+openssl
