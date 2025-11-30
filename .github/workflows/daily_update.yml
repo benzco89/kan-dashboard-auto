@@ -1,0 +1,30 @@
+name: Daily YouTube Update
+
+on:
+  schedule:
+    # רץ כל יום ב-04:00 UTC (שזה 06:00 או 07:00 בבוקר בישראל)
+    - cron: '0 4 * * *'
+  workflow_dispatch: # מאפשר להריץ ידנית בלחיצת כפתור לבדיקה
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run update script
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: python main.py
