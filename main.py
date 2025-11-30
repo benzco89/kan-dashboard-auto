@@ -50,27 +50,44 @@ def analyze_with_gemini(df_recent):
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.0-flash')
 
-    # שולחים כותרת, תיאור, תגיות ומספרים
-    data_str = df_recent[['title', 'description', 'tags', 'views', 'likes', 'video_type', 'published_at']].to_string(index=False)
-    today = datetime.now(pytz.timezone('Asia/Jerusalem')).strftime('%d/%m/%Y')
+    # --- הכנת הנתונים לניתוח מדויק יותר ---
+    # יצירת עותק לניתוח בלבד
+    analysis_df = df_recent[['title', 'description', 'video_type', 'views', 'like_rate', 'comment_rate', 'published_at']].copy()
+    
+    # המרה לפורמט קריא יותר ל-AI (הוספת סימני אחוזים וקיצור מספרים)
+    # זה עוזר לו להבין פרופורציות בלי לנחש
+    analysis_df['views'] = analysis_df['views'].apply(lambda x: f"{x:,}")
+    analysis_df['like_rate'] = analysis_df['like_rate'].astype(str) + '%'
+    analysis_df['comment_rate'] = analysis_df['comment_rate'].astype(str) + '%'
+    
+    data_str = analysis_df.to_string(index=False)
+    
+    today_date = datetime.now(pytz.timezone('Asia/Jerusalem')).strftime('%d/%m/%Y')
 
     prompt = f"""
-    אתה העורך הראשי ואנליסט הדיגיטל של "כאן חדשות". התאריך היום: {today}.
-    מטרה: דוח בוקר מבצעי לצוות על ביצועי האתמול.
+    אתה אנליסט דאטה ציני ומקצועי של "כאן חדשות". התאריך: {today_date}.
+    המטרה: דוח בוקר מבוסס עובדות בלבד. אסור להשתמש בקלישאות שיווקיות ("הקהל צמא", "תוכן מרגש").
 
-    הנה הנתונים מהימים האחרונים (כולל תיאורים ותגיות):
+    הנה הנתונים הגולמיים (שים לב לעמודות like_rate ו-comment_rate - הן המדד לאיכות):
     {data_str}
 
-    כתוב דוח קצר (עד 180 מילים) הכולל:
-    1. 📈 **השורה התחתונה:** סיכום ביצועים ב-24 שעות האחרונות.
-    2. 🧩 **הנושאים החמים:** איזה נושא (צבא/כלכלה/פוליטיקה) עניין את הקהל אתמול? זהה מכנה משותף.
-    3. 🏆 **המנצח היומי:** הסרטון הכי נצפה ולמה הוא תפס.
-    4. 🎙️ **גזרת הכתבים:** חפש בתיאורים שמות כתבים. האם כתב ספציפי הביא מספרים חריגים?
-    5. 🔥 **Evergreen:** האם יש סרטון ישן (מלפני 2-3 ימים) שעדיין בראש הטבלה?
+    נתח וכתוב דוח קצר (עד 180 מילים) לפי הסעיפים הבאים:
 
-    סגנון: מקצועי, חדשותי, עם אימוג'ים, קצר ולעניין.
+    1. 📊 **סטטוס יומי:** האם המספרים גבוהים או נמוכים מהרגיל ברשימה הזו?
+    2. 💎 **איכות מול כמות (חשוב!):** זהה סרטון שהיו לו צפיות גבוהות אבל אחוז לייקים/תגובות נמוך (קליקבייט/מחלוקת), או להפך - סרטון עם מעט צפיות אבל אחוז מעורבות חריג וגבוה (קהל נאמן). תן דוגמה ספציפית.
+    3. 🎙️ **ביצועי כתבים:** חפש שמות בתיאור. מי הכתב שהביא את המספרים הכי חזקים אתמול? (ציין את השם והמספר).
+    4. 🧩 **ניתוח נושאי:** קבץ את הסרטונים לפי נושאים (למשל: צבא, כלכלה, פוליטיקה). איזה "קלסטר" (קבוצת נושאים) ניצח בממוצע צפיות? אל תנחש למה, רק ציין את העובדה.
+
+    סגנון:
+    * קצר, חד, מבוסס מספרים.
+    * בלי "מילים יפות". אם משהו נכשל - תגיד שנכשל.
     """
-    
+
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"שגיאה בניתוח: {e}"    
     try:
         response = model.generate_content(prompt)
         return response.text
