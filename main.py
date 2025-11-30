@@ -6,10 +6,11 @@ from oauth2client.service_account import ServiceAccountCredentials
 import gspread
 import isodate
 from datetime import datetime, timedelta
+import pytz # חשוב לזמן ישראל
 
 # --- הגדרות ---
-CHANNEL_ID = 'UC_HwfTAcjBESKZRJq6BTCpg' # כאן חדשות
-SHEET_NAME = 'נתוני יוטיוב' # ודא שזה השם של הטאב למטה בשיטס!
+CHANNEL_ID = 'UC_HwfTAcjBESKZRJq6BTCpg'
+SHEET_NAME = 'נתוני יוטיוב' # השם החדש שקבעת
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
 def get_youtube_service():
@@ -17,7 +18,6 @@ def get_youtube_service():
     return build('youtube', 'v3', developerKey=api_key)
 
 def get_sheet_client():
-    # טעינת המפתח מהסודות
     creds_json = json.loads(os.environ['GCP_SERVICE_ACCOUNT'])
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, SCOPES)
     return gspread.authorize(creds)
@@ -25,12 +25,17 @@ def get_sheet_client():
 def fetch_videos():
     youtube = get_youtube_service()
     
-    # משיכת סרטונים מהחודש האחרון (כדי לעדכן גם ישנים)
+    # זמן ישראל לעדכון האחרון
+    il_timezone = pytz.timezone('Asia/Jerusalem')
+    current_time_il = datetime.now(il_timezone).strftime('%Y-%m-%d %H:%M')
+    
+    # משיכת 30 יום אחורה
     published_after = (datetime.now() - timedelta(days=30)).isoformat() + "Z"
     
     videos = []
     next_page_token = None
     
+    print("Fetching videos from YouTube...")
     while True:
         request = youtube.search().list(
             part="snippet",
@@ -45,7 +50,9 @@ def fetch_videos():
         
         video_ids = [item['id']['videoId'] for item in response['items']]
         
-        # משיכת סטטיסטיקות מלאות ל-IDs שמצאנו
+        if not video_ids:
+            break
+
         stats_request = youtube.videos().list(
             part="snippet,contentDetails,statistics",
             id=','.join(video_ids)
@@ -53,32 +60,29 @@ def fetch_videos():
         stats_response = stats_request.execute()
         
         for item in stats_response['items']:
-            # חישוב שניות
             duration_iso = item['contentDetails']['duration']
             try:
                 duration_seconds = isodate.parse_duration(duration_iso).total_seconds()
             except:
                 duration_seconds = 0
             
-            # זיהוי שורטס
             is_short = False
             if duration_seconds <= 60 and duration_seconds > 0:
                 is_short = True
             
-            # יצירת הלינק
             video_url = f"https://www.youtube.com/watch?v={item['id']}"
 
             videos.append({
                 'video_id': item['id'],
-                'published_at': item['snippet']['publishedAt'][:10], # רק תאריך
+                'published_at': item['snippet']['publishedAt'][:10],
                 'title': item['snippet']['title'],
-                'video_type': 'Shorts' if is_short else 'רגיל', # זיהוי בעברית לדשבורד
+                'video_type': 'Shorts' if is_short else 'רגיל', # כאן נכנס התיקון לעברית
                 'views': int(item['statistics'].get('viewCount', 0)),
                 'likes': int(item['statistics'].get('likeCount', 0)),
                 'comments': int(item['statistics'].get('commentCount', 0)),
                 'duration_seconds': duration_seconds,
                 'video_url': video_url,
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M')
+                'last_updated': current_time_il # זמן ישראל
             })
             
         next_page_token = response.get('nextPageToken')
@@ -88,43 +92,56 @@ def fetch_videos():
     return pd.DataFrame(videos)
 
 def update_google_sheet(new_data_df):
+    print("Connecting to Google Sheets...")
     gc = get_sheet_client()
-    # פתיחת הגיליון הראשון בקובץ
-    # שים לב: כאן צריך לשים את ה-ID של השיטס שלך מה-URL
-    # או להשתמש ב-open_by_url
-    # הדרך הכי בטוחה: פתח לפי שם הקובץ או URL
-    sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c/edit") 
-    worksheet = sh.worksheet(SHEET_NAME)
     
-    # קריאת הנתונים הקיימים
+    # פתיחה לפי ה-URL שלך (הכי בטוח)
+    sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c/edit")
+    
+    # ניסיון לפתוח את הגיליון בשם החדש
+    try:
+        worksheet = sh.worksheet(SHEET_NAME)
+    except:
+        print(f"Could not find sheet named '{SHEET_NAME}', trying first sheet.")
+        worksheet = sh.get_worksheet(0)
+    
+    # קריאת נתונים קיימים
     existing_data = worksheet.get_all_records()
     existing_df = pd.DataFrame(existing_data)
+    
+    print(f"Found {len(existing_df)} existing videos.")
     
     if existing_df.empty:
         final_df = new_data_df
     else:
-        # --- הלוגיקה החכמה (Upsert) ---
-        # 1. שמים את המידע החדש למעלה
-        combined_df = pd.concat([new_data_df, existing_df])
+        # מיזוג חכם: חדש דורס ישן לפי ID
+        # ממירים את video_id למחרוזת כדי למנוע בעיות
+        new_data_df['video_id'] = new_data_df['video_id'].astype(str)
+        existing_df['video_id'] = existing_df['video_id'].astype(str)
         
-        # 2. מסירים כפילויות לפי video_id, משאירים את העליון (החדש ביותר)
-        # זה מעדכן את הצפיות לסרטונים קיימים ומוסיף חדשים
-        final_df = combined_df.drop_duplicates(subset=['video_id'], keep='first')
+        # שמים את החדשים למעלה
+        combined = pd.concat([new_data_df, existing_df])
+        
+        # מסירים כפילויות (משאירים את הראשון = החדש ביותר שהגיע מה-API)
+        final_df = combined.drop_duplicates(subset=['video_id'], keep='first')
     
-    # מיון לפי תאריך (מהחדש לישן)
+    # מיון סופי לפי תאריך
     final_df = final_df.sort_values(by='published_at', ascending=False)
     
-    # כתיבה חזרה לשיטס (מוחקים הכל וכותבים מחדש את המעודכן)
-    worksheet.clear()
-    # הוספת כותרות
-    worksheet.append_row(final_df.columns.tolist())
-    # הוספת המידע
-    worksheet.append_rows(final_df.values.tolist())
+    # החלפת ערכי NaN (ריקים) במחרוזת ריקה כדי לא לשבור את ה-JSON
+    final_df = final_df.fillna('')
+
+    print(f"Writing {len(final_df)} videos to sheet...")
     
-    print("Update Complete!")
+    # ניקוי וכתיבה מחדש
+    worksheet.clear()
+    worksheet.update([final_df.columns.values.tolist()] + final_df.values.tolist())
+    
+    print("Success! Data updated.")
 
 if __name__ == "__main__":
-    print("Starting job...")
     new_videos = fetch_videos()
-    print(f"Fetched {len(new_videos)} videos from API.")
-    update_google_sheet(new_videos)
+    if not new_videos.empty:
+        update_google_sheet(new_videos)
+    else:
+        print("No videos found.")
