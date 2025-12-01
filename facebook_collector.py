@@ -10,7 +10,7 @@ import json
 # --- Config ---
 # אנחנו מצפים למשתנה סביבה בשם FACEBOOK_ACCESS_TOKEN
 # (ב-YAML נדאג למפות אליו את FACEBOOK_TOKEN)
-ACCESS_TOKEN = os.environ.get('FACEBOOK_ACCESS_TOKEN') 
+ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN') 
 PAGE_ID = "220634478361516"
 API_VERSION = "v24.0"
 DAYS_BACK = 7  
