@@ -42,43 +42,95 @@ def get_uploads_playlist_id(youtube):
         print(f"Error finding uploads ID: {e}")
         return None
 
-# --- ניתוח AI היברידי (24 שעות + מגמות) ---
-def analyze_with_gemini(df_context, stats_24h):
+def get_existing_data():
+    """שואב את הנתונים הקיימים מה-Sheet כדי לחשב דלתא"""
+    try:
+        gc = get_sheet_client()
+        sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c/edit")
+        try:
+            worksheet = sh.worksheet(SHEET_NAME)
+        except:
+            worksheet = sh.get_worksheet(0)
+        
+        existing_df = pd.DataFrame(worksheet.get_all_records())
+        if not existing_df.empty:
+            existing_df['video_id'] = existing_df['video_id'].astype(str)
+        return existing_df
+    except Exception as e:
+        print(f"Error fetching existing data: {e}")
+        return pd.DataFrame()
+
+# --- ניתוח AI משופר ---
+def analyze_with_gemini(df, yesterday_date):
     api_key = os.environ.get('GEMINI_API_KEY')
-    if not api_key: return "⚠️ חסר מפתח ל-Gemini."
+    if not api_key: 
+        return "⚠️ חסר מפתח ל-Gemini."
 
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.0-flash')
     
-    # הכנת טבלת הנתונים המלאה (של ה-4 ימים האחרונים)
-    analysis_df = df_context[['title', 'description', 'video_type', 'views', 'like_rate', 'comment_rate', 'tags', 'published_at']].copy()
-    analysis_df['views'] = analysis_df['views'].apply(lambda x: f"{x:,}")
-    data_str = analysis_df.to_string(index=False)
+    # --- הכנת הנתונים לפי קטגוריות ---
     
+    # 1. סרטונים שעלו אתמול
+    new_yesterday = df[df['published_at'] == yesterday_date].copy()
+    new_yesterday_str = ""
+    if not new_yesterday.empty:
+        new_yesterday = new_yesterday.sort_values('views', ascending=False)
+        for _, row in new_yesterday.head(5).iterrows():
+            new_yesterday_str += f"• {row['title'][:60]} | {row['video_type']} | {row['views']:,} צפיות\n"
+    
+    # 2. סרטונים ישנים שצברו הכי הרבה צפיות אתמול (דלתא)
+    old_videos = df[df['published_at'] < yesterday_date].copy()
+    top_delta = ""
+    if not old_videos.empty and 'views_delta' in old_videos.columns:
+        old_videos = old_videos[old_videos['views_delta'] > 0].sort_values('views_delta', ascending=False)
+        for _, row in old_videos.head(3).iterrows():
+            top_delta += f"• {row['title'][:60]} | מ-{row['published_at']} | +{row['views_delta']:,} צפיות אתמול\n"
+    
+    # 3. סטטיסטיקות כלליות
+    total_new = len(new_yesterday)
+    total_views_new = new_yesterday['views'].sum() if not new_yesterday.empty else 0
+    total_delta = df['views_delta'].sum() if 'views_delta' in df.columns else 0
+    
+    # 4. טופ 5 כללי (לפי סה"כ צפיות)
+    top5_overall = ""
+    for _, row in df.nlargest(5, 'views').iterrows():
+        marker = "🆕" if row['published_at'] == yesterday_date else ""
+        top5_overall += f"• {marker}{row['title'][:50]} | {row['video_type']} | {row['views']:,}\n"
+
     today_date = datetime.now(pytz.timezone('Asia/Jerusalem')).strftime('%d/%m/%Y')
+    
+    prompt = f"""אתה כותב דוח ביצועי יוטיוב יומי לערוץ כאן חדשות. התאריך: {today_date}.
 
-    # --- הפרומפט המשולב ---
-    prompt = f"""
-    אתה העורך הראשי ואנליסט הדיגיטל של "כאן חדשות". התאריך: {today_date}.
-    מטרה: דוח בוקר המשלב בין "המיידי" (מה קרה אתמול) לבין "המגמה" (מה מחזיק מעמד).
+=== נתונים ===
 
-    חלק א' - נתוני "הברזל" של 24 השעות האחרונות בלבד:
-    📊 צפיות ביממה האחרונה: {stats_24h['views']:,}
-    🎬 סרטונים שעלו ביממה האחרונה: {stats_24h['count']}
-    👀 ממוצע לאייטם (יממה אחרונה): {stats_24h['avg']:,}
+📰 סרטונים חדשים (עלו אתמול {yesterday_date}):
+כמות: {total_new}
+סה"כ צפיות: {total_views_new:,}
+{new_yesterday_str if new_yesterday_str else "אין סרטונים חדשים"}
 
-    חלק ב' - הטבלה המלאה (כוללת סרטונים מ-4 הימים האחרונים כדי לזהות מגמות):
-    {data_str}
+🔥 סרטונים ישנים שצברו צפיות אתמול (הדלתא הגבוהה ביותר):
+{top_delta if top_delta else "אין מידע על דלתא"}
 
-    כתוב סקירה חכמה (עד 180 מילים) לפי המבנה הבא:
+📊 טופ 5 כללי (לפי סה״כ צפיות):
+{top5_overall}
 
-    1. **⚡ הדיווח המיידי (האתמול):** איך נסגר יום השידורים האחרון? מה היה האייטם המנצח של ה-24 שעות האחרונות ולמה? (שים לב לתייג שורטס אם רלוונטי).
-    2. **📈 רדאר מגמות (קונטקסט רחב):** הבט על הטבלה המלאה. האם יש נושא (למשל: מחאת החרדים, יוקר המחיה) שכיכב לפני יומיים אבל נעלם אתמול? או להפך - נושא שמתחזק מיום ליום?
-    3. **🌲 Evergreen (ירוק עד):** זהה סרטון שעלה לפני 2-3 ימים (לא אתמול!) ועדיין נמצא בראש הטבלה עם מספרי צפיות גבוהים. זה סימן לתוכן איכותי שממשיך לעבוד.
-    4. **🎙️ זרקור על יוצרים:** קרדיט לכתב/ת שהביא ביצועים חריגים (לפי התיאור).
+=== הנחיות ===
 
-    סגנון: מקצועי, אנליטי אבל זורם. חבר בין הנקודות.
-    """
+כתוב סיכום יומי של 150 מילה בדיוק. המבנה:
+
+1. **📰 אתמול בקצרה** (2-3 משפטים): כמה סרטונים עלו, כמה צפיות צברו, מה היה הסרטון המוביל מבין החדשים.
+
+2. **🔥 ממשיך להדהד** (2-3 משפטים): אם יש סרטון ישן שצבר הרבה צפיות אתמול (דלתא גבוהה) - ציין אותו והסבר למה הוא כנראה עדיין רלוונטי.
+
+3. **💡 תובנה אחת** (משפט אחד): דפוס מעניין, נושא חם, או הבחנה לגבי סוג תוכן שעובד.
+
+=== סגנון ===
+- עובדתי וקצר, בלי הטפות או המלצות
+- ציין אם סרטון הוא Shorts
+- אל תמציא נתונים - השתמש רק במה שקיבלת
+- אם אין מידע על דלתא, דלג על החלק של "ממשיך להדהד"
+"""
 
     try:
         response = model.generate_content(prompt)
@@ -91,43 +143,29 @@ def send_telegram_report(df):
     chat_id = os.environ.get('TELEGRAM_CHAT_ID')
     
     if not token or not chat_id:
-        print("Skipping Telegram.")
+        print("Skipping Telegram - missing credentials.")
         return
 
     il_tz = pytz.timezone('Asia/Jerusalem')
+    yesterday = (datetime.now(il_tz) - timedelta(days=1)).strftime('%Y-%m-%d')
     
-    # 1. חישוב סטטיסטיקה ל-24 שעות האחרונות (ל"חלק א'" של הדוח)
-    cutoff_24h = (datetime.now(il_tz) - timedelta(days=1)).strftime('%Y-%m-%d')
-    df['date_obj'] = pd.to_datetime(df['published_at'])
-    df_24h = df[df['published_at'] >= cutoff_24h]
-    
-    stats_24h = {
-        'views': int(df_24h['views'].sum()),
-        'count': len(df_24h),
-        'avg': int(df_24h['views'].mean()) if not df_24h.empty else 0
-    }
-
-    # 2. הכנת הדאטה הרחב ל-4 ימים (ל"חלק ב'" - זיהוי מגמות ו-Evergreen)
-    cutoff_trends = (datetime.now(il_tz) - timedelta(days=4)).strftime('%Y-%m-%d')
-    df_context = df[df['published_at'] >= cutoff_trends].head(40) # לוקחים מספיק דאטה לניתוח
-
-    if df_context.empty:
-        print("No recent videos found.")
-        return
-
-    print("Analyzing Hybrid Report (24h + Trends)...")
-    analysis_text = analyze_with_gemini(df_context, stats_24h)
+    print(f"Generating AI report for {yesterday}...")
+    analysis_text = analyze_with_gemini(df, yesterday)
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": analysis_text, "parse_mode": "Markdown"}
-    try: requests.post(url, json=payload)
-    except Exception as e: print(f"Telegram Error: {e}")
+    try: 
+        response = requests.post(url, json=payload)
+        print(f"Telegram response: {response.status_code}")
+    except Exception as e: 
+        print(f"Telegram Error: {e}")
 
 # --- הפונקציה הראשית ---
 def fetch_videos():
     youtube = get_youtube_service()
     uploads_id = get_uploads_playlist_id(youtube)
-    if not uploads_id: return pd.DataFrame()
+    if not uploads_id: 
+        return pd.DataFrame()
 
     il_tz = pytz.timezone('Asia/Jerusalem')
     current_time = datetime.now(il_tz).strftime('%Y-%m-%d %H:%M')
@@ -137,7 +175,7 @@ def fetch_videos():
     next_page = None
     should_stop = False
     
-    print("Fetching videos...")
+    print("Fetching videos from YouTube API...")
     while True:
         req = youtube.playlistItems().list(part="snippet,contentDetails", playlistId=uploads_id, maxResults=50, pageToken=next_page)
         res = req.execute()
@@ -150,14 +188,17 @@ def fetch_videos():
                 break
             ids_to_fetch.append(item['contentDetails']['videoId'])
         
-        if not ids_to_fetch: break
+        if not ids_to_fetch: 
+            break
 
         stats_res = youtube.videos().list(part="snippet,contentDetails,statistics,topicDetails", id=','.join(ids_to_fetch)).execute()
         
         for item in stats_res['items']:
             dur = item['contentDetails']['duration']
-            try: sec = isodate.parse_duration(dur).total_seconds()
-            except: sec = 0
+            try: 
+                sec = isodate.parse_duration(dur).total_seconds()
+            except: 
+                sec = 0
             
             is_short = sec <= 60 and sec > 0
             
@@ -182,49 +223,75 @@ def fetch_videos():
                 'comments': comments,
                 'duration_seconds': sec,
                 'duration_formatted': format_duration(sec),
-                'like_rate': round((likes/views*100) if views>0 else 0, 2),
-                'comment_rate': round((comments/views*100) if views>0 else 0, 4),
+                'like_rate': round((likes/views*100) if views > 0 else 0, 2),
+                'comment_rate': round((comments/views*100) if views > 0 else 0, 4),
                 'video_url': f"https://www.youtube.com/watch?v={item['id']}",
                 'last_updated': current_time
             })
             
-        if should_stop or 'nextPageToken' not in res: break
+        if should_stop or 'nextPageToken' not in res: 
+            break
         next_page = res['nextPageToken']
-            
+    
+    print(f"Fetched {len(videos)} videos.")
     return pd.DataFrame(videos)
 
 def update_google_sheet(new_data_df):
     print("Updating Google Sheets...")
+    
+    # שליפת הנתונים הקיימים
+    existing_df = get_existing_data()
+    
+    # חישוב דלתא - כמה צפיות נוספו מאז ההרצה הקודמת
+    if not existing_df.empty and 'views' in existing_df.columns:
+        existing_views = existing_df.set_index('video_id')['views'].to_dict()
+        new_data_df['views_delta'] = new_data_df.apply(
+            lambda row: row['views'] - existing_views.get(row['video_id'], row['views']), 
+            axis=1
+        )
+    else:
+        new_data_df['views_delta'] = 0
+    
+    # מיזוג הנתונים
     gc = get_sheet_client()
     sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c/edit")
-    try: worksheet = sh.worksheet(SHEET_NAME)
-    except: worksheet = sh.get_worksheet(0)
+    try: 
+        worksheet = sh.worksheet(SHEET_NAME)
+    except: 
+        worksheet = sh.get_worksheet(0)
     
-    existing_df = pd.DataFrame(worksheet.get_all_records())
-    
-    if existing_df.empty: final_df = new_data_df
+    if existing_df.empty: 
+        final_df = new_data_df
     else:
         new_data_df['video_id'] = new_data_df['video_id'].astype(str)
         existing_df['video_id'] = existing_df['video_id'].astype(str)
+        
+        # וידוא שכל העמודות קיימות
         for col in new_data_df.columns:
-            if col not in existing_df.columns: existing_df[col] = ""
+            if col not in existing_df.columns: 
+                existing_df[col] = ""
+        
         combined = pd.concat([new_data_df, existing_df])
         final_df = combined.drop_duplicates(subset=['video_id'], keep='first')
     
     final_df = final_df.sort_values(by='published_at', ascending=False)
     final_df = final_df.fillna(0).replace([np.inf, -np.inf], 0)
     
+    # ניקוי עמודות טקסט
     for col in ['description', 'tags', 'thumbnail_url', 'published_time', 'duration_formatted']:
-        if col in final_df.columns: final_df[col] = final_df[col].replace(0, "")
+        if col in final_df.columns: 
+            final_df[col] = final_df[col].replace(0, "")
 
     worksheet.clear()
     worksheet.update([final_df.columns.values.tolist()] + final_df.values.tolist(), value_input_option='RAW')
-    print("Success!")
+    print("Sheet updated successfully!")
+    
+    return final_df
 
 if __name__ == "__main__":
     new_videos = fetch_videos()
     if not new_videos.empty:
-        update_google_sheet(new_videos)
-        send_telegram_report(new_videos)
+        updated_df = update_google_sheet(new_videos)
+        send_telegram_report(updated_df)
     else:
         print("No videos found.")
