@@ -156,7 +156,7 @@ def fetch_facebook_data():
                     'date': post['created_time'][:10],
                     'time': post['created_time'][11:16],
                     'type': media_type,
-                    'title': (post.get('message', '') or '').split('\n')[0][:80],
+                    'title': full_title, # הכותרת המלאה!
                     'reach': insights['reach'], 
                     'impressions': impressions,
                     'views': views, 
