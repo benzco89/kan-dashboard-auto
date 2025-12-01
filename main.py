@@ -80,17 +80,18 @@ def analyze_with_gemini(df, yesterday_date):
             new_yesterday_str += f"• {row['title'][:60]} | {row['video_type']} | {row['views']:,} צפיות\n"
     
     # 2. סרטונים ישנים שצברו הכי הרבה צפיות אתמול (דלתא)
-    old_videos['views_delta'] = pd.to_numeric(old_videos['views_delta'], errors='coerce').fillna(0)
-    old_videos = old_videos[old_videos['views_delta'] > 0].sort_values('views_delta', ascending=False)
-    if not old_videos.empty and 'views_delta' in old_videos.columns:
-        old_videos = old_videos[old_videos['views_delta'] > 0].sort_values('views_delta', ascending=False)
-        for _, row in old_videos.head(3).iterrows():
-            top_delta += f"• {row['title'][:60]} | מ-{row['published_at']} | +{row['views_delta']:,} צפיות אתמול\n"
+    top_delta = ""
+    if 'views_delta' in df.columns:
+        old_videos = df[df['published_at'] < yesterday_date].copy()
+        if not old_videos.empty:
+            old_videos['views_delta'] = pd.to_numeric(old_videos['views_delta'], errors='coerce').fillna(0)
+            old_videos = old_videos[old_videos['views_delta'] > 0].sort_values('views_delta', ascending=False)
+            for _, row in old_videos.head(3).iterrows():
+                top_delta += f"• {row['title'][:60]} | מ-{row['published_at']} | +{int(row['views_delta']):,} צפיות אתמול\n"
     
     # 3. סטטיסטיקות כלליות
     total_new = len(new_yesterday)
     total_views_new = new_yesterday['views'].sum() if not new_yesterday.empty else 0
-    total_delta = df['views_delta'].sum() if 'views_delta' in df.columns else 0
     
     # 4. טופ 5 כללי (לפי סה"כ צפיות)
     top5_overall = ""
@@ -110,7 +111,7 @@ def analyze_with_gemini(df, yesterday_date):
 {new_yesterday_str if new_yesterday_str else "אין סרטונים חדשים"}
 
 🔥 סרטונים ישנים שצברו צפיות אתמול (הדלתא הגבוהה ביותר):
-{top_delta if top_delta else "אין מידע על דלתא"}
+{top_delta if top_delta else "אין מידע על דלתא (הרצה ראשונה)"}
 
 📊 טופ 5 כללי (לפי סה״כ צפיות):
 {top5_overall}
@@ -121,7 +122,7 @@ def analyze_with_gemini(df, yesterday_date):
 
 1. **📰 אתמול בקצרה** (2-3 משפטים): כמה סרטונים עלו, כמה צפיות צברו, מה היה הסרטון המוביל מבין החדשים.
 
-2. **🔥 ממשיך להדהד** (2-3 משפטים): אם יש סרטון ישן שצבר הרבה צפיות אתמול (דלתא גבוהה) - ציין אותו והסבר למה הוא כנראה עדיין רלוונטי.
+2. **🔥 ממשיך להדהד** (2-3 משפטים): אם יש סרטון ישן שצבר הרבה צפיות אתמול (דלתא גבוהה) - ציין אותו והסבר למה הוא כנראה עדיין רלוונטי. אם אין מידע על דלתא, דלג על החלק הזה.
 
 3. **💡 תובנה אחת** (משפט אחד): דפוס מעניין, נושא חם, או הבחנה לגבי סוג תוכן שעובד.
 
@@ -129,7 +130,6 @@ def analyze_with_gemini(df, yesterday_date):
 - עובדתי וקצר, בלי הטפות או המלצות
 - ציין אם סרטון הוא Shorts
 - אל תמציא נתונים - השתמש רק במה שקיבלת
-- אם אין מידע על דלתא, דלג על החלק של "ממשיך להדהד"
 """
 
     try:
@@ -244,6 +244,7 @@ def update_google_sheet(new_data_df):
     
     # חישוב דלתא - כמה צפיות נוספו מאז ההרצה הקודמת
     if not existing_df.empty and 'views' in existing_df.columns:
+        existing_df['views'] = pd.to_numeric(existing_df['views'], errors='coerce').fillna(0)
         existing_views = existing_df.set_index('video_id')['views'].to_dict()
         new_data_df['views_delta'] = new_data_df.apply(
             lambda row: row['views'] - existing_views.get(row['video_id'], row['views']), 
