@@ -122,24 +122,49 @@ def fetch_facebook_data():
     return pd.DataFrame(all_posts)
 
 def save_to_sheets(df):
-    creds_json = os.environ.get('GOOGLE_CREDENTIALS')
-    creds_dict = json.loads(creds_json)
-    creds = Credentials.from_service_account_info(creds_dict, scopes=[
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive'
-    ])
-    gc = gspread.authorize(creds)
-    sh = gc.open_by_key(SPREADSHEET_ID)
+    if df.empty: return
     
-    try:
-        worksheet = sh.worksheet(SHEET_NAME)
-    except:
-        worksheet = sh.add_worksheet(title=SHEET_NAME, rows=1000, cols=25)
+    # שימוש ב-GCP_SERVICE_ACCOUNT (בדיוק כמו ביוטיוב)
+    creds_json = json.loads(os.environ['GCP_SERVICE_ACCOUNT'])
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, SCOPES)
+    gc = gspread.authorize(creds)
+    
+    # פתיחה לפי URL (כמו ביוטיוב)
+    sh = gc.open_by_url(SPREADSHEET_URL)
+    
+    try: worksheet = sh.worksheet(SHEET_NAME)
+    except: worksheet = sh.add_worksheet(title=SHEET_NAME, rows=1000, cols=20)
+    
+    # לוגיקת Upsert (מיזוג חכם)
+    existing_data = worksheet.get_all_records()
+    existing_df = pd.DataFrame(existing_data)
+    
+    if not existing_df.empty:
+        df['post_id'] = df['post_id'].astype(str)
+        existing_df['post_id'] = existing_df['post_id'].astype(str)
+        
+        # השלמת עמודות
+        for col in df.columns:
+            if col not in existing_df.columns: existing_df[col] = ""
+            
+        combined = pd.concat([df, existing_df])
+        # מוחקים כפילויות, שומרים את החדש (הראשון)
+        final_df = combined.drop_duplicates(subset=['post_id'], keep='first')
+    else:
+        final_df = df
+    
+    final_df = final_df.sort_values(by='published_at', ascending=False)
+    final_df = final_df.fillna(0).replace([np.inf, -np.inf], 0)
+    
+    # ניקוי NaN לטקסט ריק בעמודות מחרוזת
+    text_cols = ['title', 'full_text', 'link', 'type']
+    for col in text_cols:
+        if col in final_df.columns:
+            final_df[col] = final_df[col].replace(0, "")
     
     worksheet.clear()
-    worksheet.update([df.columns.tolist()] + df.values.tolist())
-    print(f"✅ Saved {len(df)} rows to {SHEET_NAME}")
-
+    worksheet.update([final_df.columns.values.tolist()] + final_df.values.tolist(), value_input_option='RAW')
+    print(f"✅ Saved {len(final_df)} rows to Sheet: {SHEET_NAME}")
 # --- Main ---
 if __name__ == "__main__":
     df = fetch_facebook_data()
