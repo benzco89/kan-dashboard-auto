@@ -6,4 +6,4 @@ isodate
 pytz
 numpy
 requests
-google-generativeai
+google-genai
