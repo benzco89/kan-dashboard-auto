@@ -150,6 +150,7 @@ def fetch_facebook_data():
 
                 total_eng = public['likes'] + public['comments'] + public['shares']
                 eng_rate = round((total_eng / insights['reach']) * 100, 2) if insights['reach'] > 0 else 0
+                full_title = (post.get('message', '') or '').replace('\n', ' ')
                 
                 all_posts.append({
                     'post_id': post_id,
