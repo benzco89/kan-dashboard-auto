@@ -80,8 +80,8 @@ def analyze_with_gemini(df, yesterday_date):
             new_yesterday_str += f"• {row['title'][:60]} | {row['video_type']} | {row['views']:,} צפיות\n"
     
     # 2. סרטונים ישנים שצברו הכי הרבה צפיות אתמול (דלתא)
-    old_videos = df[df['published_at'] < yesterday_date].copy()
-    top_delta = ""
+    old_videos['views_delta'] = pd.to_numeric(old_videos['views_delta'], errors='coerce').fillna(0)
+    old_videos = old_videos[old_videos['views_delta'] > 0].sort_values('views_delta', ascending=False)
     if not old_videos.empty and 'views_delta' in old_videos.columns:
         old_videos = old_videos[old_videos['views_delta'] > 0].sort_values('views_delta', ascending=False)
         for _, row in old_videos.head(3).iterrows():
