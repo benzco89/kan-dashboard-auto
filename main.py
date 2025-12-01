@@ -9,7 +9,6 @@ from datetime import datetime, timedelta
 import pytz
 import numpy as np
 import requests
-# --- הספרייה החדשה ---
 from google import genai
 from google.genai import types
 
@@ -45,11 +44,15 @@ def get_uploads_playlist_id(youtube):
         return None
 
 def get_existing_data():
+    """שואב את הנתונים הקיימים מה-Sheet כדי לחשב דלתא"""
     try:
         gc = get_sheet_client()
         sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c/edit")
-        try: worksheet = sh.worksheet(SHEET_NAME)
-        except: worksheet = sh.get_worksheet(0)
+        try:
+            worksheet = sh.worksheet(SHEET_NAME)
+        except:
+            worksheet = sh.get_worksheet(0)
+        
         existing_df = pd.DataFrame(worksheet.get_all_records())
         if not existing_df.empty:
             existing_df['video_id'] = existing_df['video_id'].astype(str)
@@ -58,15 +61,19 @@ def get_existing_data():
         print(f"Error fetching existing data: {e}")
         return pd.DataFrame()
 
-# --- ניתוח AI עם Gemini 3 Pro (הגרסה החדשה) ---
+
+# --- ניתוח AI עם Gemini 3 ---
 def analyze_with_gemini(df, yesterday_date):
     api_key = os.environ.get('GEMINI_API_KEY')
-    if not api_key: return "⚠️ חסר מפתח ל-Gemini."
+    if not api_key: 
+        return "⚠️ חסר מפתח ל-Gemini."
 
-    # 1. אתחול הלקוח החדש (הרבה יותר נקי!)
+    # יצירת Client
     client = genai.Client(api_key=api_key)
-
-    # --- הכנת הנתונים (לוגיקה זהה, רק הוספת נתונים לפרומפט) ---
+    
+    # --- הכנת הנתונים לפי קטגוריות ---
+    
+    # 1. סרטונים שעלו אתמול
     new_yesterday = df[df['published_at'] == yesterday_date].copy()
     new_yesterday_str = ""
     if not new_yesterday.empty:
@@ -74,6 +81,7 @@ def analyze_with_gemini(df, yesterday_date):
         for _, row in new_yesterday.head(5).iterrows():
             new_yesterday_str += f"• {row['title'][:60]} | {row['video_type']} | {row['views']:,} צפיות\n"
     
+    # 2. סרטונים ישנים שצברו הכי הרבה צפיות אתמול (דלתא)
     top_delta = ""
     if 'views_delta' in df.columns:
         old_videos = df[df['published_at'] < yesterday_date].copy()
@@ -81,11 +89,13 @@ def analyze_with_gemini(df, yesterday_date):
             old_videos['views_delta'] = pd.to_numeric(old_videos['views_delta'], errors='coerce').fillna(0)
             old_videos = old_videos[old_videos['views_delta'] > 0].sort_values('views_delta', ascending=False)
             for _, row in old_videos.head(3).iterrows():
-                top_delta += f"• {row['title'][:60]} | מ-{row['published_at']} | +{int(row['views_delta']):,} צפיות\n"
+                top_delta += f"• {row['title'][:60]} | מ-{row['published_at']} | +{int(row['views_delta']):,} צפיות אתמול\n"
     
+    # 3. סטטיסטיקות כלליות
     total_new = len(new_yesterday)
     total_views_new = new_yesterday['views'].sum() if not new_yesterday.empty else 0
     
+    # 4. טופ 5 כללי (לפי סה"כ צפיות)
     top5_overall = ""
     for _, row in df.nlargest(5, 'views').iterrows():
         marker = "🆕" if row['published_at'] == yesterday_date else ""
@@ -93,7 +103,7 @@ def analyze_with_gemini(df, yesterday_date):
 
     today_date = datetime.now(pytz.timezone('Asia/Jerusalem')).strftime('%d/%m/%Y')
     
-        prompt = f"""אתה כותב דוח ביצועי יוטיוב יומי לערוץ כאן חדשות. התאריך: {today_date}.
+    prompt = f"""אתה כותב דוח ביצועי יוטיוב יומי לערוץ כאן חדשות. התאריך: {today_date}.
 
 === נתונים ===
 
@@ -122,48 +132,66 @@ def analyze_with_gemini(df, yesterday_date):
 2. [שם מקוצר] | [Shorts/רגיל] | [צפיות]
 3. [שם מקוצר] | [Shorts/רגיל] | [צפיות]
 
-🔥 **ממשיך להדהד:** הסרטון הישן (לא מאתמול) שצבר הכי הרבה צפיות אתמול.
+🔥 **ממשיך להדהד:** 
+הסרטון הישן (לא מאתמול) שצבר הכי הרבה צפיות אתמול.
 פורמט: [שם] | פורסם ב-[תאריך] | +[דלתא] צפיות אתמול
 אם הדלתא מעל 5,000 - הוסף משפט קצר למה זה כנראה עדיין רלוונטי.
 אם אין מידע על דלתא או שהיא נמוכה מ-500 - כתוב "אין סרטון ישן בולט היום".
 
 **חלק חופשי (חובה לבחור 2 בנושאים שונים):**
 
-תסתכל על הנתונים ותבחר 2 תובנות מעניינות. חשוב: התובנות חייבות להיות על נושאים שונים לגמרי.
+תסתכל על הנתונים ותבחר 2 תובנות מעניינות. חשוב: התובנות חייבות להיות על נושאים שונים לגמרי - אל תכתוב פעמיים על אותו דבר (למשל, אם כתבת על Shorts בתובנה אחת, התובנה השנייה חייבת להיות על משהו אחר).
 
 אפשרויות:
-- 📈 מגמה או נושא חם
+- 📈 מגמה או נושא חם שחוזר בכמה סרטונים
 - ⚡ הפתעה - סרטון שהצליח/נכשל מעבר לצפוי
-- 🎬 תצפית על Shorts vs רגיל
-- 👤 קרדיט ליוצר/כתב שמוזכר ב-description
-- 🔄 השוואה לימים קודמים
+- 🎬 תצפית על Shorts vs רגיל - מה עובד יותר ולמה
+- 👤 קרדיט ליוצר/כתב שמוזכר ב-description ובלט בביצועים
+- 🔄 השוואה לימים קודמים אם יש משהו חריג
 
-כתוב כל תובנה במשפט-שניים.
+כתוב כל תובנה במשפט-שניים. אל תכתוב על משהו שכבר ברור מהמספרים.
 
 === סגנון ===
-- התחל ישר מ-📊
-- קצר ועובדתי
+- התחל ישר מ-📊, בלי פתיחה כמו "היום אנו מציגים" או "להלן סיכום"
+- קצר ועובדתי, בלי הטפות
 - ציין תמיד אם סרטון הוא Shorts
 - אל תמציא ואל תנחש
+- אל תחזור על אותו מידע פעמיים
 """
 
-
     try:
-        # 2. הקריאה החדשה והקצרה
-        response = client.models.generate_content(
-            model="gemini-3-pro-preview", # המודל החדש שביקשת
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(
-                    include_thoughts=True # הפעלת יכולת החשיבה
-                ),
-                tools=[types.Tool(google_search=types.GoogleSearch())], # הוספת חיפוש אם צריך השלמת מידע
-                temperature=0.7
-            )
+        # הגדרת התוכן
+        contents = [
+            types.Content(
+                role="user",
+                parts=[
+                    types.Part.from_text(text=prompt),
+                ],
+            ),
+        ]
+        
+        # הגדרת קונפיג עם חשיבה ברמה גבוהה
+        generate_content_config = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(
+                thinking_level="HIGH",
+            ),
         )
-        return response.text
+        
+        # קריאה ל-API עם streaming
+        response_text = ""
+        for chunk in client.models.generate_content_stream(
+            model="gemini-3-pro-preview",
+            contents=contents,
+            config=generate_content_config,
+        ):
+            if chunk.text:
+                response_text += chunk.text
+        
+        return response_text
+        
     except Exception as e:
-        return f"שגיאה בניתוח AI: {e}"
+        return f"שגיאה בניתוח: {e}"
+
 
 def send_telegram_report(df):
     token = os.environ.get('TELEGRAM_TOKEN')
@@ -176,7 +204,7 @@ def send_telegram_report(df):
     il_tz = pytz.timezone('Asia/Jerusalem')
     yesterday = (datetime.now(il_tz) - timedelta(days=1)).strftime('%Y-%m-%d')
     
-    print(f"Generating AI report with Gemini 3 Pro for {yesterday}...")
+    print(f"Generating AI report for {yesterday} with Gemini 3...")
     analysis_text = analyze_with_gemini(df, yesterday)
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -187,11 +215,13 @@ def send_telegram_report(df):
     except Exception as e: 
         print(f"Telegram Error: {e}")
 
-# --- הפונקציה הראשית ---
+
+# --- שאיבת סרטונים ---
 def fetch_videos():
     youtube = get_youtube_service()
     uploads_id = get_uploads_playlist_id(youtube)
-    if not uploads_id: return pd.DataFrame()
+    if not uploads_id: 
+        return pd.DataFrame()
 
     il_tz = pytz.timezone('Asia/Jerusalem')
     current_time = datetime.now(il_tz).strftime('%Y-%m-%d %H:%M')
@@ -201,7 +231,7 @@ def fetch_videos():
     next_page = None
     should_stop = False
     
-    print("Fetching videos...")
+    print("Fetching videos from YouTube API...")
     while True:
         req = youtube.playlistItems().list(part="snippet,contentDetails", playlistId=uploads_id, maxResults=50, pageToken=next_page)
         res = req.execute()
@@ -214,16 +244,20 @@ def fetch_videos():
                 break
             ids_to_fetch.append(item['contentDetails']['videoId'])
         
-        if not ids_to_fetch: break
+        if not ids_to_fetch: 
+            break
 
         stats_res = youtube.videos().list(part="snippet,contentDetails,statistics,topicDetails", id=','.join(ids_to_fetch)).execute()
         
         for item in stats_res['items']:
             dur = item['contentDetails']['duration']
-            try: sec = isodate.parse_duration(dur).total_seconds()
-            except: sec = 0
+            try: 
+                sec = isodate.parse_duration(dur).total_seconds()
+            except: 
+                sec = 0
             
             is_short = sec <= 60 and sec > 0
+            
             views = int(item['statistics'].get('viewCount', 0))
             likes = int(item['statistics'].get('likeCount', 0))
             comments = int(item['statistics'].get('commentCount', 0))
@@ -251,49 +285,67 @@ def fetch_videos():
                 'last_updated': current_time
             })
             
-        if should_stop or 'nextPageToken' not in res: break
+        if should_stop or 'nextPageToken' not in res: 
+            break
         next_page = res['nextPageToken']
-            
+    
     print(f"Fetched {len(videos)} videos.")
     return pd.DataFrame(videos)
 
+
 def update_google_sheet(new_data_df):
     print("Updating Google Sheets...")
+    
+    # שליפת הנתונים הקיימים
     existing_df = get_existing_data()
     
+    # חישוב דלתא - כמה צפיות נוספו מאז ההרצה הקודמת
     if not existing_df.empty and 'views' in existing_df.columns:
         existing_df['views'] = pd.to_numeric(existing_df['views'], errors='coerce').fillna(0)
         existing_views = existing_df.set_index('video_id')['views'].to_dict()
         new_data_df['views_delta'] = new_data_df.apply(
-            lambda row: row['views'] - existing_views.get(row['video_id'], row['views']), axis=1
+            lambda row: row['views'] - existing_views.get(row['video_id'], row['views']), 
+            axis=1
         )
     else:
         new_data_df['views_delta'] = 0
     
+    # מיזוג הנתונים
     gc = get_sheet_client()
     sh = gc.open_by_url("https://docs.google.com/spreadsheets/d/1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c/edit")
-    try: worksheet = sh.worksheet(SHEET_NAME)
-    except: worksheet = sh.get_worksheet(0)
+    try: 
+        worksheet = sh.worksheet(SHEET_NAME)
+    except: 
+        worksheet = sh.get_worksheet(0)
     
-    if existing_df.empty: final_df = new_data_df
+    if existing_df.empty: 
+        final_df = new_data_df
     else:
         new_data_df['video_id'] = new_data_df['video_id'].astype(str)
         existing_df['video_id'] = existing_df['video_id'].astype(str)
+        
+        # וידוא שכל העמודות קיימות
         for col in new_data_df.columns:
-            if col not in existing_df.columns: existing_df[col] = ""
+            if col not in existing_df.columns: 
+                existing_df[col] = ""
+        
         combined = pd.concat([new_data_df, existing_df])
         final_df = combined.drop_duplicates(subset=['video_id'], keep='first')
     
     final_df = final_df.sort_values(by='published_at', ascending=False)
     final_df = final_df.fillna(0).replace([np.inf, -np.inf], 0)
     
+    # ניקוי עמודות טקסט
     for col in ['description', 'tags', 'thumbnail_url', 'published_time', 'duration_formatted']:
-        if col in final_df.columns: final_df[col] = final_df[col].replace(0, "")
+        if col in final_df.columns: 
+            final_df[col] = final_df[col].replace(0, "")
 
     worksheet.clear()
     worksheet.update([final_df.columns.values.tolist()] + final_df.values.tolist(), value_input_option='RAW')
     print("Sheet updated successfully!")
+    
     return final_df
+
 
 if __name__ == "__main__":
     new_videos = fetch_videos()
