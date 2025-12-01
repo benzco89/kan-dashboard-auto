@@ -13,7 +13,7 @@ import json
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN') 
 PAGE_ID = "220634478361516"
 API_VERSION = "v24.0"
-DAYS_BACK = 7  
+DAYS_BACK = 14  
 
 SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
 SHEET_NAME = "נתוני פייסבוק"
