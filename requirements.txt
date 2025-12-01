@@ -1,3 +1,4 @@
+google-genai
 pandas
 google-api-python-client
 gspread
@@ -6,4 +7,3 @@ isodate
 pytz
 numpy
 requests
-google-genai
