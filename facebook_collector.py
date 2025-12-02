@@ -20,18 +20,20 @@ SHEET_NAME = "נתוני פייסבוק"
 
 def get_video_direct_metrics(video_id):
     """משיכת צפיות ישירות מאובייקט הוידאו"""
-    if not video_id: return 0
+    if not video_id:
+        return 0
     url = f"https://graph.facebook.com/{API_VERSION}/{video_id}"
     params = {'access_token': ACCESS_TOKEN, 'fields': 'views'}
     try:
         res = requests.get(url, params=params).json()
         return res.get('views', 0)
-    except: return 0
+    except:
+        return 0
 
 def get_post_insights(post_id, media_type):
     """
     משיכת מדדי insights לפוסט - עובד לכל סוגי הפוסטים!
-    תיקון: מדדי reach ו-impressions נשלפים לכל הפוסטים, לא רק וידאו
+    תיקון: reach נופל ל-impressions אם post_impressions_unique לא זמין/0
     """
     # מדדים בסיסיים - עובדים לכל סוגי הפוסטים (תמונות, לינקים, וידאו)
     base_metrics = "post_impressions,post_impressions_unique,post_engaged_users,post_clicks"
@@ -51,21 +53,29 @@ def get_post_insights(post_id, media_type):
     
     # שלב 1: שליפת מדדים בסיסיים (לכל סוגי הפוסטים)
     url = f"https://graph.facebook.com/{API_VERSION}/{post_id}/insights"
-    params = {'access_token': ACCESS_TOKEN, 'metric': base_metrics, 'period': 'lifetime'}
+    params = {
+        'access_token': ACCESS_TOKEN,
+        'metric': base_metrics,
+        'period': 'lifetime'
+    }
     
     try:
         res = requests.get(url, params=params).json()
         if 'data' in res:
             for item in res['data']:
-                name = item['name']
+                name = item.get('name')
                 v = 0
                 if 'values' in item and len(item['values']) > 0:
-                    v = item['values'][0]['value']
+                    v = item['values'][0].get('value', 0)
                 
                 if name == 'post_impressions_unique': 
+                    # reach "אמיתי" אם קיים
                     result['reach'] = v
                 elif name == 'post_impressions': 
                     result['impressions'] = v
+                    # fallback – אם reach עדיין 0 נשתמש ב-impressions
+                    if result['reach'] == 0 and v:
+                        result['reach'] = v
                 elif name == 'post_engaged_users': 
                     result['engaged_users'] = v
                 elif name == 'post_clicks': 
@@ -75,21 +85,27 @@ def get_post_insights(post_id, media_type):
     
     # שלב 2: שליפת מדדי וידאו (רק לוידאו ורילס)
     if media_type in ['Video', 'Reel']:
-        params_video = {'access_token': ACCESS_TOKEN, 'metric': video_metrics, 'period': 'lifetime'}
+        params_video = {
+            'access_token': ACCESS_TOKEN,
+            'metric': video_metrics,
+            'period': 'lifetime'
+        }
         try:
             res_video = requests.get(url, params=params_video).json()
             if 'data' in res_video:
                 for item in res_video['data']:
-                    name = item['name']
+                    name = item.get('name')
                     v = 0
                     if 'values' in item and len(item['values']) > 0:
-                        v = item['values'][0]['value']
+                        v = item['values'][0].get('value', 0)
                     
                     if name == 'blue_reels_play_count': 
                         result['views'] = v
                     elif name == 'post_video_avg_time_watched': 
+                        # המטריקה במילישניות – ממירים לשניות
                         result['avg_watch_sec'] = round(v/1000, 1) if v else 0
                     elif name == 'post_video_view_time': 
+                        # ממילישניות לדקות
                         result['total_watch_min'] = round(v/1000/60, 1) if v else 0
         except Exception as e:
             print(f"Error fetching video metrics for {post_id}: {e}")
@@ -107,7 +123,7 @@ def get_public_metrics(post_id):
         res = requests.get(url, params=params).json()
         likes = 0
         if 'reactions' in res and 'summary' in res['reactions']:
-             likes = res['reactions']['summary']['total_count']
+            likes = res['reactions']['summary']['total_count']
         return {
             'shares': res.get('shares', {}).get('count', 0),
             'comments': res.get('comments', {}).get('summary', {}).get('total_count', 0),
@@ -119,18 +135,24 @@ def get_public_metrics(post_id):
 def detect_media_type(post):
     """זיהוי סוג הפוסט"""
     permalink = post.get('permalink_url', '')
-    if '/reel/' in permalink: return 'Reel'
-    if '/videos/' in permalink: return 'Video'
+    if '/reel/' in permalink:
+        return 'Reel'
+    if '/videos/' in permalink:
+        return 'Video'
     
     if 'attachments' in post and 'data' in post['attachments']:
         att = post['attachments']['data'][0]
         att_type = att.get('type', '')
         url = att.get('url', '')
         
-        if 'reel' in url or 'reel' in att.get('target', {}).get('url', ''): return 'Reel'
-        if att_type in ['video_inline', 'video_direct', 'video_autoplay', 'video']: return 'Video'
-        if att_type in ['photo', 'cover_photo', 'album']: return 'Photo'
-        if att_type in ['share', 'link']: return 'Link'
+        if 'reel' in url or 'reel' in att.get('target', {}).get('url', ''):
+            return 'Reel'
+        if att_type in ['video_inline', 'video_direct', 'video_autoplay', 'video']:
+            return 'Video'
+        if att_type in ['photo', 'cover_photo', 'album']:
+            return 'Photo'
+        if att_type in ['share', 'link']:
+            return 'Link'
         
     return 'Status'
 
@@ -161,7 +183,8 @@ def fetch_facebook_data():
         if 'error' in res:
             print(f"❌ API Error: {res['error']['message']}")
             break
-        if 'data' not in res or not res['data']: break
+        if 'data' not in res or not res['data']:
+            break
         
         for post in res['data']:
             post_id = post['id']
@@ -178,17 +201,23 @@ def fetch_facebook_data():
                 if vid_id:
                     views = get_video_direct_metrics(vid_id)
             
-            # חישוב impressions - עדיפות ל-impressions, אחרת reach
-            impressions = insights['impressions']
-            if impressions == 0: 
+            # --- חישוב impressions עם fallbackים ---
+            impressions = insights.get('impressions', 0)
+
+            # אם אין impressions אבל יש reach – נשתמש בו
+            if impressions == 0 and insights.get('reach', 0) > 0:
                 impressions = insights['reach']
-            # עבור וידאו - אם עדיין 0, השתמש בצפיות
-            if impressions == 0 and views > 0: 
+
+            # אם עדיין 0 ויש views (בוידאו/רילס) – נניח שהם משקפים חשיפה
+            if impressions == 0 and views > 0:
                 impressions = views
 
             # חישוב engagement
             total_eng = public['likes'] + public['comments'] + public['shares']
-            eng_rate = round((total_eng / insights['reach']) * 100, 2) if insights['reach'] > 0 else 0
+
+            # עדיפות לחישוב לפי reach; אם reach 0 – נשתמש ב-impressions
+            denom = insights.get('reach', 0) or impressions
+            eng_rate = round((total_eng / denom) * 100, 2) if denom > 0 else 0
             
             all_posts.append({
                 'post_id': post_id,
@@ -216,7 +245,8 @@ def fetch_facebook_data():
         if 'paging' in res and 'next' in res['paging']:
             url = res['paging']['next']
             params = {}
-        else: break
+        else:
+            break
     
     return pd.DataFrame(all_posts)
 
