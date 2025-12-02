@@ -35,7 +35,7 @@ jobs:
       # שלב 2: הרצת פייסבוק (שומר לשיטס בנפרד)
       - name: Run Facebook Collector
         env:
-          FACEBOOK_ACCESS_TOKEN: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           # משתמשים באותו סוד של גוגל כמו ביוטיוב
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
