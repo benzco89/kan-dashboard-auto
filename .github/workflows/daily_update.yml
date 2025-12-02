@@ -22,7 +22,15 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      # שלב 1: הרצת יוטיוב (שולח גם טלגרם על יוטיוב)
+      # שלב 1: מעקב עוקבים (חדש!) - רץ ראשון כי הכי מהיר
+      - name: Track Followers
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: python followers_tracker.py
+
+      # שלב 2: הרצת יוטיוב (שולח גם טלגרם על יוטיוב)
       - name: Run YouTube Update
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
@@ -32,11 +40,10 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
 
-      # שלב 2: הרצת פייסבוק (שומר לשיטס בנפרד)
+      # שלב 3: הרצת פייסבוק (שומר לשיטס בנפרד)
       - name: Run Facebook Collector
         env:
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
-          # משתמשים באותו סוד של גוגל כמו ביוטיוב
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: python facebook_collector.py
