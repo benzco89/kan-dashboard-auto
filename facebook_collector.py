@@ -2,23 +2,22 @@ import os
 import requests
 import pandas as pd
 import gspread
-from google.oauth2.service_account import Credentials  # <-- הייבוא הנכון והמודרני
+from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
 import time
 import json
 
 # --- Config ---
-# אנחנו מצפים למשתנה סביבה בשם FACEBOOK_ACCESS_TOKEN
-# (ב-YAML נדאג למפות אליו את FACEBOOK_TOKEN)
+# הותאם לשם שאתה רגיל אליו
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN') 
 PAGE_ID = "220634478361516"
 API_VERSION = "v24.0"
-DAYS_BACK = 14  
+DAYS_BACK = 3  # לאוטומציה יומית
 
 SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
 SHEET_NAME = "נתוני פייסבוק"
 
-# --- Functions ---
+# --- Functions (הלוגיקה שעבדה לך ב-100%) ---
 
 def get_video_direct_metrics(video_id):
     """משיכת צפיות ישירות מאובייקט הוידאו"""
@@ -31,11 +30,10 @@ def get_video_direct_metrics(video_id):
     except: return 0
 
 def get_post_insights(post_id, media_type):
-    # שימוש במדדים המעודכנים ל-v24
+    # הסרנו את views_10s הבעייתי
     base_metrics = "post_impressions,post_impressions_unique,post_engaged_users"
     video_metrics = "blue_reels_play_count,post_video_avg_time_watched,post_video_view_time"
     
-    # בונים את רשימת המדדים (מוסיפים וידאו רק אם רלוונטי)
     metrics = f"{base_metrics},{video_metrics}" 
     
     url = f"https://graph.facebook.com/{API_VERSION}/{post_id}/insights"
@@ -46,7 +44,7 @@ def get_post_insights(post_id, media_type):
     try:
         res = requests.get(url, params=params).json()
         
-        # Fallback למקרה של שגיאה (אם ביקשנו מדדי וידאו על תמונה)
+        # Fallback
         if 'error' in res:
              params['metric'] = base_metrics
              res = requests.get(url, params=params).json()
@@ -55,7 +53,6 @@ def get_post_insights(post_id, media_type):
             for item in res['data']:
                 name = item['name']
                 v = 0
-                # חילוץ ערך גמיש (לפעמים ברשימה ולפעמים בודד)
                 if 'values' in item and len(item['values']) > 0:
                     v = item['values'][0]['value']
                 
@@ -94,7 +91,6 @@ def detect_media_type(post):
         att_type = att.get('type', '')
         url = att.get('url', '')
         
-        # זיהוי נוסף לפי Attachments
         if 'reel' in url or 'reel' in att.get('target', {}).get('url', ''): return 'Reel'
         if att_type in ['video_inline', 'video_direct', 'video_autoplay', 'video']: return 'Video'
         if att_type in ['photo', 'cover_photo', 'album']: return 'Photo'
@@ -102,7 +98,6 @@ def detect_media_type(post):
     return 'Link'
 
 def get_video_id_from_post(post):
-    """חילוץ מזהה הוידאו לצורך שליפת צפיות ישירות"""
     if 'attachments' in post and 'data' in post['attachments']:
         att = post['attachments']['data'][0]
         if 'target' in att and 'id' in att['target']:
@@ -120,104 +115,117 @@ def fetch_facebook_data():
               'fields': 'id,created_time,message,permalink_url,attachments', 'since': since_unix}
     
     while True:
-        try:
-            res = requests.get(url, params=params).json()
-            if 'error' in res:
-                print(f"❌ API Error: {res['error']['message']}")
-                break
-            if 'data' not in res or not res['data']: break
-            
-            for post in res['data']:
-                post_id = post['id']
-                media_type = detect_media_type(post)
-                
-                # איסוף הנתונים
-                insights = get_post_insights(post_id, media_type)
-                public = get_public_metrics(post_id)
-                
-                # טיפול מיוחד בצפיות (היברידי)
-                views = insights['views']
-                # אם חסר צפיות וזה וידאו, ננסה למשוך ישירות מהאובייקט
-                if views == 0 and media_type in ['Video', 'Reel']:
-                    vid_id = get_video_id_from_post(post)
-                    if vid_id:
-                        views = get_video_direct_metrics(vid_id)
-                
-                # טיפול בחשיפות (Fallback)
-                impressions = insights['impressions']
-                if impressions == 0: impressions = insights['reach'] # אם אין impressions קח reach
-                if impressions == 0 and views > 0: impressions = views # אם אין כלום קח צפיות
-
-                total_eng = public['likes'] + public['comments'] + public['shares']
-                eng_rate = round((total_eng / insights['reach']) * 100, 2) if insights['reach'] > 0 else 0
-                full_title = (post.get('message', '') or '').replace('\n', ' ')
-                
-                all_posts.append({
-                    'post_id': post_id,
-                    'date': post['created_time'][:10],
-                    'time': post['created_time'][11:16],
-                    'type': media_type,
-                    'title': full_title, # הכותרת המלאה!
-                    'reach': insights['reach'], 
-                    'impressions': impressions,
-                    'views': views, 
-                    'avg_watch_sec': insights['avg_watch_sec'],
-                    'likes': public['likes'], 
-                    'comments': public['comments'],
-                    'shares': public['shares'], 
-                    'total_engagement': total_eng, 
-                    'engagement_rate': eng_rate,
-                    'permalink': post.get('permalink_url', ''), 
-                    'pulled_at': datetime.now().strftime('%Y-%m-%d %H:%M')
-                })
-                time.sleep(0.15)
-            
-            if 'paging' in res and 'next' in res['paging']:
-                url = res['paging']['next']
-                params = {}
-            else: break
-        except Exception as e:
-            print(f"⚠️ Error: {e}")
+        res = requests.get(url, params=params).json()
+        if 'error' in res:
+            print(f"❌ API Error: {res['error']['message']}")
             break
+        if 'data' not in res or not res['data']: break
+        
+        for post in res['data']:
+            post_id = post['id']
+            media_type = detect_media_type(post)
+            insights = get_post_insights(post_id, media_type)
+            public = get_public_metrics(post_id)
+            
+            views = insights['views']
+            if views == 0 and media_type in ['Video', 'Reel']:
+                vid_id = get_video_id_from_post(post)
+                if vid_id:
+                    views = get_video_direct_metrics(vid_id)
+            
+            impressions = insights['impressions']
+            if impressions == 0: impressions = insights['reach']
+            if impressions == 0 and views > 0: impressions = views
+
+            total_eng = public['likes'] + public['comments'] + public['shares']
+            eng_rate = round((total_eng / insights['reach']) * 100, 2) if insights['reach'] > 0 else 0
+            
+            all_posts.append({
+                'post_id': post_id,
+                'date': post['created_time'][:10],
+                'time': post['created_time'][11:16],
+                'type': media_type,
+                'title': (post.get('message', '') or '').replace('\n', ' ')[:200], # בלי מגבלה קצרה מדי
+                'reach': insights['reach'], 
+                'impressions': impressions,
+                'views': views, 
+                'avg_watch_sec': insights['avg_watch_sec'],
+                'likes': public['likes'], 
+                'comments': public['comments'],
+                'shares': public['shares'], 
+                'total_engagement': total_eng, 
+                'engagement_rate': eng_rate,
+                'permalink': post.get('permalink_url', ''), 
+                'pulled_at': datetime.now().strftime('%Y-%m-%d %H:%M')
+            })
+            time.sleep(0.15)
+        
+        if 'paging' in res and 'next' in res['paging']:
+            url = res['paging']['next']
+            params = {}
+        else: break
     
     return pd.DataFrame(all_posts)
 
-def save_to_sheets(df):
-    # שימוש ב-GCP_SERVICE_ACCOUNT (שם המשתנה מה-YAML)
+# --- פונקציית השמירה החכמה (Upsert) ---
+def save_to_sheets(new_df):
+    # שימוש ב-GCP_SERVICE_ACCOUNT (כי זה מה שיש לנו בגיטהאב שעובד)
     creds_json = os.environ.get('GCP_SERVICE_ACCOUNT') 
-    if not creds_json:
-        # Fallback למקרה שיש שם ישן בסביבה
+    
+    # במקרה שאתה מריץ מקומית ויש לך משתנה אחר
+    if not creds_json: 
         creds_json = os.environ.get('GOOGLE_CREDENTIALS')
 
     creds_dict = json.loads(creds_json)
-    
-    # --- התיקון הקריטי כאן: שימוש ב-Credentials מהספרייה הנכונה ---
-    scopes = [
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive'
-    ]
+    scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     gc = gspread.authorize(creds)
-    
     sh = gc.open_by_key(SPREADSHEET_ID)
     
-    try:
-        worksheet = sh.worksheet(SHEET_NAME)
-    except:
-        worksheet = sh.add_worksheet(title=SHEET_NAME, rows=1000, cols=25)
+    try: worksheet = sh.worksheet(SHEET_NAME)
+    except: worksheet = sh.add_worksheet(title=SHEET_NAME, rows=1000, cols=25)
     
-    # הכנה לשמירה
-    df = df.fillna(0)
+    # 1. קריאת היסטוריה
+    existing_data = worksheet.get_all_records()
+    existing_df = pd.DataFrame(existing_data)
     
-    worksheet.clear()
-    worksheet.update([df.columns.tolist()] + df.values.tolist())
-    print(f"✅ Saved {len(df)} rows to {SHEET_NAME}")
+    # 2. מיזוג
+    if not existing_df.empty:
+        new_df['post_id'] = new_df['post_id'].astype(str)
+        existing_df['post_id'] = existing_df['post_id'].astype(str)
+        
+        # חישוב דלתא (כמה צפיות נוספו היום)
+        if 'views' in existing_df.columns:
+            # מנקים וממירים למספר
+            existing_df['views'] = pd.to_numeric(existing_df['views'], errors='coerce').fillna(0)
+            view_map = existing_df.set_index('post_id')['views'].to_dict()
+            new_df['views_delta'] = new_df.apply(lambda x: x['views'] - view_map.get(x['post_id'], x['views']), axis=1)
+        else:
+            new_df['views_delta'] = 0
 
-# --- Main ---
+        for col in new_df.columns:
+            if col not in existing_df.columns: existing_df[col] = ""
+            
+        combined = pd.concat([new_df, existing_df])
+        final_df = combined.drop_duplicates(subset=['post_id'], keep='first')
+        print(f"🔄 Merged: {len(new_df)} new + {len(existing_df)} existing -> {len(final_df)} total")
+    else:
+        new_df['views_delta'] = 0
+        final_df = new_df
+    
+    # 3. ניקוי ומיון
+    final_df = final_df.sort_values(by='date', ascending=False)
+    final_df = final_df.fillna(0).replace([float('inf'), float('-inf')], 0)
+    
+    # 4. שמירה
+    worksheet.clear()
+    worksheet.update([final_df.columns.tolist()] + final_df.values.tolist())
+    print(f"✅ Saved {len(final_df)} rows to {SHEET_NAME}")
+
 if __name__ == "__main__":
     df = fetch_facebook_data()
     if not df.empty:
         save_to_sheets(df)
-        print(f"✅ Done! {len(df)} posts")
+        print(f"✅ Done! {len(df)} posts processed.")
     else:
         print("❌ No data collected.")
