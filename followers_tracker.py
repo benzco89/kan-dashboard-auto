@@ -332,9 +332,20 @@ def save_followers_data(youtube_stats, facebook_stats):
     if updated_today:
         # מחיקת שורות היום הקיימות
         all_data = worksheet.get_all_values()
-        new_data = [all_data[0]]  # headers
+        
+        # שמירת headers (שורה ראשונה)
+        headers = all_data[0] if all_data else [
+            'date', 'pulled_at', 'platform',
+            'followers', 'fan_count', 'total_views', 'video_count',
+            'followers_change', 'views_change',
+            'fan_adds', 'fan_removes', 'daily_reach', 'daily_engagements', 'daily_video_views'
+        ]
+        
+        new_data = [headers]
+        
+        # שמירת כל השורות מלבד היום הנוכחי
         for row in all_data[1:]:
-            if row[0] != today:
+            if row and len(row) > 0 and row[0] != today:
                 new_data.append(row)
         
         # הוספת הנתונים החדשים
