@@ -20,10 +20,18 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      # הרצת פייסבוק בלבד
+      # הרצת פייסבוק
       - name: Run Facebook Collector
         env:
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: python facebook_collector.py
+
+      # הרצת מעקב עוקבים (YouTube + Facebook)
+      - name: Run Followers Tracker
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: python followers_tracker.py
