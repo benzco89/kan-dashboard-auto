@@ -212,8 +212,8 @@ def save_followers_data(youtube_stats, facebook_stats):
     try:
         worksheet = sh.worksheet(SHEET_NAME)
     except:
-        # יצירת גיליון חדש עם כותרות
-        worksheet = sh.add_worksheet(title=SHEET_NAME, rows=1000, cols=20)
+        # יצירת גיליון חדש עם כותרות - תיקון: 14 עמודות בדיוק
+        worksheet = sh.add_worksheet(title=SHEET_NAME, rows=1000, cols=14)
         headers = [
             'date', 'pulled_at', 'platform',
             'followers', 'fan_count', 'total_views', 'video_count',
@@ -224,7 +224,20 @@ def save_followers_data(youtube_stats, facebook_stats):
         print(f"✅ Created new sheet: {SHEET_NAME}")
     
     # קריאת נתונים קיימים לחישוב שינוי
-    existing_data = worksheet.get_all_records()
+    try:
+        existing_data = worksheet.get_all_records()
+    except Exception as e:
+        print(f"⚠️ Warning reading existing data: {e}")
+        # אם יש בעיה בקריאה, נסה לנקות ולהתחיל מחדש
+        worksheet.clear()
+        headers = [
+            'date', 'pulled_at', 'platform',
+            'followers', 'fan_count', 'total_views', 'video_count',
+            'followers_change', 'views_change',
+            'fan_adds', 'fan_removes', 'daily_reach', 'daily_engagements', 'daily_video_views'
+        ]
+        worksheet.update('A1:N1', [headers])
+        existing_data = []
     
     today = get_israel_date()
     pulled_at = get_israel_datetime()
