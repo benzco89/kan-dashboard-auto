@@ -43,6 +43,7 @@ def get_post_insights(post_id, media_type):
       - media_views: post_media_view – תצוגות לכל סוגי הפוסטים
       - avg_watch_sec
       - total_watch_min
+      - views_30s: צפיות של 30+ שניות (רק וידאו/רילס)
     """
     # מדדים בסיסיים - עובדים לכל סוגי הפוסטים (תמונות, לינקים, וידאו)
     base_metrics = ",".join([
@@ -58,6 +59,7 @@ def get_post_insights(post_id, media_type):
         "blue_reels_play_count",
         "post_video_avg_time_watched",
         "post_video_view_time",
+        "post_video_complete_views_30s",
     ])
 
     result = {
@@ -68,7 +70,8 @@ def get_post_insights(post_id, media_type):
         'views': 0,
         'media_views': 0,
         'avg_watch_sec': 0,
-        'total_watch_min': 0
+        'total_watch_min': 0,
+        'views_30s': 0
     }
 
     # שלב 1: שליפת מדדים בסיסיים (לכל סוגי הפוסטים)
@@ -123,6 +126,8 @@ def get_post_insights(post_id, media_type):
                 elif name == 'post_video_view_time':
                     # ממילישניות לדקות
                     result['total_watch_min'] = round(v / 1000 / 60, 1) if v else 0
+                elif name == 'post_video_complete_views_30s':
+                    result['views_30s'] = v
         except Exception as e:
             print(f"Error fetching video metrics for {post_id}: {e}")
 
@@ -273,6 +278,7 @@ def fetch_facebook_data():
                 'media_views': media_views,
                 'avg_watch_sec': insights.get('avg_watch_sec', 0),
                 'total_watch_min': insights.get('total_watch_min', 0),
+                'views_30s': insights.get('views_30s', 0),
                 'likes': public.get('likes', 0),
                 'comments': public.get('comments', 0),
                 'shares': public.get('shares', 0),

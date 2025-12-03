@@ -129,8 +129,66 @@ def get_facebook_stats():
         
     except Exception as e:
         print(f"❌ Facebook Error: {e}")
-    
+
     return None
+
+def get_facebook_daily_insights():
+    """
+    משיכת נתונים יומיים ברמת הדף - עוקבים חדשים, reach, אינטראקציות
+    מחזיר: fan_adds, fan_removes, daily_reach, daily_engagements, daily_video_views
+    """
+    access_token = os.environ.get('FACEBOOK_TOKEN')
+    if not access_token:
+        print("⚠️ Missing FACEBOOK_TOKEN")
+        return None
+
+    try:
+        url = f"https://graph.facebook.com/{FACEBOOK_API_VERSION}/{FACEBOOK_PAGE_ID}/insights"
+        params = {
+            'access_token': access_token,
+            'metric': ','.join([
+                'page_fan_adds',              # עוקבים חדשים
+                'page_fan_removes',           # עוקבים שעזבו
+                'page_impressions_unique',    # reach יומי
+                'page_post_engagements',      # אינטראקציות כוללות
+                'page_video_views'            # צפיות וידאו כוללות
+            ]),
+            'period': 'day',
+            'date_preset': 'yesterday'
+        }
+
+        res = requests.get(url, params=params).json()
+
+        result = {
+            'fan_adds': 0,
+            'fan_removes': 0,
+            'daily_reach': 0,
+            'daily_engagements': 0,
+            'daily_video_views': 0
+        }
+
+        if 'data' in res:
+            for item in res['data']:
+                name = item.get('name')
+                values = item.get('values', [])
+                value = values[0].get('value', 0) if values else 0
+
+                if name == 'page_fan_adds':
+                    result['fan_adds'] = value
+                elif name == 'page_fan_removes':
+                    result['fan_removes'] = value
+                elif name == 'page_impressions_unique':
+                    result['daily_reach'] = value
+                elif name == 'page_post_engagements':
+                    result['daily_engagements'] = value
+                elif name == 'page_video_views':
+                    result['daily_video_views'] = value
+
+        return result
+
+    except Exception as e:
+        print(f"❌ Facebook Daily Insights Error: {e}")
+        return None
 
 # --- Google Sheets Functions ---
 
@@ -155,13 +213,14 @@ def save_followers_data(youtube_stats, facebook_stats):
         worksheet = sh.worksheet(SHEET_NAME)
     except:
         # יצירת גיליון חדש עם כותרות
-        worksheet = sh.add_worksheet(title=SHEET_NAME, rows=1000, cols=15)
+        worksheet = sh.add_worksheet(title=SHEET_NAME, rows=1000, cols=20)
         headers = [
-            'date', 'pulled_at', 'platform', 
+            'date', 'pulled_at', 'platform',
             'followers', 'fan_count', 'total_views', 'video_count',
-            'followers_change', 'views_change'
+            'followers_change', 'views_change',
+            'fan_adds', 'fan_removes', 'daily_reach', 'daily_engagements', 'daily_video_views'
         ]
-        worksheet.update('A1:I1', [headers])
+        worksheet.update('A1:N1', [headers])
         print(f"✅ Created new sheet: {SHEET_NAME}")
     
     # קריאת נתונים קיימים לחישוב שינוי
@@ -197,7 +256,8 @@ def save_followers_data(youtube_stats, facebook_stats):
             youtube_stats['total_views'],
             youtube_stats['video_count'],
             followers_change,
-            views_change
+            views_change,
+            0, 0, 0, 0, 0  # fan_adds, fan_removes, daily_reach, daily_engagements, daily_video_views - לא רלוונטי ליוטיוב
         ])
         print(f"📺 YouTube: {youtube_stats['subscribers']:,} subscribers (+{followers_change:,})")
     
@@ -209,7 +269,7 @@ def save_followers_data(youtube_stats, facebook_stats):
             if row.get('platform') == 'Facebook' and row.get('date') != today:
                 prev_fb = row
                 break
-        
+
         followers_change = 0
         if prev_fb:
             prev_followers = int(prev_fb.get('followers', 0) or 0)
@@ -217,7 +277,17 @@ def save_followers_data(youtube_stats, facebook_stats):
                 prev_followers = int(prev_fb.get('fan_count', 0) or 0)
             current_followers = facebook_stats['followers'] or facebook_stats['fan_count']
             followers_change = current_followers - prev_followers
-        
+
+        # משיכת נתונים יומיים נוספים
+        daily_insights = get_facebook_daily_insights()
+
+        # הכנת ערכים (אם אין נתונים יומיים - נשים 0)
+        fan_adds = daily_insights.get('fan_adds', 0) if daily_insights else 0
+        fan_removes = daily_insights.get('fan_removes', 0) if daily_insights else 0
+        daily_reach = daily_insights.get('daily_reach', 0) if daily_insights else 0
+        daily_engagements = daily_insights.get('daily_engagements', 0) if daily_insights else 0
+        daily_video_views = daily_insights.get('daily_video_views', 0) if daily_insights else 0
+
         rows_to_add.append([
             today,
             pulled_at,
@@ -227,9 +297,16 @@ def save_followers_data(youtube_stats, facebook_stats):
             0,  # total_views לא זמין
             0,  # video_count לא זמין
             followers_change,
-            0   # views_change לא זמין
+            0,  # views_change לא זמין
+            fan_adds,
+            fan_removes,
+            daily_reach,
+            daily_engagements,
+            daily_video_views
         ])
         print(f"📘 Facebook: {facebook_stats['fan_count']:,} likes, {facebook_stats['followers']:,} followers (+{followers_change:,})")
+        if daily_insights:
+            print(f"   Daily: +{fan_adds:,} adds, -{fan_removes:,} removes, {daily_reach:,} reach, {daily_engagements:,} engagements")
     
     # בדיקה אם כבר יש נתונים להיום - עדכון במקום הוספה
     updated_today = False
