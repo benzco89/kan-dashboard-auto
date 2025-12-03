@@ -11,7 +11,7 @@ import json
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN')
 PAGE_ID = "220634478361516"
 API_VERSION = "v24.0"
-DAYS_BACK = 16  # לאוטומציה יומית
+DAYS_BACK = 3  # לאוטומציה יומית
 
 SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
 SHEET_NAME = "נתוני פייסבוק"
@@ -316,11 +316,16 @@ def save_to_sheets(new_df):
     try:
         worksheet = sh.worksheet(SHEET_NAME)
     except:
-        worksheet = sh.add_worksheet(title=SHEET_NAME, rows=1000, cols=30)
+        # תיקון: 25 עמודות (23 מהנתונים + 2 עתיד) במקום 30
+        worksheet = sh.add_worksheet(title=SHEET_NAME, rows=1000, cols=25)
 
     # קריאת היסטוריה
-    existing_data = worksheet.get_all_records()
-    existing_df = pd.DataFrame(existing_data)
+    try:
+        existing_data = worksheet.get_all_records()
+        existing_df = pd.DataFrame(existing_data)
+    except Exception as e:
+        print(f"⚠️ Warning reading existing data: {e}")
+        existing_df = pd.DataFrame()
 
     # מיזוג
     if not existing_df.empty:
