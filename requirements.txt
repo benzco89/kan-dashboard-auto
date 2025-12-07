@@ -7,3 +7,4 @@ isodate
 pytz
 numpy
 requests
+python-dotenv

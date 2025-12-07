@@ -7,6 +7,14 @@ from datetime import datetime, timedelta
 import time
 import json
 
+# Load .env file if exists (for local development)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+
 # --- Config ---
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN')
 PAGE_ID = "220634478361516"
@@ -45,14 +53,23 @@ def get_post_insights(post_id, media_type):
       - total_watch_min
       - views_30s: צפיות של 30+ שניות (רק וידאו/רילס)
     """
-    # מדדים בסיסיים - עובדים לכל סוגי הפוסטים (תמונות, לינקים, וידאו)
-    base_metrics = ",".join([
-        "post_impressions",
-        "post_impressions_unique",
-        "post_engaged_users",
-        "post_clicks",
-        "post_media_view",
-    ])
+    # מדדים בסיסיים - עובדים לכל סוגי הפוסטים (תמונות, לינקים)
+    # הערה: post_media_view ו-post_engaged_users לא עובדים לתמונות ב-New Page Experience
+    if media_type in ['Video', 'Reel']:
+        base_metrics = ",".join([
+            "post_impressions",
+            "post_impressions_unique",
+            "post_engaged_users",
+            "post_clicks",
+            "post_media_view",
+        ])
+    else:
+        # Photos - using metrics from meta_api.md reference
+        base_metrics = ",".join([
+            "post_impressions",
+            "post_impressions_unique",  # This is reach
+            "post_consumptions",        # Total interactions
+        ])
 
     # מדדי וידאו - רק לוידאו ורילס
     video_metrics = ",".join([
@@ -84,6 +101,14 @@ def get_post_insights(post_id, media_type):
 
     try:
         res = requests.get(url, params=params).json()
+        
+        # Debug: הדפסת תוכן התגובה לפוסטים מסוג Photo
+        if media_type == 'Photo':
+            if 'error' in res:
+                print(f"❌ Photo insights error for {post_id}: {res['error'].get('message', 'Unknown')}")
+            elif not res.get('data'):
+                print(f"⚠️ Photo insights empty for {post_id}")
+        
         data = res.get('data', [])
         for item in data:
             name = item.get('name')
@@ -98,6 +123,10 @@ def get_post_insights(post_id, media_type):
                 result['engaged_users'] = v
             elif name == 'post_clicks':
                 result['clicks'] = v
+            elif name == 'post_consumptions':
+                # For photos - total clicks/interactions
+                if result['clicks'] == 0:
+                    result['clicks'] = v
             elif name == 'post_media_view':
                 result['media_views'] = v
     except Exception as e:
@@ -269,7 +298,7 @@ def fetch_facebook_data():
                 'date': post['created_time'][:10],
                 'time': post['created_time'][11:16],
                 'type': media_type,
-                'title': (post.get('message', '') or '').replace('\n', ' ')[:200],
+                'title': (post.get('message', '') or '').replace('\n', ' ')[:500],
                 'reach': reach_val,
                 'impressions': impressions,
                 'clicks': insights.get('clicks', 0),
