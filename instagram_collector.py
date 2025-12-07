@@ -11,6 +11,8 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
 import time
 import json
+import re  # for timestamp parsing
+import pytz  # for Israel timezone
 
 # Load .env file if exists (for local development)
 try:
@@ -192,7 +194,9 @@ def fetch_instagram_media(ig_account_id):
             # בדיקת תאריך
             timestamp = media.get('timestamp', '')
             if timestamp:
-                media_date = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                # Handle both '+0000' and 'Z' formats
+                ts_normalized = re.sub(r'\+0000$', '+00:00', timestamp.replace('Z', '+00:00'))
+                media_date = datetime.fromisoformat(ts_normalized)
                 if media_date.timestamp() < since_unix:
                     # יצאנו מטווח התאריכים
                     break
@@ -213,8 +217,8 @@ def fetch_instagram_media(ig_account_id):
             
             all_media.append({
                 'media_id': media_id,
-                'date': timestamp[:10] if timestamp else '',
-                'time': timestamp[11:16] if timestamp else '',
+                'date': media_date.astimezone(pytz.timezone('Asia/Jerusalem')).strftime('%Y-%m-%d') if timestamp else '',
+                'time': media_date.astimezone(pytz.timezone('Asia/Jerusalem')).strftime('%H:%M') if timestamp else '',
                 'type': content_type,
                 'caption': (media.get('caption', '') or '')[:500].replace('\n', ' '),
                 'likes': media.get('like_count', 0),
@@ -227,7 +231,7 @@ def fetch_instagram_media(ig_account_id):
                 'avg_watch_sec': insights.get('avg_watch_sec', 0),
                 'engagement_rate': 0,  # יחושב אחר כך
                 'permalink': media.get('permalink', ''),
-                'pulled_at': datetime.now().strftime('%Y-%m-%d %H:%M')
+                'pulled_at': datetime.now(pytz.timezone('Asia/Jerusalem')).strftime('%Y-%m-%d %H:%M')
             })
             
             time.sleep(0.15)  # Rate limiting
@@ -236,7 +240,9 @@ def fetch_instagram_media(ig_account_id):
         if res['data']:
             last_timestamp = res['data'][-1].get('timestamp', '')
             if last_timestamp:
-                last_date = datetime.fromisoformat(last_timestamp.replace('Z', '+00:00'))
+                # Handle both '+0000' and 'Z' formats
+                ts_normalized = re.sub(r'\+0000$', '+00:00', last_timestamp.replace('Z', '+00:00'))
+                last_date = datetime.fromisoformat(ts_normalized)
                 if last_date.timestamp() < since_unix:
                     break
         

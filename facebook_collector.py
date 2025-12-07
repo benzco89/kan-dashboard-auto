@@ -6,6 +6,8 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime, timedelta
 import time
 import json
+import pytz  # for Israel timezone
+import re  # for timestamp parsing
 
 # Load .env file if exists (for local development)
 try:
@@ -293,10 +295,17 @@ def fetch_facebook_data():
             denom = reach_val or impressions
             eng_rate = round((total_eng / denom) * 100, 2) if denom > 0 else 0
 
+            # המרה לשעון ישראל
+            il_tz = pytz.timezone('Asia/Jerusalem')
+            created_time = post['created_time']
+            # Handle format: 2025-12-06T21:17:30+0000
+            ts_normalized = re.sub(r'\+0000$', '+00:00', created_time.replace('Z', '+00:00'))
+            post_datetime = datetime.fromisoformat(ts_normalized).astimezone(il_tz)
+            
             all_posts.append({
                 'post_id': post_id,
-                'date': post['created_time'][:10],
-                'time': post['created_time'][11:16],
+                'date': post_datetime.strftime('%Y-%m-%d'),
+                'time': post_datetime.strftime('%H:%M'),
                 'type': media_type,
                 'title': (post.get('message', '') or '').replace('\n', ' ')[:500],
                 'reach': reach_val,
@@ -314,7 +323,7 @@ def fetch_facebook_data():
                 'total_engagement': total_eng,
                 'engagement_rate': eng_rate,
                 'permalink': post.get('permalink_url', ''),
-                'pulled_at': datetime.now().strftime('%Y-%m-%d %H:%M')
+                'pulled_at': datetime.now(il_tz).strftime('%Y-%m-%d %H:%M')
             })
             time.sleep(0.15)
 
