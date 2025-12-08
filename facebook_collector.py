@@ -20,7 +20,7 @@ except ImportError:
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN')
 PAGE_ID = "220634478361516"
 API_VERSION = "v24.0"
-DAYS_BACK = 16  # לאוטומציה יומית
+DAYS_BACK = 16
 
 SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
 SHEET_NAME = "נתוני פייסבוק"
@@ -40,19 +40,11 @@ def get_video_direct_metrics(video_id):
         return 0
 
 def get_negative_feedback_safe(post_id):
-    """
-    מנסה למשוך פידבק שלילי בנפרד.
-    אם נכשל (כי המדד בוטל בגרסה החדשה), מחזיר 0 ולא תוקע את הסקריפט.
-    """
-    url = f"https://graph.facebook.com/{API_VERSION}/{post_id}/insights"
-    params = {
-        'access_token': ACCESS_TOKEN,
-        'metric': 'post_negative_feedback',
-        'period': 'lifetime'
-    }
+    """משיכת פידבק שלילי בנפרד כדי לא להכשיל את שאר הנתונים"""
     try:
-        res = requests.get(url, params=params).json()
-        if 'data' in res and len(res['data']) > 0:
+        url = f"https://graph.facebook.com/{API_VERSION}/{post_id}/insights"
+        res = requests.get(url, params={'access_token': ACCESS_TOKEN, 'metric': 'post_negative_feedback', 'period': 'lifetime'}).json()
+        if 'data' in res and res['data']:
             return res['data'][0]['values'][0]['value']
     except:
         pass
@@ -60,9 +52,11 @@ def get_negative_feedback_safe(post_id):
 
 def get_post_insights(post_id, media_type):
     """
-    משיכת מדדי insights - גרסה יציבה
+    משיכת מדדי insights - גרסה מתוקנת (ללא המדדים שמפילים את הבקשה)
     """
-    # מדדים שעובדים בוודאות (לפי הבדיקה)
+    # === התיקון הקריטי כאן ===
+    # הסרנו את post_impressions ואת post_engaged_users שגרמו לשגיאה 400
+    
     if media_type in ['Video', 'Reel']:
         metrics = ",".join([
             "post_impressions_unique",      # Reach
@@ -72,11 +66,10 @@ def get_post_insights(post_id, media_type):
             "post_media_view"               # Views (Fallback)
         ])
     else:
-        # לתמונות וסטטוסים
+        # לתמונות וסטטוסים - נשארים רק עם מה שעובד בוודאות
         metrics = ",".join([
             "post_impressions_unique",      # Reach
-            "post_clicks",                  # Clicks
-            "post_impressions"              # Impressions
+            "post_clicks"                   # Clicks
         ])
 
     result = {
@@ -97,10 +90,9 @@ def get_post_insights(post_id, media_type):
     try:
         res = requests.get(url, params=params).json()
         
+        # אם עדיין יש שגיאה, נדפיס אותה אבל לא נתרסק
         if 'error' in res:
-            # במקרה של שגיאה, נדפיס אזהרה אבל לא נעצור
-            # print(f"⚠️ Insights warning for {post_id}: {res['error'].get('message')}")
-            pass
+            print(f"⚠️ API Error for {post_id} ({media_type}): {res['error'].get('message')}")
         
         data = res.get('data', [])
         for item in data:
@@ -110,8 +102,7 @@ def get_post_insights(post_id, media_type):
 
             if name == 'post_impressions_unique':
                 result['reach'] = v
-            elif name == 'post_impressions':
-                result['impressions'] = v
+            # post_impressions הוסר כי הוא גורם לשגיאה, נשתמש ב-reach כקירוב
             elif name == 'post_clicks':
                 result['clicks'] = v
             elif name == 'blue_reels_play_count':
@@ -122,7 +113,7 @@ def get_post_insights(post_id, media_type):
                 result['avg_watch_sec'] = round(v / 1000, 1) if v else 0
 
     except Exception as e:
-        print(f"❌ Error fetching insights for {post_id}: {e}")
+        print(f"❌ Exception fetching insights for {post_id}: {e}")
 
     return result
 
@@ -204,7 +195,7 @@ def fetch_facebook_data():
             insights = get_post_insights(post_id, media_type)
             public = get_public_metrics(post_id)
             
-            # 2. משיכת נתונים שליליים (בזהירות) - תוספת חדשה
+            # 2. משיכת נתונים שליליים (בזהירות)
             neg_feedback = get_negative_feedback_safe(post_id)
 
             # 3. תיקוני נתונים
@@ -218,8 +209,10 @@ def fetch_facebook_data():
                     pass
 
             reach = insights.get('reach', 0)
+            # אם אין impressions (כי הסרנו את המדד), נשתמש ב-reach כברירת מחדל
+            impressions = insights.get('impressions', 0) or reach
             if reach == 0:
-                reach = insights.get('impressions', 0) or views
+                reach = impressions or views
 
             # 4. חישוב מדד מעורבות משוקלל
             clicks = insights.get('clicks', 0)
@@ -247,10 +240,10 @@ def fetch_facebook_data():
                 'type': media_type,
                 'title': (post.get('message', '') or '').replace('\n', ' ')[:500],
                 'reach': reach,
-                'impressions': insights.get('impressions', 0),
+                'impressions': impressions,
                 'clicks': clicks,
                 'engaged_users': total_eng,
-                'negative_feedback': neg_feedback, # המדד החדש
+                'negative_feedback': neg_feedback,
                 'views': views,
                 'avg_watch_sec': insights.get('avg_watch_sec', 0),
                 'likes': public['likes'],
@@ -262,7 +255,7 @@ def fetch_facebook_data():
                 'pulled_at': datetime.now(il_tz).strftime('%Y-%m-%d %H:%M')
             })
             
-            time.sleep(0.2)
+            time.sleep(0.15)
 
         if 'paging' in res and 'next' in res['paging']:
             url = res['paging']['next']
@@ -315,7 +308,7 @@ def save_to_sheets(new_df):
         else:
             new_df['views_delta'] = 0
 
-        # וידוא עמודות (זה יוסיף אוטומטית את negative_feedback לגיליון)
+        # וידוא עמודות
         for col in new_df.columns:
             if col not in existing_df.columns:
                 existing_df[col] = ""
