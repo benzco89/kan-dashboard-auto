@@ -20,7 +20,7 @@ except ImportError:
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN')
 PAGE_ID = "220634478361516"
 API_VERSION = "v24.0"
-DAYS_BACK = 3
+DAYS_BACK = 16
 
 SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
 SHEET_NAME = "נתוני פייסבוק"
@@ -52,25 +52,28 @@ def get_negative_feedback_safe(post_id):
 
 def get_post_insights(post_id, media_type):
     """
-    משיכת מדדי insights - גרסה מתוקנת (ללא המדדים שמפילים את הבקשה)
+    משיכת מדדי insights - גרסה מעודכנת עם מדדי וידאו מורחבים
     """
-    # === התיקון הקריטי כאן ===
-    # הסרנו את post_impressions ואת post_engaged_users שגרמו לשגיאה 400
+    
+    # מדדים בסיסיים שעובדים לכל סוגי הפוסטים
+    base_metrics = [
+        "post_impressions_unique",      # Reach
+        "post_clicks",                  # Clicks
+    ]
+    
+    # מדדי וידאו נוספים
+    video_metrics = [
+        "blue_reels_play_count",        # Views (Reels)
+        "post_video_avg_time_watched",  # Watch Time (ms)
+        "post_video_view_time",         # Total watch time (ms) - לחישוב total_watch_min
+        "post_video_views_30s",         # 30-second views - לחישוב completion rate
+        "post_media_view",              # Views (Fallback)
+    ]
     
     if media_type in ['Video', 'Reel']:
-        metrics = ",".join([
-            "post_impressions_unique",      # Reach
-            "post_clicks",                  # Clicks
-            "blue_reels_play_count",        # Views (Reels)
-            "post_video_avg_time_watched",  # Watch Time
-            "post_media_view"               # Views (Fallback)
-        ])
+        metrics = ",".join(base_metrics + video_metrics)
     else:
-        # לתמונות וסטטוסים - נשארים רק עם מה שעובד בוודאות
-        metrics = ",".join([
-            "post_impressions_unique",      # Reach
-            "post_clicks"                   # Clicks
-        ])
+        metrics = ",".join(base_metrics)
 
     result = {
         'reach': 0,
@@ -78,6 +81,9 @@ def get_post_insights(post_id, media_type):
         'clicks': 0,
         'views': 0,
         'avg_watch_sec': 0,
+        'total_watch_min': 0,
+        'views_30s': 0,
+        'media_views': 0,
     }
 
     url = f"https://graph.facebook.com/{API_VERSION}/{post_id}/insights"
@@ -90,9 +96,15 @@ def get_post_insights(post_id, media_type):
     try:
         res = requests.get(url, params=params).json()
         
-        # אם עדיין יש שגיאה, נדפיס אותה אבל לא נתרסק
         if 'error' in res:
-            print(f"⚠️ API Error for {post_id} ({media_type}): {res['error'].get('message')}")
+            error_msg = res['error'].get('message', 'Unknown error')
+            # אם יש שגיאה במדדי וידאו, ננסה בלי הם
+            if media_type in ['Video', 'Reel'] and 'Invalid metric' in error_msg:
+                print(f"⚠️ Retrying without extended video metrics for {post_id}")
+                params['metric'] = ",".join(base_metrics + ["blue_reels_play_count", "post_video_avg_time_watched", "post_media_view"])
+                res = requests.get(url, params=params).json()
+            else:
+                print(f"⚠️ API Error for {post_id} ({media_type}): {error_msg}")
         
         data = res.get('data', [])
         for item in data:
@@ -102,15 +114,21 @@ def get_post_insights(post_id, media_type):
 
             if name == 'post_impressions_unique':
                 result['reach'] = v
-            # post_impressions הוסר כי הוא גורם לשגיאה, נשתמש ב-reach כקירוב
             elif name == 'post_clicks':
                 result['clicks'] = v
             elif name == 'blue_reels_play_count':
                 result['views'] = v
-            elif name == 'post_media_view' and result['views'] == 0:
-                result['views'] = v
+            elif name == 'post_media_view':
+                result['media_views'] = v
+                if result['views'] == 0:
+                    result['views'] = v
             elif name == 'post_video_avg_time_watched':
                 result['avg_watch_sec'] = round(v / 1000, 1) if v else 0
+            elif name == 'post_video_view_time':
+                # המרה ממילישניות לדקות
+                result['total_watch_min'] = round(v / 60000, 1) if v else 0
+            elif name == 'post_video_views_30s':
+                result['views_30s'] = v
 
     except Exception as e:
         print(f"❌ Exception fetching insights for {post_id}: {e}")
@@ -165,7 +183,6 @@ def detect_media_type(post):
 def fetch_facebook_data():
     print(f"🚀 Facebook Collector - {datetime.now()}")
 
-    # משיכת נתונים אחורה
     since_unix = int((datetime.now() - timedelta(days=DAYS_BACK)).timestamp())
     all_posts = []
 
@@ -209,12 +226,10 @@ def fetch_facebook_data():
                     pass
 
             reach = insights.get('reach', 0)
-            # אם אין impressions (כי הסרנו את המדד), נשתמש ב-reach כברירת מחדל
-            impressions = insights.get('impressions', 0) or reach
             if reach == 0:
-                reach = impressions or views
+                reach = views
 
-            # 4. חישוב מדד מעורבות משוקלל
+            # 4. חישוב מדדים נגזרים
             clicks = insights.get('clicks', 0)
             total_eng = (
                 clicks +
@@ -227,7 +242,13 @@ def fetch_facebook_data():
             if reach > 0:
                 engagement_rate = round((total_eng / reach) * 100, 2)
 
-            # 5. המרת זמן
+            # 5. חישוב completion rate (רק לוידאו)
+            completion_rate = 0
+            views_30s = insights.get('views_30s', 0)
+            if views > 0 and views_30s > 0:
+                completion_rate = round((views_30s / views) * 100, 1)
+
+            # 6. המרת זמן
             il_tz = pytz.timezone('Asia/Jerusalem')
             created_time = post['created_time']
             ts_normalized = re.sub(r'\+0000$', '+00:00', created_time.replace('Z', '+00:00'))
@@ -240,17 +261,18 @@ def fetch_facebook_data():
                 'type': media_type,
                 'title': (post.get('message', '') or '').replace('\n', ' ')[:500],
                 'reach': reach,
-                'impressions': impressions,
                 'clicks': clicks,
-                'engaged_users': total_eng,
-                'negative_feedback': neg_feedback,
                 'views': views,
+                'views_30s': views_30s,
+                'total_watch_min': insights.get('total_watch_min', 0),
                 'avg_watch_sec': insights.get('avg_watch_sec', 0),
+                'completion_rate': completion_rate,
                 'likes': public['likes'],
                 'comments': public['comments'],
                 'shares': public['shares'],
                 'total_engagement': total_eng,
                 'engagement_rate': engagement_rate,
+                'negative_feedback': neg_feedback,
                 'permalink': post.get('permalink_url', ''),
                 'pulled_at': datetime.now(il_tz).strftime('%Y-%m-%d %H:%M')
             })
@@ -308,6 +330,16 @@ def save_to_sheets(new_df):
         else:
             new_df['views_delta'] = 0
 
+        # חישוב דלתא ל-reach
+        if 'reach' in existing_df.columns:
+            existing_df['reach'] = pd.to_numeric(existing_df['reach'], errors='coerce').fillna(0)
+            reach_map = existing_df.set_index('post_id')['reach'].to_dict()
+            new_df['reach_delta'] = new_df.apply(
+                lambda x: x['reach'] - reach_map.get(x['post_id'], x['reach']), axis=1
+            )
+        else:
+            new_df['reach_delta'] = 0
+
         # וידוא עמודות
         for col in new_df.columns:
             if col not in existing_df.columns:
@@ -318,6 +350,7 @@ def save_to_sheets(new_df):
         print(f"🔄 Merged: {len(new_df)} new + {len(existing_df)} existing -> {len(final_df)} total")
     else:
         new_df['views_delta'] = 0
+        new_df['reach_delta'] = 0
         final_df = new_df
 
     # ניקוי ומיון
