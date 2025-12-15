@@ -129,7 +129,8 @@ def summarize_youtube(df, yesterday_date):
             comments = int(row.get('comments', 0))
             like_rate = round(row.get('like_rate', 0), 1)
             # פורמט מורחב לניתוח AI
-            top_new += f"• {row['title'][:55]} | {row.get('video_type', 'רגיל')} | {int(row['views']):,} צפיות | {likes:,} לייקים ({like_rate}%) | {comments} תגובות\n"
+            video_url = row.get('video_url', '')
+            top_new += f"• {row['title']} | {row.get('video_type', 'רגיל')} | {int(row['views']):,} צפיות | {likes:,} לייקים ({like_rate}%) | {comments} תגובות | LINK: {video_url}\n"
     
     # סרטונים ישנים עם דלתא גבוהה
     top_delta = ""
@@ -138,7 +139,8 @@ def summarize_youtube(df, yesterday_date):
         if not old_videos.empty:
             old_videos = old_videos[old_videos['views_delta'] > 0].sort_values('views_delta', ascending=False)
             for _, row in old_videos.head(3).iterrows():
-                top_delta += f"• {row['title'][:50]} | מ-{row['published_at']} | +{int(row['views_delta']):,} צפיות חדשות\n"
+                video_url = row.get('video_url', '')
+                top_delta += f"• {row['title']} | מ-{row['published_at']} | +{int(row['views_delta']):,} צפיות חדשות | LINK: {video_url}\n"
     
     return f"""סרטונים חדשים: {new_count}
 סה"כ צפיות חדשות: {total_views_new:,}
@@ -178,13 +180,14 @@ def summarize_facebook(df, yesterday_date):
     if not new_yesterday.empty:
         new_yesterday = new_yesterday.sort_values('reach', ascending=False)
         for _, row in new_yesterday.head(5).iterrows():
-            title = (row.get('title', '') or '')[:45]
+            title = (row.get('title', '') or '')
             likes = int(row.get('likes', 0))
             comments = int(row.get('comments', 0))
             shares = int(row.get('shares', 0))
             eng_rate = round(row.get('engagement_rate', 0), 1)
             # פורמט מורחב לניתוח AI
-            top_posts += f"• {title} | {row.get('type', '')} | {int(row['reach']):,} reach | {int(row['views']):,} views | לייקים: {likes:,} | תגובות: {comments} | שיתופים: {shares} | מעורבות: {eng_rate}%\n"
+            permalink = row.get('permalink', '')
+            top_posts += f"• {title} | {row.get('type', '')} | {int(row['reach']):,} reach | {int(row['views']):,} views | לייקים: {likes:,} | תגובות: {comments} | שיתופים: {shares} | מעורבות: {eng_rate}% | LINK: {permalink}\n"
     
     return f"""פוסטים חדשים: {new_count}
 סה"כ Reach: {total_reach:,} | צפיות וידאו: {total_views:,}
@@ -222,14 +225,15 @@ def summarize_instagram(df, yesterday_date):
     if not new_yesterday.empty:
         new_yesterday = new_yesterday.sort_values('views', ascending=False)
         for _, row in new_yesterday.head(5).iterrows():
-            caption = (row.get('caption', '') or '')[:40]
+            caption = (row.get('caption', '') or '')
             likes = int(row.get('likes', 0))
             comments = int(row.get('comments', 0))
             saved = int(row.get('saved', 0))
             shares = int(row.get('shares', 0))
             eng_rate = round(row.get('engagement_rate', 0), 1)
             # פורמט מורחב לניתוח AI
-            top_posts += f"• {caption} | {row.get('type', '')} | {int(row['views']):,} views | {int(row['reach']):,} reach | לייקים: {likes:,} | תגובות: {comments} | שמירות: {saved} | שיתופים: {shares} | מעורבות: {eng_rate}%\n"
+            permalink = row.get('permalink', '')
+            top_posts += f"• {caption} | {row.get('type', '')} | {int(row['views']):,} views | {int(row['reach']):,} reach | לייקים: {likes:,} | תגובות: {comments} | שמירות: {saved} | שיתופים: {shares} | מעורבות: {eng_rate}% | LINK: {permalink}\n"
     
     return f"""פוסטים חדשים: {new_count}
 סה"כ צפיות: {total_views:,} | Reach: {total_reach:,}
@@ -299,26 +303,26 @@ def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagr
 
 📺 YouTube
 ━━━━━━━━━━━━━━━━━
-• כמה סרטונים | כמה צפיות חדשות
-• מוביל 1: שם קצר | סוג | צפיות
-• מוביל 2: שם קצר | סוג | צפיות
-• מוביל 3: שם קצר | סוג | צפיות
+- כמה סרטונים | כמה צפיות חדשות
+- מוביל 1: [שם](LINK) | סוג | צפיות
+- מוביל 2: [שם](LINK) | סוג | צפיות
+- מוביל 3: [שם](LINK) | סוג | צפיות
 💡 תובנה במשפט אחד (אפשר להזכיר מעורבות חריגה אם יש)
 
 📘 Facebook
 ━━━━━━━━━━━━━━━━━
-• כמה פוסטים | reach כולל
-• מוביל 1: שם קצר | סוג | reach
-• מוביל 2: שם קצר | סוג | reach
-• מוביל 3: שם קצר | סוג | reach
+- כמה פוסטים | reach כולל
+- מוביל 1: [שם](LINK) | סוג | reach
+- מוביל 2: [שם](LINK) | סוג | reach
+- מוביל 3: [שם](LINK) | סוג | reach
 💡 תובנה במשפט אחד (אפשר להזכיר מעורבות/שיתופים חריגים אם יש)
 
 📷 Instagram
 ━━━━━━━━━━━━━━━━━
-• כמה פוסטים | צפיות כולל
-• מוביל 1: שם קצר | סוג | views
-• מוביל 2: שם קצר | סוג | views
-• מוביל 3: שם קצר | סוג | views
+- כמה פוסטים | צפיות כולל
+- מוביל 1: [שם](LINK) | סוג | views
+- מוביל 2: [שם](LINK) | סוג | views
+- מוביל 3: [שם](LINK) | סוג | views
 💡 תובנה במשפט אחד (אפשר להזכיר שמירות/תגובות חריגות אם יש)
 
 🔥 3 תובנות חוצות פלטפורמות
@@ -348,6 +352,11 @@ def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagr
 
 === ⚙️ כללים קריטיים ===
 
+**חשוב - לינקים:**
+- הנתונים שקיבלת כוללים LINK: לכל פריט
+- כשאתה מציג מוביל, השתמש בפורמט Markdown: [כותרת](LINK)
+- דוגמה: ["זה היה מרחץ דמים": ארסן](https://youtube.com/watch?v=xyz)
+- אל תשנה את LINK - העתק אותו בדיוק כפי שהוא
 **תובנות מבוססות נתונים:**
 ✅ "פוסט X הגיע ל-Y reach, פי Z יותר מהמוביל השני" ← טוב, ספציפי
 ✅ "הסרטון על X קיבל 5% like rate, פי 2 מהממוצע" ← טוב, מבוסס נתונים
@@ -482,7 +491,12 @@ def send_telegram_message(message):
         print(f"⚠️ Message too long ({len(message)} chars), truncating...")
         message = message[:3900] + "\n\n... (הדוח קוצר עקב מגבלת אורך)"
     
-    payload = {"chat_id": chat_id, "text": message}
+    payload = {
+        "chat_id": chat_id, 
+        "text": message,
+        "parse_mode": "Markdown",
+        "disable_web_page_preview": True
+    }
     try: 
         response = requests.post(url, json=payload)
         print(f"Telegram response: {response.status_code}")
