@@ -27,7 +27,7 @@ API_VERSION = "v24.0"
 
 # ימים אחורה: 16 להרצה ראשונה, 3 לאוטומציה יומית
 # לשנות ל-3 אחרי ההרצה הראשונה
-DAYS_BACK = 3
+DAYS_BACK = 7
 
 SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
 SHEET_NAME = "נתוני אינסטגרם"
