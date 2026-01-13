@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import * as path from 'path';
+import * as fs from 'fs';
 
 const SPREADSHEET_ID = '1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c';
 
@@ -11,6 +12,28 @@ export const SHEETS = {
   FOLLOWERS: 'מעקב עוקבים',
   INSIGHTS: 'תובנות יומיות',
 } as const;
+
+// Get credentials from environment variable or local file
+function getCredentials() {
+  // Option 1: Environment variable (for production - Render, Vercel, etc.)
+  const envCreds = process.env.GCP_SERVICE_ACCOUNT;
+  if (envCreds) {
+    try {
+      return JSON.parse(envCreds);
+    } catch (e) {
+      console.error('Failed to parse GCP_SERVICE_ACCOUNT env variable');
+    }
+  }
+
+  // Option 2: Local file (for development)
+  const localPath = path.join(process.cwd(), '..', 'service-account.json');
+  if (fs.existsSync(localPath)) {
+    const content = fs.readFileSync(localPath, 'utf8');
+    return JSON.parse(content);
+  }
+
+  throw new Error('No Google credentials found. Set GCP_SERVICE_ACCOUNT env var or provide service-account.json');
+}
 
 // Type definitions based on the data structure
 export interface YouTubeVideo {
@@ -67,10 +90,10 @@ export interface DailyInsight {
 
 // Initialize Google Sheets API
 async function getGoogleSheetsClient() {
-  const serviceAccountPath = path.join(process.cwd(), '..', 'service-account.json');
+  const credentials = getCredentials();
 
   const auth = new google.auth.GoogleAuth({
-    keyFile: serviceAccountPath,
+    credentials,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
 

@@ -26,5 +26,14 @@ Thumbs.db
 *.pem
 *.key
 credentials.json
+service-account.json
 token.json
 .env
+
+# Claude Code temp files
+tmpclaude-*
+.claude/
+.mcp.json
+
+# Node.js
+node_modules/
