@@ -1,0 +1,303 @@
+<html dir="rtl" lang="he"><head></head><body class="bg-background-light dark:bg-background-dark text-text-main-light dark:text-text-main-dark transition-colors duration-300 min-h-screen flex flex-col">```html
+
+
+
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Kan News Social Dashboard</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#F7381B", // Kan News Red/Orange
+                        "background-light": "#F3F4F6", // Gray 100
+                        "background-dark": "#111827", // Gray 900
+                        "card-light": "#FFFFFF",
+                        "card-dark": "#1F2937",
+                        "text-main-light": "#111827",
+                        "text-main-dark": "#F9FAFB",
+                        "text-sub-light": "#6B7280",
+                        "text-sub-dark": "#9CA3AF",
+                    },
+                    fontFamily: {
+                        display: ["Heebo", "sans-serif"],
+                        body: ["Heebo", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem", // Consistent rounded corners
+                        'xl': "1rem",
+                        '2xl': "1.5rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+        body {
+            font-family: 'Heebo', sans-serif;
+        }.no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+
+
+<header class="bg-card-light dark:bg-card-dark shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="text-3xl font-black tracking-tighter">כאן</span>
+<div class="bg-primary w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-lg transform -skew-x-6">
+<span>|&lt;</span>
+</div>
+<span class="text-3xl font-black tracking-tighter">חדשות</span>
+</div>
+<div class="hidden md:flex items-center gap-2 mr-8">
+<span class="px-2 py-1 text-xs font-bold bg-gray-100 dark:bg-gray-800 rounded text-gray-500 uppercase tracking-wide">Social Dashboard</span>
+</div>
+</div>
+<div class="flex-1 max-w-lg mx-8 hidden md:block">
+<div class="relative group">
+<div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+<span class="material-icons-round text-gray-400 group-focus-within:text-primary transition-colors">search</span>
+</div>
+<input class="block w-full pr-10 pl-4 py-2.5 rounded-full bg-background-light dark:bg-gray-800 border-transparent focus:border-primary focus:bg-white dark:focus:bg-gray-900 focus:ring-0 text-sm transition-all duration-300" placeholder="חיפוש פוסטים, סרטונים או נתונים..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400" onclick="document.documentElement.classList.toggle('dark')">
+<span class="material-icons-round dark:hidden">dark_mode</span>
+<span class="material-icons-round hidden dark:block">light_mode</span>
+</button>
+<div class="flex bg-background-light dark:bg-gray-800 rounded-full p-1 hidden sm:flex">
+<button class="px-4 py-1.5 rounded-full text-sm font-medium bg-white dark:bg-gray-700 shadow-sm text-primary transition-all">הכל</button>
+<button class="px-4 py-1.5 rounded-full text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all">Facebook</button>
+<button class="px-4 py-1.5 rounded-full text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all">Instagram</button>
+<button class="px-4 py-1.5 rounded-full text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all">YouTube</button>
+</div>
+<div class="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-orange-400 p-0.5 cursor-pointer">
+<img alt="User Profile" class="rounded-full bg-white dark:bg-gray-900 h-full w-full object-cover border-2 border-white dark:border-gray-900" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9duZ9ZKp360j84tekw0tDb4jUCQ0BK0JvReR7hxhuoOnWhbBWGEW8PpZle2mtdhH-pS5TjCnTeX4QT3b11iAC7r9lwvKfOqMT7InBZifsiRIIeeSXjKOcJxta26EPHnv6xg4xbXU-wKYZW8YXeTWYiNXcXRBPnVFWCXBSaG_D7XRjelmNvDLFsnBL-74cXkA3h9a2UxqgbLeCaNTXgEPFnUftQwhTstGq_pWF-HhWpHC5x6zZxcXvPId4z9hl0Fnl4K0KNeuZRAQ"/>
+</div>
+</div>
+</div>
+</header>
+<div class="flex-1 max-w-screen-2xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6 p-6">
+<aside class="hidden lg:block lg:col-span-2">
+<nav class="sticky top-24 space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 bg-primary text-white rounded-xl shadow-lg shadow-orange-500/20 transition-transform transform hover:scale-105" href="#">
+<span class="material-icons-round">dashboard</span>
+<span class="font-medium">סקירה כללית</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all hover:shadow-md" href="#">
+<span class="material-icons-round">trending_up</span>
+<span class="font-medium">זמן אמת</span>
+<span class="mr-auto bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full font-bold">LIVE</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all hover:shadow-md" href="#">
+<span class="material-icons-round">insights</span>
+<span class="font-medium">דוחות וניתוחים</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all hover:shadow-md" href="#">
+<span class="material-icons-round">campaign</span>
+<span class="font-medium">קמפיינים</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all hover:shadow-md" href="#">
+<span class="material-icons-round">people</span>
+<span class="font-medium">קהל יעד</span>
+</a>
+<div class="border-t border-gray-200 dark:border-gray-700 my-4 pt-4"></div>
+<a class="flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all hover:shadow-md" href="#">
+<span class="material-icons-round">settings</span>
+<span class="font-medium">הגדרות</span>
+</a>
+</nav>
+</aside>
+<main class="lg:col-span-7 space-y-6">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="bg-card-light dark:bg-card-dark p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start mb-4">
+<div class="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
+<span class="material-icons-round text-xl">group</span>
+</div>
+<span class="flex items-center text-green-500 text-xs font-bold bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full">
+<span class="material-icons-round text-sm ml-1">arrow_upward</span> 2.4%
+                        </span>
+</div>
+<div class="text-3xl font-black text-text-main-light dark:text-text-main-dark mb-1">4.2M</div>
+<div class="text-sm text-text-sub-light dark:text-text-sub-dark">סה״כ עוקבים</div>
+</div>
+<div class="bg-card-light dark:bg-card-dark p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start mb-4">
+<div class="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600 dark:text-purple-400">
+<span class="material-icons-round text-xl">visibility</span>
+</div>
+<span class="flex items-center text-green-500 text-xs font-bold bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full">
+<span class="material-icons-round text-sm ml-1">arrow_upward</span> 12.5%
+                        </span>
+</div>
+<div class="text-3xl font-black text-text-main-light dark:text-text-main-dark mb-1">18.5M</div>
+<div class="text-sm text-text-sub-light dark:text-text-sub-dark">חשיפה חודשית</div>
+</div>
+<div class="bg-card-light dark:bg-card-dark p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start mb-4">
+<div class="p-2 bg-orange-50 dark:bg-orange-900/20 rounded-lg text-orange-600 dark:text-orange-400">
+<span class="material-icons-round text-xl">favorite</span>
+</div>
+<span class="flex items-center text-red-500 text-xs font-bold bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-full">
+<span class="material-icons-round text-sm ml-1">arrow_downward</span> 0.8%
+                        </span>
+</div>
+<div class="text-3xl font-black text-text-main-light dark:text-text-main-dark mb-1">8.7%</div>
+<div class="text-sm text-text-sub-light dark:text-text-sub-dark">שיעור מעורבות</div>
+</div>
+</div>
+<div class="bg-card-light dark:bg-card-dark p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-lg font-bold">ביצועי תוכן לאורך זמן</h3>
+<select class="bg-background-light dark:bg-gray-800 border-none text-sm rounded-lg py-1 px-3 focus:ring-1 focus:ring-primary">
+<option>7 ימים אחרונים</option>
+<option>30 ימים אחרונים</option>
+<option>שנה אחרונה</option>
+</select>
+</div>
+<div class="h-64 flex items-end justify-between gap-2 px-2">
+<div class="w-full bg-blue-100 dark:bg-blue-900/20 rounded-t-lg relative group h-[40%]">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-lg h-[60%] opacity-80 group-hover:opacity-100 transition-opacity"></div>
+</div>
+<div class="w-full bg-blue-100 dark:bg-blue-900/20 rounded-t-lg relative group h-[55%]">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-lg h-[45%] opacity-80 group-hover:opacity-100 transition-opacity"></div>
+</div>
+<div class="w-full bg-blue-100 dark:bg-blue-900/20 rounded-t-lg relative group h-[70%]">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-lg h-[75%] opacity-80 group-hover:opacity-100 transition-opacity"></div>
+</div>
+<div class="w-full bg-blue-100 dark:bg-blue-900/20 rounded-t-lg relative group h-[60%]">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-lg h-[50%] opacity-80 group-hover:opacity-100 transition-opacity"></div>
+</div>
+<div class="w-full bg-blue-100 dark:bg-blue-900/20 rounded-t-lg relative group h-[85%]">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-lg h-[80%] opacity-80 group-hover:opacity-100 transition-opacity"></div>
+</div>
+<div class="w-full bg-blue-100 dark:bg-blue-900/20 rounded-t-lg relative group h-[45%]">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-lg h-[30%] opacity-80 group-hover:opacity-100 transition-opacity"></div>
+</div>
+<div class="w-full bg-blue-100 dark:bg-blue-900/20 rounded-t-lg relative group h-[95%]">
+<div class="absolute bottom-0 w-full bg-primary rounded-t-lg h-[90%] opacity-80 group-hover:opacity-100 transition-opacity"></div>
+</div>
+</div>
+<div class="flex justify-between mt-4 text-xs text-text-sub-light dark:text-text-sub-dark font-medium">
+<span>יום א'</span>
+<span>יום ב'</span>
+<span>יום ג'</span>
+<span>יום ד'</span>
+<span>יום ה'</span>
+<span>יום ו'</span>
+<span>שבת</span>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-center mb-4">
+<h3 class="text-lg font-bold">תוכן מוביל</h3>
+<a class="text-primary text-sm font-medium hover:underline" href="#">הצג הכל</a>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+<div class="group relative aspect-video rounded-xl overflow-hidden cursor-pointer">
+<img alt="News event" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqgPP5Um6Vwmnrx9xE6u4F-8nJI8VHjscxcyL4w37MztnCHn-qBeeKM4oBqQMzC3rJKtt8BqgcAEMBcRZgadt-dRnDynUe-YC_55od6naHGsa-06xLDRjwNoSZv59LVRwEsSfpMiieVG97ji5O75NiUGKw8Muy0zHU5wfwiZgID9IZ-fgLrXh7uRSm67ISNWOrgLRpuWcYnD94TW72MIN1DbwLcOqwYDfCsj3Y6Z49ovfZ8d7sOtwGKOEM2d6fqrAPcGP_Q-j0T8g"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+<div class="absolute top-2 left-2 bg-red-600 text-white text-xs px-2 py-0.5 rounded shadow">YouTube</div>
+<div class="absolute bottom-3 right-3 text-white">
+<p class="font-bold text-sm line-clamp-1">דיווח מיוחד: אירועי היום בכנסת</p>
+<div class="flex items-center gap-3 text-xs mt-1 text-gray-200">
+<span class="flex items-center gap-1"><span class="material-icons-round text-sm">visibility</span> 120K</span>
+<span class="flex items-center gap-1"><span class="material-icons-round text-sm">thumb_up</span> 4.5K</span>
+</div>
+</div>
+</div>
+<div class="group relative aspect-video rounded-xl overflow-hidden cursor-pointer">
+<img alt="Interview" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9AHevPHHf4JC24WyUu0OPBywnjHid1LWd-imK8n0_J01FmePf6eq68-Wl4MNZoOwFRD3hVd55NFezIIHbB4Nh06OmG6d_Lk1Ye_JzmOxTJlDoQW_41RsFTaJAunAvoQL03ceAvo2J44XACq_jFT8rhS8K6-KmJBrfcFfChcF2UgVv-6AzPqG_nFDaOkaB69-IXRxs-JcW-qZPJWHGYEJo_mmFuA7YFG2Qz7AdDlNA3-jg4OEnqYwt3kzwjG8OeMx8g3sq0R4NeA0"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+<div class="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded shadow">Facebook</div>
+<div class="absolute bottom-3 right-3 text-white">
+<p class="font-bold text-sm line-clamp-1">ראיון בלעדי עם שר האוצר</p>
+<div class="flex items-center gap-3 text-xs mt-1 text-gray-200">
+<span class="flex items-center gap-1"><span class="material-icons-round text-sm">visibility</span> 85K</span>
+<span class="flex items-center gap-1"><span class="material-icons-round text-sm">thumb_up</span> 2.1K</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<aside class="lg:col-span-3">
+<div class="bg-card-light dark:bg-card-dark rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 h-full flex flex-col sticky top-24">
+<div class="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+<h3 class="font-black text-lg flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                        מבזקים
+                    </h3>
+<span class="text-xs text-text-sub-light dark:text-text-sub-dark bg-background-light dark:bg-gray-800 px-2 py-1 rounded">עדכון אחרון: עכשיו</span>
+</div>
+<div class="flex-1 overflow-y-auto max-h-[calc(100vh-12rem)] no-scrollbar p-2">
+<div class="space-y-1">
+<div class="p-3 hover:bg-background-light dark:hover:bg-gray-800 rounded-xl transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-primary font-bold text-sm">08:15</span>
+<span class="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 rounded">פוליטי</span>
+</div>
+<p class="text-sm font-medium leading-snug group-hover:text-primary transition-colors">בעקבות הכרזת ארגון הבריאות העולמי: משרד הבריאות מפרסם הנחיות חדשות.</p>
+</div>
+<div class="p-3 hover:bg-background-light dark:hover:bg-gray-800 rounded-xl transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-primary font-bold text-sm">07:46</span>
+<span class="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 rounded">בטחוני</span>
+</div>
+<p class="text-sm font-medium leading-snug group-hover:text-primary transition-colors">דיווח ראשוני: חשד לאירוע בטחוני בצפון, כוחות בדרך למקום.</p>
+</div>
+<div class="p-3 bg-red-50 dark:bg-red-900/10 rounded-xl transition-colors cursor-pointer group border-r-4 border-primary">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-primary font-bold text-sm">07:28</span>
+<span class="text-xs bg-primary text-white px-1.5 rounded animate-pulse">דחוף</span>
+</div>
+<p class="text-sm font-bold leading-snug text-gray-900 dark:text-white">ראש הממשלה יכנס את הקבינט המדיני-בטחוני בשעה 14:00.</p>
+</div>
+<div class="p-3 hover:bg-background-light dark:hover:bg-gray-800 rounded-xl transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-primary font-bold text-sm">07:10</span>
+<span class="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 rounded">כלכלה</span>
+</div>
+<p class="text-sm font-medium leading-snug group-hover:text-primary transition-colors">הדולר מתחזק: השער היציג נקבע על 3.82 שקלים.</p>
+</div>
+<div class="p-3 hover:bg-background-light dark:hover:bg-gray-800 rounded-xl transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-primary font-bold text-sm">06:45</span>
+<span class="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 rounded">עולם</span>
+</div>
+<p class="text-sm font-medium leading-snug group-hover:text-primary transition-colors">בחירות בארה״ב: הסקרים האחרונים מראים צמצום הפער בין המועמדים.</p>
+</div>
+<div class="p-3 hover:bg-background-light dark:hover:bg-gray-800 rounded-xl transition-colors cursor-pointer group">
+<div class="flex items-center gap-2 mb-1">
+<span class="text-primary font-bold text-sm">06:30</span>
+<span class="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 rounded">תחבורה</span>
+</div>
+<p class="text-sm font-medium leading-snug group-hover:text-primary transition-colors">שיבושי תנועה כבדים בכביש החוף בעקבות תאונה.</p>
+</div>
+</div>
+</div>
+<div class="p-4 border-t border-gray-100 dark:border-gray-700">
+<button class="w-full py-2 bg-background-light dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors">
+                        טען עוד מבזקים
+                    </button>
+</div>
+</div>
+</aside>
+</div>
+
+</body></html>

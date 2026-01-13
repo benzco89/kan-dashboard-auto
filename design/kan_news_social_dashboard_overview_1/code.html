@@ -1,0 +1,385 @@
+<html dir="rtl" lang="he"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Kan News Social Dashboard</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#F7381B", // Kan News Red/Orange
+                        "background-light": "#F3F4F6", // Gray 100
+                        "background-dark": "#111827", // Gray 900
+                        "card-light": "#FFFFFF",
+                        "card-dark": "#1F2937",
+                        "text-main-light": "#111827",
+                        "text-main-dark": "#F9FAFB",
+                        "text-sub-light": "#6B7280",
+                        "text-sub-dark": "#9CA3AF",
+                        facebook: "#1877F2",
+                        instagram: "#E4405F",
+                        youtube: "#FF0000",
+                    },
+                    fontFamily: {
+                        display: ["Heebo", "sans-serif"],
+                        body: ["Heebo", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.75rem", // Consistent rounded corners
+                        'xl': "1rem",
+                        '2xl': "1.5rem",
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+        body {
+            font-family: 'Heebo', sans-serif;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }@keyframes growUp {
+            from { height: 0; }
+            to { height: var(--h); }
+        }
+        .chart-bar {
+            animation: growUp 1s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-text-main-light dark:text-text-main-dark transition-colors duration-300 min-h-screen flex flex-col">
+<header class="bg-card-light dark:bg-card-dark shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+<div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="text-3xl font-black tracking-tighter">כאן</span>
+<div class="bg-primary w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-lg transform -skew-x-6">
+<span>|&lt;</span>
+</div>
+<span class="text-3xl font-black tracking-tighter">חדשות</span>
+</div>
+<div class="hidden md:flex items-center gap-2 mr-6 border-r border-gray-300 dark:border-gray-600 pr-6 h-8">
+<span class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">מרכז שליטה - דיגיטל</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="hidden md:flex items-center bg-background-light dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
+<button class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-700 rounded-md shadow-sm text-sm font-bold text-gray-800 dark:text-white transition-all">
+<span class="material-icons-round text-base">calendar_today</span>
+                        30 ימים אחרונים
+                        <span class="material-icons-round text-base mr-2">expand_more</span>
+</button>
+<div class="px-3 text-sm text-gray-500 font-medium">1 אוק - 30 אוק</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400" onclick="document.documentElement.classList.toggle('dark')">
+<span class="material-icons-round dark:hidden">dark_mode</span>
+<span class="material-icons-round hidden dark:block">light_mode</span>
+</button>
+<button class="relative p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400">
+<span class="material-icons-round">notifications</span>
+<span class="absolute top-1 right-1 w-2.5 h-2.5 bg-primary rounded-full border-2 border-white dark:border-gray-900"></span>
+</button>
+<div class="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-orange-400 p-0.5 cursor-pointer ml-2">
+<img alt="User Profile" class="rounded-full bg-white dark:bg-gray-900 h-full w-full object-cover border-2 border-white dark:border-gray-900" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9duZ9ZKp360j84tekw0tDb4jUCQ0BK0JvReR7hxhuoOnWhbBWGEW8PpZle2mtdhH-pS5TjCnTeX4QT3b11iAC7r9lwvKfOqMT7InBZifsiRIIeeSXjKOcJxta26EPHnv6xg4xbXU-wKYZW8YXeTWYiNXcXRBPnVFWCXBSaG_D7XRjelmNvDLFsnBL-74cXkA3h9a2UxqgbLeCaNTXgEPFnUftQwhTstGq_pWF-HhWpHC5x6zZxcXvPId4z9hl0Fnl4K0KNeuZRAQ"/>
+</div>
+</div>
+</div>
+</div>
+</header>
+<div class="flex-1 max-w-screen-2xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 p-6 lg:p-8">
+<aside class="hidden lg:block lg:col-span-2">
+<nav class="sticky top-28 space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 bg-primary text-white rounded-xl shadow-lg shadow-orange-500/20 transition-transform transform hover:scale-105" href="#">
+<span class="material-icons-round">dashboard</span>
+<span class="font-medium">מרכז שליטה</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all hover:shadow-md" href="#">
+<span class="material-icons-round">analytics</span>
+<span class="font-medium">ניתוח מעמיק</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all hover:shadow-md" href="#">
+<span class="material-icons-round">campaign</span>
+<span class="font-medium">קמפיינים</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all hover:shadow-md" href="#">
+<span class="material-icons-round">video_library</span>
+<span class="font-medium">ניהול וידאו</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all hover:shadow-md" href="#">
+<span class="material-icons-round">people</span>
+<span class="font-medium">קהל וצופים</span>
+</a>
+<div class="border-t border-gray-200 dark:border-gray-700 my-4 pt-4 mx-4"></div>
+<div class="px-4 text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">מערכת</div>
+<a class="flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 rounded-xl transition-all hover:shadow-md" href="#">
+<span class="material-icons-round">settings</span>
+<span class="font-medium">הגדרות</span>
+</a>
+</nav>
+</aside>
+<main class="lg:col-span-10 space-y-8">
+<div class="flex items-end justify-between">
+<div>
+<h1 class="text-3xl font-black text-gray-900 dark:text-white">סקירת ביצועים</h1>
+<p class="text-gray-500 dark:text-gray-400 mt-1">סיכום נתונים מצטבר לכלל הפלטפורמות</p>
+</div>
+<button class="flex items-center gap-2 text-primary font-bold hover:bg-orange-50 dark:hover:bg-gray-800 px-4 py-2 rounded-lg transition-colors">
+<span class="material-icons-round">download</span>
+                    ייצוא דוח PDF
+                </button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-card-light dark:bg-card-dark p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 relative overflow-hidden group hover:border-primary/30 transition-all duration-300">
+<div class="absolute top-0 right-0 p-32 bg-primary/5 rounded-full blur-3xl transform translate-x-12 -translate-y-12"></div>
+<div class="relative z-10">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="p-3 bg-primary/10 rounded-xl text-primary">
+<span class="material-symbols-outlined text-2xl">public</span>
+</div>
+<h3 class="font-bold text-gray-700 dark:text-gray-200">חשיפה כוללת</h3>
+</div>
+<span class="flex items-center text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 text-xs font-bold px-2 py-1 rounded-full">
+<span class="material-icons-round text-sm ml-1">trending_up</span> +12.5%
+                            </span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-5xl font-black text-text-main-light dark:text-text-main-dark tracking-tight">45.2M</span>
+<span class="text-sm text-gray-500 font-medium">משתמשים</span>
+</div>
+<div class="mt-4 h-1.5 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 78%"></div>
+</div>
+<p class="text-xs text-gray-400 mt-2">78% מהיעד החודשי</p>
+</div>
+</div>
+<div class="bg-card-light dark:bg-card-dark p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 relative overflow-hidden group hover:border-primary/30 transition-all duration-300">
+<div class="absolute top-0 right-0 p-32 bg-orange-400/5 rounded-full blur-3xl transform translate-x-12 -translate-y-12"></div>
+<div class="relative z-10">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="p-3 bg-orange-100 dark:bg-orange-900/20 rounded-xl text-orange-600">
+<span class="material-symbols-outlined text-2xl">thumb_up</span>
+</div>
+<h3 class="font-bold text-gray-700 dark:text-gray-200">סה״כ מעורבות</h3>
+</div>
+<span class="flex items-center text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 text-xs font-bold px-2 py-1 rounded-full">
+<span class="material-icons-round text-sm ml-1">trending_up</span> +5.2%
+                            </span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-5xl font-black text-text-main-light dark:text-text-main-dark tracking-tight">3.8M</span>
+<span class="text-sm text-gray-500 font-medium">אינטראקציות</span>
+</div>
+<div class="mt-4 h-1.5 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+<div class="h-full bg-orange-500 rounded-full" style="width: 62%"></div>
+</div>
+<p class="text-xs text-gray-400 mt-2">62% מהיעד החודשי</p>
+</div>
+</div>
+<div class="bg-card-light dark:bg-card-dark p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 relative overflow-hidden group hover:border-primary/30 transition-all duration-300">
+<div class="absolute top-0 right-0 p-32 bg-red-400/5 rounded-full blur-3xl transform translate-x-12 -translate-y-12"></div>
+<div class="relative z-10">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="p-3 bg-red-100 dark:bg-red-900/20 rounded-xl text-red-600">
+<span class="material-symbols-outlined text-2xl">play_circle</span>
+</div>
+<h3 class="font-bold text-gray-700 dark:text-gray-200">צפיות וידאו</h3>
+</div>
+<span class="flex items-center text-red-500 bg-red-50 dark:bg-red-900/20 dark:text-red-400 text-xs font-bold px-2 py-1 rounded-full">
+<span class="material-icons-round text-sm ml-1">trending_down</span> -1.2%
+                            </span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-5xl font-black text-text-main-light dark:text-text-main-dark tracking-tight">12.5M</span>
+<span class="text-sm text-gray-500 font-medium">צפיות</span>
+</div>
+<div class="mt-4 h-1.5 w-full bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+<div class="h-full bg-red-500 rounded-full" style="width: 92%"></div>
+</div>
+<p class="text-xs text-gray-400 mt-2">92% מהיעד החודשי</p>
+</div>
+</div>
+</div>
+<div class="pt-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+<h2 class="text-xl font-bold text-gray-900 dark:text-white">פירוט לפי פלטפורמה</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<div class="bg-card-light dark:bg-card-dark rounded-2xl p-6 border-t-4 border-facebook shadow-md hover:shadow-lg transition-shadow flex flex-col h-full">
+<div class="flex justify-between items-center mb-6">
+<div class="flex items-center gap-3">
+<div class="bg-facebook text-white p-2 rounded-lg">
+<svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"></path></svg>
+</div>
+<span class="font-bold text-lg">Facebook</span>
+</div>
+<span class="text-xs font-semibold text-gray-400">מעודכן לפני 5 דק׳</span>
+</div>
+<div class="grid grid-cols-2 gap-4 mb-6">
+<div>
+<p class="text-xs text-gray-500 uppercase font-semibold">עוקבים</p>
+<p class="text-2xl font-black text-gray-900 dark:text-white">1.2M</p>
+</div>
+<div>
+<p class="text-xs text-gray-500 uppercase font-semibold">פוסטים חדשים</p>
+<p class="text-2xl font-black text-gray-900 dark:text-white">42</p>
+</div>
+</div>
+<div class="flex-1 min-h-[100px] flex items-end justify-between gap-1 mb-6 border-b border-gray-100 dark:border-gray-700 pb-2 px-2">
+<div class="w-full bg-facebook/20 hover:bg-facebook/40 transition-colors rounded-t-sm chart-bar" style="--h: 30%"></div>
+<div class="w-full bg-facebook/20 hover:bg-facebook/40 transition-colors rounded-t-sm chart-bar" style="--h: 45%"></div>
+<div class="w-full bg-facebook/20 hover:bg-facebook/40 transition-colors rounded-t-sm chart-bar" style="--h: 40%"></div>
+<div class="w-full bg-facebook/20 hover:bg-facebook/40 transition-colors rounded-t-sm chart-bar" style="--h: 60%"></div>
+<div class="w-full bg-facebook/20 hover:bg-facebook/40 transition-colors rounded-t-sm chart-bar" style="--h: 55%"></div>
+<div class="w-full bg-facebook/20 hover:bg-facebook/40 transition-colors rounded-t-sm chart-bar" style="--h: 75%"></div>
+<div class="w-full bg-facebook/20 hover:bg-facebook/40 transition-colors rounded-t-sm chart-bar" style="--h: 65%"></div>
+<div class="w-full bg-facebook hover:bg-facebook transition-colors rounded-t-sm chart-bar" style="--h: 80%"></div>
+</div>
+<button class="w-full mt-auto py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-gray-600 dark:text-gray-300 hover:bg-facebook hover:text-white hover:border-facebook transition-all flex items-center justify-center gap-2 group">
+                        מעבר לפלטפורמה
+                        <span class="material-icons-round text-sm group-hover:translate-x-1 transition-transform rtl:rotate-180">arrow_right_alt</span>
+</button>
+</div>
+<div class="bg-card-light dark:bg-card-dark rounded-2xl p-6 border-t-4 border-pink-500 shadow-md hover:shadow-lg transition-shadow flex flex-col h-full">
+<div class="flex justify-between items-center mb-6">
+<div class="flex items-center gap-3">
+<div class="bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 text-white p-2 rounded-lg">
+<svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"></path></svg>
+</div>
+<span class="font-bold text-lg">Instagram</span>
+</div>
+<span class="text-xs font-semibold text-gray-400">מעודכן לפני 2 דק׳</span>
+</div>
+<div class="grid grid-cols-2 gap-4 mb-6">
+<div>
+<p class="text-xs text-gray-500 uppercase font-semibold">עוקבים</p>
+<p class="text-2xl font-black text-gray-900 dark:text-white">850K</p>
+</div>
+<div>
+<p class="text-xs text-gray-500 uppercase font-semibold">סטוריז היום</p>
+<p class="text-2xl font-black text-gray-900 dark:text-white">14</p>
+</div>
+</div>
+<div class="flex-1 min-h-[100px] flex items-end justify-between gap-1 mb-6 border-b border-gray-100 dark:border-gray-700 pb-2 px-2">
+<div class="w-full bg-pink-500/20 hover:bg-pink-500/40 transition-colors rounded-t-sm chart-bar" style="--h: 20%"></div>
+<div class="w-full bg-pink-500/20 hover:bg-pink-500/40 transition-colors rounded-t-sm chart-bar" style="--h: 40%"></div>
+<div class="w-full bg-pink-500/20 hover:bg-pink-500/40 transition-colors rounded-t-sm chart-bar" style="--h: 30%"></div>
+<div class="w-full bg-pink-500/20 hover:bg-pink-500/40 transition-colors rounded-t-sm chart-bar" style="--h: 60%"></div>
+<div class="w-full bg-pink-500/20 hover:bg-pink-500/40 transition-colors rounded-t-sm chart-bar" style="--h: 85%"></div>
+<div class="w-full bg-pink-500/20 hover:bg-pink-500/40 transition-colors rounded-t-sm chart-bar" style="--h: 70%"></div>
+<div class="w-full bg-pink-500/20 hover:bg-pink-500/40 transition-colors rounded-t-sm chart-bar" style="--h: 60%"></div>
+<div class="w-full bg-pink-500 hover:bg-pink-600 transition-colors rounded-t-sm chart-bar" style="--h: 90%"></div>
+</div>
+<button class="w-full mt-auto py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-gray-600 dark:text-gray-300 hover:bg-pink-500 hover:text-white hover:border-pink-500 transition-all flex items-center justify-center gap-2 group">
+                        מעבר לפלטפורמה
+                        <span class="material-icons-round text-sm group-hover:translate-x-1 transition-transform rtl:rotate-180">arrow_right_alt</span>
+</button>
+</div>
+<div class="bg-card-light dark:bg-card-dark rounded-2xl p-6 border-t-4 border-youtube shadow-md hover:shadow-lg transition-shadow flex flex-col h-full">
+<div class="flex justify-between items-center mb-6">
+<div class="flex items-center gap-3">
+<div class="bg-youtube text-white p-2 rounded-lg">
+<svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"></path></svg>
+</div>
+<span class="font-bold text-lg">YouTube</span>
+</div>
+<span class="text-xs font-semibold text-gray-400">מעודכן לפני 10 דק׳</span>
+</div>
+<div class="grid grid-cols-2 gap-4 mb-6">
+<div>
+<p class="text-xs text-gray-500 uppercase font-semibold">מנויים</p>
+<p class="text-2xl font-black text-gray-900 dark:text-white">650K</p>
+</div>
+<div>
+<p class="text-xs text-gray-500 uppercase font-semibold">שעות צפייה</p>
+<p class="text-2xl font-black text-gray-900 dark:text-white">2.1M</p>
+</div>
+</div>
+<div class="flex-1 min-h-[100px] flex items-end justify-between gap-1 mb-6 border-b border-gray-100 dark:border-gray-700 pb-2 px-2">
+<div class="w-full bg-youtube/20 hover:bg-youtube/40 transition-colors rounded-t-sm chart-bar" style="--h: 30%"></div>
+<div class="w-full bg-youtube/20 hover:bg-youtube/40 transition-colors rounded-t-sm chart-bar" style="--h: 40%"></div>
+<div class="w-full bg-youtube/20 hover:bg-youtube/40 transition-colors rounded-t-sm chart-bar" style="--h: 35%"></div>
+<div class="w-full bg-youtube/20 hover:bg-youtube/40 transition-colors rounded-t-sm chart-bar" style="--h: 50%"></div>
+<div class="w-full bg-youtube/20 hover:bg-youtube/40 transition-colors rounded-t-sm chart-bar" style="--h: 65%"></div>
+<div class="w-full bg-youtube/20 hover:bg-youtube/40 transition-colors rounded-t-sm chart-bar" style="--h: 55%"></div>
+<div class="w-full bg-youtube/20 hover:bg-youtube/40 transition-colors rounded-t-sm chart-bar" style="--h: 70%"></div>
+<div class="w-full bg-youtube hover:bg-red-600 transition-colors rounded-t-sm chart-bar" style="--h: 85%"></div>
+</div>
+<button class="w-full mt-auto py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 font-bold text-gray-600 dark:text-gray-300 hover:bg-youtube hover:text-white hover:border-youtube transition-all flex items-center justify-center gap-2 group">
+                        מעבר לפלטפורמה
+                        <span class="material-icons-round text-sm group-hover:translate-x-1 transition-transform rtl:rotate-180">arrow_right_alt</span>
+</button>
+</div>
+</div>
+<div class="pt-6">
+<div class="flex justify-between items-center mb-6">
+<h2 class="text-xl font-bold text-gray-900 dark:text-white">תכנים במגמת עלייה</h2>
+<a class="text-primary text-sm font-bold hover:underline" href="#">לכל התכנים</a>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+<div class="group relative rounded-xl overflow-hidden cursor-pointer shadow-sm hover:shadow-lg transition-all">
+<img alt="Content Thumbnail" class="w-full aspect-video object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqgPP5Um6Vwmnrx9xE6u4F-8nJI8VHjscxcyL4w37MztnCHn-qBeeKM4oBqQMzC3rJKtt8BqgcAEMBcRZgadt-dRnDynUe-YC_55od6naHGsa-06xLDRjwNoSZv59LVRwEsSfpMiieVG97ji5O75NiUGKw8Muy0zHU5wfwiZgID9IZ-fgLrXh7uRSm67ISNWOrgLRpuWcYnD94TW72MIN1DbwLcOqwYDfCsj3Y6Z49ovfZ8d7sOtwGKOEM2d6fqrAPcGP_Q-j0T8g"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+<div class="absolute top-2 left-2 bg-youtube text-white text-[10px] px-1.5 py-0.5 rounded shadow font-bold">YouTube</div>
+<div class="absolute bottom-3 right-3 text-white pr-2">
+<div class="flex items-center gap-2 text-xs mb-1 text-red-400 font-bold">
+<span class="material-icons-round text-[14px]">local_fire_department</span> חם עכשיו
+                             </div>
+<p class="font-bold text-sm line-clamp-1">דיווח מיוחד: אירועי היום</p>
+<p class="text-xs text-gray-300">120K צפיות</p>
+</div>
+</div>
+<div class="group relative rounded-xl overflow-hidden cursor-pointer shadow-sm hover:shadow-lg transition-all">
+<img alt="Content Thumbnail" class="w-full aspect-video object-cover group-hover:scale-105 transition-transform duration-500" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9AHevPHHf4JC24WyUu0OPBywnjHid1LWd-imK8n0_J01FmePf6eq68-Wl4MNZoOwFRD3hVd55NFezIIHbB4Nh06OmG6d_Lk1Ye_JzmOxTJlDoQW_41RsFTaJAunAvoQL03ceAvo2J44XACq_jFT8rhS8K6-KmJBrfcFfChcF2UgVv-6AzPqG_nFDaOkaB69-IXRxs-JcW-qZPJWHGYEJo_mmFuA7YFG2Qz7AdDlNA3-jg4OEnqYwt3kzwjG8OeMx8g3sq0R4NeA0"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+<div class="absolute top-2 left-2 bg-facebook text-white text-[10px] px-1.5 py-0.5 rounded shadow font-bold">Facebook</div>
+<div class="absolute bottom-3 right-3 text-white pr-2">
+<div class="flex items-center gap-2 text-xs mb-1 text-green-400 font-bold">
+<span class="material-icons-round text-[14px]">trending_up</span> עולה
+                             </div>
+<p class="font-bold text-sm line-clamp-1">ראיון בלעדי עם השר</p>
+<p class="text-xs text-gray-300">85K צפיות</p>
+</div>
+</div>
+<div class="group relative rounded-xl overflow-hidden cursor-pointer shadow-sm hover:shadow-lg transition-all bg-gray-200 dark:bg-gray-800">
+<div class="absolute inset-0 flex items-center justify-center">
+<span class="material-icons-round text-4xl text-gray-400">play_circle_outline</span>
+</div>
+<div class="w-full aspect-video opacity-0"></div> 
+<div class="absolute top-2 left-2 bg-instagram text-white text-[10px] px-1.5 py-0.5 rounded shadow font-bold">Instagram</div>
+<div class="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/60 to-transparent">
+<p class="font-bold text-sm text-white line-clamp-1">עדכון ערב</p>
+<p class="text-xs text-gray-300">45K צפיות</p>
+</div>
+</div>
+<div class="group relative rounded-xl overflow-hidden cursor-pointer shadow-sm hover:shadow-lg transition-all bg-gray-200 dark:bg-gray-800">
+<div class="absolute inset-0 flex items-center justify-center">
+<span class="material-icons-round text-4xl text-gray-400">play_circle_outline</span>
+</div>
+<div class="w-full aspect-video opacity-0"></div> 
+<div class="absolute top-2 left-2 bg-youtube text-white text-[10px] px-1.5 py-0.5 rounded shadow font-bold">YouTube</div>
+<div class="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/60 to-transparent">
+<p class="font-bold text-sm text-white line-clamp-1">מאחורי הקלעים</p>
+<p class="text-xs text-gray-300">32K צפיות</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+
+</body></html>

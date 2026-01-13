@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html class="light" dir="rtl" lang="he"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Performance Comparison Tool - Kan Analytics</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@200..900&amp;family=Assistant:wght@200..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#FF6B00","primary-hover": "#E65A00",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101822",
+                    },
+                    fontFamily: {
+                        "display": ["Heebo", "sans-serif"],
+                        "body": ["Assistant", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-50 font-display transition-colors duration-200">
+<div class="w-full bg-white dark:bg-[#1a2634] border-b border-slate-200 dark:border-slate-700">
+<div class="px-6 md:px-10 py-3 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="size-8 flex items-center justify-center">
+<div class="font-black text-3xl tracking-tighter leading-none text-slate-900 dark:text-white">
+                        כאן
+                    </div>
+</div>
+<div class="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
+<h2 class="text-slate-900 dark:text-white text-xl font-bold leading-tight tracking-tight">אנליטיקס</h2>
+</div>
+<div class="flex items-center gap-8">
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary text-sm font-medium transition-colors" href="#">דשבורד</a>
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary text-sm font-medium transition-colors" href="#">דוחות</a>
+<a class="text-slate-900 dark:text-white text-sm font-bold border-b-2 border-primary pb-0.5" href="#">השוואה</a>
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary text-sm font-medium transition-colors" href="#">הגדרות</a>
+</nav>
+<div class="flex items-center gap-4">
+<button class="hidden sm:flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-bold transition-colors shadow-sm shadow-orange-200 dark:shadow-none">
+<span class="material-symbols-outlined text-lg">download</span>
+<span>ייצוא</span>
+</button>
+<div class="size-9 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden bg-center bg-cover" data-alt="User profile avatar" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDZJV_2saJ75khvHTGBtOw1ijmOFtv6DeBIczRRN2wxnHYriNHy8vABA8XiMUsUkxxfBtXBOjgIBHHhFt9Pv5szDuO2z_PjPsjt9AecShPl8O62jAfbyTu0at7_AZtdhjhQQn63AU1SBY6zni8lSAjft_dzBBb6vumNGsWEOby3_8QU7nyG87SdTO2ggwYAmxfQnMX1_33YDbqbEvKxSW-QKbT8XTwOHM8hlJS3mX5HEsyVeU5dhj7ifMFhHT2U4iNEnykWeShBatk");'></div>
+</div>
+</div>
+</div>
+</div>
+<div class="max-w-[1440px] mx-auto px-6 md:px-10 py-8 flex flex-col gap-8">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div class="flex flex-col gap-2">
+<h1 class="text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">סקירת ביצועים</h1>
+<p class="text-slate-500 dark:text-slate-400 text-base font-body">השווה מדדים בין תקופות זמן שונות כדי לזהות מגמות.</p>
+</div>
+<div class="flex flex-wrap items-center gap-3 bg-white dark:bg-[#1a2634] p-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+<button class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg">
+<span class="material-symbols-outlined text-slate-400">calendar_today</span>
+<span class="font-body">נוב 01 - נוב 30, 2023</span>
+</button>
+<span class="text-slate-400 text-sm font-medium">מול</span>
+<button class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg">
+<span class="material-symbols-outlined text-slate-400">history</span>
+<span class="font-body">אוק 01 - אוק 31, 2023</span>
+</button>
+<div class="h-6 w-px bg-slate-200 dark:bg-slate-600 mx-1"></div>
+<button class="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-sm font-bold rounded-lg transition-colors">
+                    החל
+                </button>
+</div>
+</div>
+<div class="flex overflow-x-auto pb-2 gap-3 no-scrollbar">
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-primary text-white px-4 hover:opacity-90 transition-opacity shadow-sm shadow-orange-200 dark:shadow-none">
+<span class="text-sm font-bold">כל הפלטפורמות</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-white dark:bg-[#1a2634] border border-slate-200 dark:border-slate-700 px-4 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group">
+<span class="text-slate-700 dark:text-slate-300 text-sm font-medium group-hover:text-primary">פייסבוק</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-white dark:bg-[#1a2634] border border-slate-200 dark:border-slate-700 px-4 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group">
+<span class="text-slate-700 dark:text-slate-300 text-sm font-medium group-hover:text-primary">טוויטר / X</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-white dark:bg-[#1a2634] border border-slate-200 dark:border-slate-700 px-4 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group">
+<span class="text-slate-700 dark:text-slate-300 text-sm font-medium group-hover:text-primary">אינסטגרם</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-white dark:bg-[#1a2634] border border-slate-200 dark:border-slate-700 px-4 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors group">
+<span class="text-slate-700 dark:text-slate-300 text-sm font-medium group-hover:text-primary">יוטיוב</span>
+</button>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+<div class="bg-white dark:bg-[#1a2634] p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between h-full">
+<div class="flex justify-between items-start mb-4">
+<div class="flex flex-col gap-1">
+<span class="text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">חשיפה כוללת</span>
+<h3 class="text-4xl font-black text-slate-900 dark:text-white tracking-tight font-display">1.2M</h3>
+</div>
+<div class="flex items-center justify-center size-10 rounded-full bg-orange-50 dark:bg-orange-900/20 text-primary">
+<span class="material-symbols-outlined">public</span>
+</div>
+</div>
+<div class="flex items-center gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-xs font-bold" dir="ltr">
+<span class="material-symbols-outlined text-sm">trending_up</span> 15.2%
+                    </span>
+<span class="text-slate-400 text-sm font-medium">לעומת 1.04M קודם</span>
+</div>
+</div>
+<div class="bg-white dark:bg-[#1a2634] p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between h-full">
+<div class="flex justify-between items-start mb-4">
+<div class="flex flex-col gap-1">
+<span class="text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">שיעור מעורבות</span>
+<h3 class="text-4xl font-black text-slate-900 dark:text-white tracking-tight font-display">4.8%</h3>
+</div>
+<div class="flex items-center justify-center size-10 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">favorite</span>
+</div>
+</div>
+<div class="flex items-center gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-xs font-bold" dir="ltr">
+<span class="material-symbols-outlined text-sm">trending_down</span> 2.1%
+                    </span>
+<span class="text-slate-400 text-sm font-medium">לעומת 4.9% קודם</span>
+</div>
+</div>
+<div class="bg-white dark:bg-[#1a2634] p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between h-full">
+<div class="flex justify-between items-start mb-4">
+<div class="flex flex-col gap-1">
+<span class="text-slate-500 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">עוקבים חדשים</span>
+<h3 class="text-4xl font-black text-slate-900 dark:text-white tracking-tight font-display">1,240</h3>
+</div>
+<div class="flex items-center justify-center size-10 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">group_add</span>
+</div>
+</div>
+<div class="flex items-center gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
+<span class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-xs font-bold" dir="ltr">
+<span class="material-symbols-outlined text-sm">trending_up</span> 0.5%
+                    </span>
+<span class="text-slate-400 text-sm font-medium">לעומת 1,234 קודם</span>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-[#1a2634] p-6 md:p-8 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+<h3 class="text-lg font-bold text-slate-900 dark:text-white">ביצועים לפי פלטפורמה</h3>
+<div class="flex items-center gap-4 text-sm">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-primary"></div>
+<span class="text-slate-600 dark:text-slate-300 font-medium">תקופה נוכחית</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-slate-300 dark:bg-slate-600"></div>
+<span class="text-slate-600 dark:text-slate-300 font-medium">תקופה קודמת</span>
+</div>
+</div>
+</div>
+<div class="w-full h-[320px] flex items-end justify-between gap-4 md:gap-8 px-2 font-display">
+<div class="flex flex-col items-center gap-3 w-full h-full justify-end group cursor-pointer">
+<div class="relative w-full max-w-[60px] flex items-end justify-center gap-1 h-full">
+<div class="w-1/2 bg-slate-300 dark:bg-slate-600 rounded-t-sm h-[60%] relative group-hover:opacity-80 transition-all"></div>
+<div class="w-1/2 bg-primary rounded-t-sm h-[75%] relative group-hover:bg-primary-hover transition-all shadow-md"></div>
+<div class="absolute -top-16 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none font-body">
+<p>נוכחי: 75K</p>
+<p class="text-slate-400">קודם: 60K</p>
+</div>
+</div>
+<span class="text-slate-600 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">פייסבוק</span>
+</div>
+<div class="flex flex-col items-center gap-3 w-full h-full justify-end group cursor-pointer">
+<div class="relative w-full max-w-[60px] flex items-end justify-center gap-1 h-full">
+<div class="w-1/2 bg-slate-300 dark:bg-slate-600 rounded-t-sm h-[40%] relative group-hover:opacity-80 transition-all"></div>
+<div class="w-1/2 bg-primary rounded-t-sm h-[35%] relative group-hover:bg-primary-hover transition-all shadow-md"></div>
+<div class="absolute -top-16 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none font-body">
+<p>נוכחי: 35K</p>
+<p class="text-slate-400">קודם: 40K</p>
+</div>
+</div>
+<span class="text-slate-600 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">טוויטר</span>
+</div>
+<div class="flex flex-col items-center gap-3 w-full h-full justify-end group cursor-pointer">
+<div class="relative w-full max-w-[60px] flex items-end justify-center gap-1 h-full">
+<div class="w-1/2 bg-slate-300 dark:bg-slate-600 rounded-t-sm h-[70%] relative group-hover:opacity-80 transition-all"></div>
+<div class="w-1/2 bg-primary rounded-t-sm h-[85%] relative group-hover:bg-primary-hover transition-all shadow-md"></div>
+<div class="absolute -top-16 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none font-body">
+<p>נוכחי: 85K</p>
+<p class="text-slate-400">קודם: 70K</p>
+</div>
+</div>
+<span class="text-slate-600 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">אינסטגרם</span>
+</div>
+<div class="flex flex-col items-center gap-3 w-full h-full justify-end group cursor-pointer">
+<div class="relative w-full max-w-[60px] flex items-end justify-center gap-1 h-full">
+<div class="w-1/2 bg-slate-300 dark:bg-slate-600 rounded-t-sm h-[45%] relative group-hover:opacity-80 transition-all"></div>
+<div class="w-1/2 bg-primary rounded-t-sm h-[60%] relative group-hover:bg-primary-hover transition-all shadow-md"></div>
+<div class="absolute -top-16 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none font-body">
+<p>נוכחי: 60K</p>
+<p class="text-slate-400">קודם: 45K</p>
+</div>
+</div>
+<span class="text-slate-600 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">יוטיוב</span>
+</div>
+<div class="flex flex-col items-center gap-3 w-full h-full justify-end group cursor-pointer">
+<div class="relative w-full max-w-[60px] flex items-end justify-center gap-1 h-full">
+<div class="w-1/2 bg-slate-300 dark:bg-slate-600 rounded-t-sm h-[20%] relative group-hover:opacity-80 transition-all"></div>
+<div class="w-1/2 bg-primary rounded-t-sm h-[45%] relative group-hover:bg-primary-hover transition-all shadow-md"></div>
+<div class="absolute -top-16 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none font-body">
+<p>נוכחי: 45K</p>
+<p class="text-slate-400">קודם: 20K</p>
+</div>
+</div>
+<span class="text-slate-600 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">טיקטוק</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+<div class="bg-white dark:bg-[#1a2634] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+<div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+<h3 class="font-bold text-slate-900 dark:text-white">פוסטים מובילים (נוכחי)</h3>
+<a class="text-primary text-sm font-bold hover:underline" href="#">הצג הכל</a>
+</div>
+<div class="divide-y divide-slate-100 dark:divide-slate-700">
+<div class="p-4 flex gap-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+<div class="w-16 h-16 rounded-lg bg-slate-200 shrink-0 bg-cover bg-center" data-alt="Abstract colorful pattern representing a top post thumbnail" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCtjOwkjjeIrhs9SULLNnAornLpvp53uAzOHD_wLBkSDSck8epPDzLi3gyJthLGuUi1QfUEPbQXv6-XEg6V2jLSjkitg6TvOgeAK0yhYsytWhcWfVk5A3fzO4I2nvNjAoTrMAR-RlpENZgfNayiUN6bolkH8eSyZXE4eTLTRRE5JOh2MPr77W_v3_9WGbroSq0BIti6kKXwUzjDpn8B0vb2qtPyUo45iSh2ZnyfZ5MIguuh8WcdcNCCVxrVu02s3BO2DV5RZI9y_Zw");'></div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-sm text-blue-600">social_leaderboard</span>
+<span class="text-xs text-slate-500 font-body">פייסבוק • 12 בנוב</span>
+</div>
+<p class="text-slate-900 dark:text-white text-sm font-medium truncate font-body">חדשות: מדיניות כלכלית חדשה הוכרזה...</p>
+<div class="flex gap-4 mt-2">
+<span class="text-xs text-slate-500 font-medium font-body">12.5K חשיפה</span>
+<span class="text-xs text-green-600 font-bold font-body" dir="ltr">4.2% Eng. Rate</span>
+</div>
+</div>
+</div>
+<div class="p-4 flex gap-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+<div class="w-16 h-16 rounded-lg bg-slate-200 shrink-0 bg-cover bg-center" data-alt="Abstract geometric shapes representing a post thumbnail" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBCaO3DdoxJ3OKZ3-wy_kD9QJDYNx5MHkY0qNERTKWEkj_1uvsWeNwDhBH2nSxumphjszR1O51qyE_fyulHyykiln1SSNCtwLQKiZbFQUhNWu7hkjNybLwiOMRPq11NXwSE40UNLmhDNs1KmdbdtEaGCRbkPexlDpys3mXxt628cxMUXNirpV8hI9NYpD3FggmOf0OO89ELY6BHk5gquZsvEjDFAvvkruCWmbXjfnU3FaXsX_XTETUpYWGZUNIPxlaa4VhMbJkcU4k");'></div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-sm text-pink-600">photo_camera</span>
+<span class="text-xs text-slate-500 font-body">אינסטגרם • 05 בנוב</span>
+</div>
+<p class="text-slate-900 dark:text-white text-sm font-medium truncate font-body">מאחורי הקלעים באולפן היום 📸</p>
+<div class="flex gap-4 mt-2">
+<span class="text-xs text-slate-500 font-medium font-body">8.1K חשיפה</span>
+<span class="text-xs text-green-600 font-bold font-body" dir="ltr">6.8% Eng. Rate</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-[#1a2634] rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden opacity-90">
+<div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+<h3 class="font-bold text-slate-700 dark:text-slate-300">פוסטים מובילים (קודם)</h3>
+<a class="text-slate-500 hover:text-primary text-sm font-bold hover:underline" href="#">הצג הכל</a>
+</div>
+<div class="divide-y divide-slate-100 dark:divide-slate-700">
+<div class="p-4 flex gap-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+<div class="w-16 h-16 rounded-lg bg-slate-200 shrink-0 bg-cover bg-center grayscale" data-alt="Abstract blue gradient representing a past post thumbnail" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDMYKTYp2RnNzMi7gpzE25eaWYI4ysO8Ni0etvAG1AcYu3APCjePd84nu442hx39Rh9u92iYZPV1L4dc4vd5fQkUrea2xTEHPco37ERZRcUhqHKWbWlD169oN-mCrO7W1dXM2qynttPQyFIKdlw3r8mdWlrSp38BZHpWkzN8Rtw6Haxb3SGn8tt-NjcSP58QY6a1Wcl3gV7ZucX3IdtB9HhnJ6CbLb9dQ4Rn7f7gMFmorW00c5Ko_BgIY9vVWXMghVAdgqESfLdyn8");'></div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-sm text-slate-500">smart_display</span>
+<span class="text-xs text-slate-500 font-body">יוטיוב • 28 באוק</span>
+</div>
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium truncate font-body">ניתוח שבועי: מגמות בשוק הטכנולוגיה</p>
+<div class="flex gap-4 mt-2">
+<span class="text-xs text-slate-500 font-medium font-body">10.2K חשיפה</span>
+<span class="text-xs text-slate-600 dark:text-slate-400 font-bold font-body" dir="ltr">3.5% Eng. Rate</span>
+</div>
+</div>
+</div>
+<div class="p-4 flex gap-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+<div class="w-16 h-16 rounded-lg bg-slate-200 shrink-0 bg-cover bg-center grayscale" data-alt="Abstract dark texture representing a past post thumbnail" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuANLzii00VWZaXtNJq0IC7-qxrfeDJu8M612Vg7rmKPutWlDgOQr1XWwYltxAfcTywqpLMHENDCKA6L7iG3lnGMHQTVEJOLOCQPQLZCSlxAfo01T16JHsbu21FjBWhkXwU8z4vo9CcxbKvdNaZdnDFRg6Y2LkPyiHOdeDUSQhiheonxRGU2S4cPhQIUtHh0nvEd8Fdlbuhu-BOKxdhUTjRU6t091p0yDuduIlycAvxosowP-o8up4m907NrLireKUvRFZZPj-QlZT8");'></div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-sm text-slate-500">social_leaderboard</span>
+<span class="text-xs text-slate-500 font-body">פייסבוק • 15 באוק</span>
+</div>
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium truncate font-body">עדכון קהילה: אירועי אוקטובר</p>
+<div class="flex gap-4 mt-2">
+<span class="text-xs text-slate-500 font-medium font-body">9.5K חשיפה</span>
+<span class="text-xs text-slate-600 dark:text-slate-400 font-bold font-body" dir="ltr">2.9% Eng. Rate</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</body></html>

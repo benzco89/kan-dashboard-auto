@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Kan Analytics - YouTube Platform View</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f47b25",
+                        "background-light": "#f8fafc","surface-white": "#ffffff",
+                        "text-main": "#0f172a","text-secondary": "#64748b","border-light": "#e2e8f0","teal-custom": "#0d9488",
+                        "slate-blue": "#475569"
+                    },
+                    fontFamily: {
+                        "display": ["Manrope", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "2xl": "1rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #f47b25; 
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-fill {
+             font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light text-text-main font-display overflow-hidden">
+<div class="relative flex h-screen w-full overflow-hidden">
+<aside class="flex w-64 flex-col justify-between border-l border-border-light bg-surface-white p-4 hidden md:flex shrink-0">
+<div class="flex flex-col gap-6">
+<div class="flex items-center gap-3 pb-4 border-b border-border-light">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-12 ring-2 ring-[#f47b25]/20" data-alt="User profile picture of a news anchor" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDIH73IPyF3XyJcOO9d5N5bwkydkIqOP2EKG0uZvKEW3sEtVwVCzWFRD5xZj9h4XOUK4WicSq1yyI6ioAI1NQmo8eiOGBj-5EcDJ00uRVHsppJcW5GFsq8jw3TIT4lrbzdqxvXaOcRcqGSml2jhFuAw8VRpZPtxwhNoI0S1ESN-2fkyMTfI_IbQWuA-k8jw3CzFJtzEvw4zuhYJdG2sg_inFlhwtODgVYQvg4H3WuHCKmUmzdn7Jit8JT04eMVd46ANeWXwx9kC--Y");'></div>
+<div class="flex flex-col">
+<h1 class="text-text-main text-base font-bold leading-normal">Kan Analytics</h1>
+<p class="text-text-secondary text-xs font-normal leading-normal">Editor in Chief</p>
+</div>
+</div>
+<nav class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-slate-100 transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-primary">dashboard</span>
+<p class="text-text-secondary group-hover:text-text-main text-sm font-medium leading-normal">Overview</p>
+</a>
+<div class="pt-4 pb-2">
+<p class="text-slate-400 text-xs font-bold uppercase tracking-wider px-3">Platforms</p>
+</div>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-slate-100 transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-primary">public</span>
+<p class="text-text-secondary group-hover:text-text-main text-sm font-medium leading-normal">Facebook</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-slate-100 transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-primary">photo_camera</span>
+<p class="text-text-secondary group-hover:text-text-main text-sm font-medium leading-normal">Instagram</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg bg-orange-50 border-r-4 border-primary" href="#">
+<span class="material-symbols-outlined text-primary icon-fill">smart_display</span>
+<p class="text-primary text-sm font-bold leading-normal">YouTube</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-slate-100 transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-primary">podcasts</span>
+<p class="text-text-secondary group-hover:text-text-main text-sm font-medium leading-normal">Podcasts</p>
+</a>
+</nav>
+</div>
+<div class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-slate-100 transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-primary">settings</span>
+<p class="text-text-secondary group-hover:text-text-main text-sm font-medium leading-normal">Settings</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-slate-100 transition-colors group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-primary">logout</span>
+<p class="text-text-secondary group-hover:text-text-main text-sm font-medium leading-normal">Logout</p>
+</a>
+</div>
+</aside>
+<main class="flex-1 flex flex-col min-w-0 overflow-y-auto bg-background-light scroll-smooth">
+<header class="sticky top-0 z-20 bg-surface-white/95 backdrop-blur-sm border-b border-border-light px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div class="flex flex-col gap-1">
+<div class="flex flex-wrap items-center gap-2 text-sm">
+<a class="text-text-secondary hover:text-primary transition-colors" href="#">Dashboard</a>
+<span class="text-slate-300 material-symbols-outlined text-[16px]">chevron_left</span>
+<span class="text-text-main font-medium">YouTube Analytics</span>
+</div>
+<h2 class="text-text-main text-xl font-bold">Platform Overview</h2>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200">
+<button class="p-2 text-text-secondary hover:text-primary transition-colors rounded-md hover:bg-white shadow-sm">
+<span class="material-symbols-outlined">calendar_today</span>
+</button>
+<span class="text-text-main text-sm font-medium px-2">Last 28 Days</span>
+<button class="p-2 text-text-secondary hover:text-primary transition-colors rounded-md hover:bg-white shadow-sm">
+<span class="material-symbols-outlined">expand_more</span>
+</button>
+</div>
+<button class="flex items-center gap-2 bg-primary hover:bg-[#d66614] text-white px-4 py-2.5 rounded-lg font-bold text-sm transition-colors shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-[20px]">download</span>
+<span>Export Report</span>
+</button>
+</div>
+</header>
+<div class="p-6 max-w-[1600px] w-full mx-auto flex flex-col gap-6 pb-20">
+<div class="relative w-full rounded-2xl overflow-hidden min-h-[180px] flex flex-col justify-end p-8 group shadow-xl">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="Abstract orange and black data visualization waves background" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuD0Hi5CXccici3IskSM1IIqAp6fbaYoNRAQVFYMA1rZa9wFms3rbfnEbmb_mZYKL0D_ZjwKnPTVNE7jJ1T1DmE5T4_V8Jz2J9bGDvU9fbUbqgxqfRxX-sp0t1bb-nMQlyd2_S-13s1k5Q-hUtWEmdA4p8y01OwOAEhL3ZRxkrehTD2VXg0KMfGQ2PsAYZx2ci5KPyuvzH2co5ELXlXliEyKjTdjj_kFYy_g_lNpEi7HVohrgRmMGsThRKUvfQS2lQhJDIYv5TqaCLo");'></div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent"></div>
+<div class="absolute inset-0 bg-gradient-to-r from-black/80 to-transparent"></div>
+<div class="relative z-10 flex items-end gap-6">
+<div class="w-24 h-24 rounded-full bg-white p-1 shadow-lg">
+<div class="w-full h-full rounded-full bg-cover bg-center border-2 border-primary" data-alt="Kan News Digital Channel Logo" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAN59wgYYqRhq1LDrNKFoVNSmIoqUNvvM-jzb33quff5d28ALE4vGjdG_vKwNFm3YCCFyP39DwIX_V-fJjdfjAt5oRTIQBqCvtBgpBYmkdKbEawAGXJOTKNHv3gPrWzE412c5QuXdIqTRZv8M1Tdy-rnDq39w65tykHO8G8j37tcIhrqOG9G7lWhkUGSBEt7-TSWtcspRjjd4hK63CUkAzHOoc3tMPxmgHfCCW5h2uNsHX-Li8M7W42kZ4GIRR1YDUBLh54ryyevH8");'></div>
+</div>
+<div class="mb-2">
+<h1 class="text-white text-3xl font-extrabold tracking-tight">Kan News Digital</h1>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-primary icon-fill text-[18px]">verified</span>
+<p class="text-slate-300 text-sm font-medium">Official Channel • 1.2M Subscribers</p>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+<div class="bg-surface-white p-5 rounded-xl border border-border-light hover:border-primary/50 transition-colors shadow-sm">
+<div class="flex justify-between items-start mb-2">
+<p class="text-text-secondary text-sm font-medium">Total Views</p>
+<span class="material-symbols-outlined text-primary">visibility</span>
+</div>
+<p class="text-text-main text-3xl font-bold mb-1">2.4M</p>
+<div class="flex items-center gap-1 text-[#0bda16] text-xs font-bold bg-[#0bda16]/10 w-fit px-2 py-1 rounded">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span>+12%</span>
+</div>
+</div>
+<div class="bg-surface-white p-5 rounded-xl border border-border-light hover:border-primary/50 transition-colors shadow-sm">
+<div class="flex justify-between items-start mb-2">
+<p class="text-text-secondary text-sm font-medium">Watch Time (Hours)</p>
+<span class="material-symbols-outlined text-primary">schedule</span>
+</div>
+<p class="text-text-main text-3xl font-bold mb-1">850K</p>
+<div class="flex items-center gap-1 text-[#fa3f38] text-xs font-bold bg-[#fa3f38]/10 w-fit px-2 py-1 rounded">
+<span class="material-symbols-outlined text-[14px]">trending_down</span>
+<span>-2.1%</span>
+</div>
+</div>
+<div class="bg-surface-white p-5 rounded-xl border border-border-light hover:border-primary/50 transition-colors shadow-sm">
+<div class="flex justify-between items-start mb-2">
+<p class="text-text-secondary text-sm font-medium">Net Subscribers</p>
+<span class="material-symbols-outlined text-primary">group_add</span>
+</div>
+<p class="text-text-main text-3xl font-bold mb-1">+15.2K</p>
+<div class="flex items-center gap-1 text-[#0bda16] text-xs font-bold bg-[#0bda16]/10 w-fit px-2 py-1 rounded">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span>+8%</span>
+</div>
+</div>
+<div class="bg-surface-white p-5 rounded-xl border border-border-light hover:border-primary/50 transition-colors shadow-sm">
+<div class="flex justify-between items-start mb-2">
+<p class="text-text-secondary text-sm font-medium">Est. Revenue</p>
+<span class="material-symbols-outlined text-primary">attach_money</span>
+</div>
+<p class="text-text-main text-3xl font-bold mb-1">$12.5K</p>
+<div class="flex items-center gap-1 text-[#0bda16] text-xs font-bold bg-[#0bda16]/10 w-fit px-2 py-1 rounded">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span>+5.4%</span>
+</div>
+</div>
+</div>
+<div class="bg-surface-white rounded-xl border border-border-light p-6 shadow-sm">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-text-main text-lg font-bold">Subscriber Growth</h3>
+<div class="flex gap-2">
+<button class="px-3 py-1 rounded-md text-xs font-medium bg-primary text-white shadow-sm">Daily</button>
+<button class="px-3 py-1 rounded-md text-xs font-medium text-text-secondary hover:bg-slate-100 transition-colors">Weekly</button>
+<button class="px-3 py-1 rounded-md text-xs font-medium text-text-secondary hover:bg-slate-100 transition-colors">Monthly</button>
+</div>
+</div>
+<div class="relative w-full h-[300px] flex items-end gap-1 pt-8">
+<div class="absolute -right-0 top-0 h-full flex flex-col justify-between text-xs text-slate-400 text-right pr-2">
+<span>20k</span>
+<span>15k</span>
+<span>10k</span>
+<span>5k</span>
+<span>0</span>
+</div>
+<div class="absolute inset-0 right-8 flex flex-col justify-between pointer-events-none">
+<div class="w-full h-px bg-slate-100"></div>
+<div class="w-full h-px bg-transparent border-t border-dashed border-slate-200"></div>
+<div class="w-full h-px bg-transparent border-t border-dashed border-slate-200"></div>
+<div class="w-full h-px bg-transparent border-t border-dashed border-slate-200"></div>
+<div class="w-full h-px bg-slate-100"></div>
+</div>
+<div class="absolute inset-0 right-8 h-full z-10">
+<svg class="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 1000 300">
+<defs>
+<linearGradient id="gradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#f47b25" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#f47b25" stop-opacity="0"></stop>
+</linearGradient>
+</defs>
+<path d="M0,280 C50,270 100,200 150,220 C200,240 250,150 300,160 C350,170 400,120 450,130 C500,140 550,80 600,90 C650,100 700,50 750,70 C800,90 850,20 900,40 C950,60 1000,10 1000,10" fill="url(#gradient)" stroke="none"></path>
+<path d="M0,280 C50,270 100,200 150,220 C200,240 250,150 300,160 C350,170 400,120 450,130 C500,140 550,80 600,90 C650,100 700,50 750,70 C800,90 850,20 900,40 C950,60 1000,10 1000,10" fill="none" stroke="#f47b25" stroke-width="3" vector-effect="non-scaling-stroke"></path>
+<circle cx="150" cy="220" fill="white" r="5" stroke="#f47b25" stroke-width="2.5"></circle>
+<circle cx="300" cy="160" fill="white" r="5" stroke="#f47b25" stroke-width="2.5"></circle>
+<circle cx="600" cy="90" fill="white" r="5" stroke="#f47b25" stroke-width="2.5"></circle>
+<circle cx="900" cy="40" fill="white" r="5" stroke="#f47b25" stroke-width="2.5"></circle>
+</svg>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+<div class="xl:col-span-2 bg-surface-white rounded-xl border border-border-light p-6 shadow-sm flex flex-col">
+<div class="flex justify-between items-center mb-6">
+<h3 class="text-text-main text-lg font-bold">Top 5 Videos by Retention</h3>
+<a class="text-primary text-sm font-bold hover:underline" href="#">View All</a>
+</div>
+<div class="flex flex-col gap-4">
+<div class="grid grid-cols-12 text-xs text-slate-400 font-bold uppercase tracking-wider px-2">
+<div class="col-span-6">Video</div>
+<div class="col-span-2 text-center">Views</div>
+<div class="col-span-4 text-left">Avg. View Duration</div>
+</div>
+<div class="grid grid-cols-12 items-center p-2 rounded-lg hover:bg-slate-50 transition-colors group cursor-pointer border border-transparent hover:border-slate-100">
+<div class="col-span-6 flex items-center gap-3">
+<div class="w-16 h-10 bg-cover bg-center rounded overflow-hidden shrink-0 shadow-sm" data-alt="Thumbnail showing political debate highlights" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuD55kWqDlDBEJRbZH-nwngogo1vYC1VfK6lNdT0JlyguwSC9MYIcO-5sDkYt35tQqE7YnGO-Y1-y6pK1_zIzqrWQXq9AcMqsxmn6K2eai1smIwpRKD0QS1cnty-BJ7p-jy2ghY33rEQm2ukvyjIqjfybI5BGa_bBtGk-JCH8OHY3JpkGql3qBEdX1FmmG3FHTNj9yjXw29JQQRK8mz6XLuDwnRi1KICYKMDazhrbHKt2RJHNu93ObzM0nxRrLkC7g6L0_vJ1z7-JvY");'></div>
+<div class="min-w-0">
+<p class="text-text-main text-sm font-medium truncate group-hover:text-primary transition-colors">Election Night Special Coverage 2023</p>
+<p class="text-text-secondary text-xs">Published Oct 24, 2023</p>
+</div>
+</div>
+<div class="col-span-2 text-center text-text-main font-medium text-sm">142.5K</div>
+<div class="col-span-4 pl-4">
+<div class="flex items-center gap-2">
+<span class="text-text-main text-xs font-bold w-8">65%</span>
+<div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 65%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-12 items-center p-2 rounded-lg hover:bg-slate-50 transition-colors group cursor-pointer border border-transparent hover:border-slate-100">
+<div class="col-span-6 flex items-center gap-3">
+<div class="w-16 h-10 bg-cover bg-center rounded overflow-hidden shrink-0 shadow-sm" data-alt="Thumbnail showing breaking news reporter on site" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBsl37GA_SQ59xk_IBfCX4LmKH7t7c2LYrheFSUFl0SuoYI-40K-vg-IQDpPHEeUGNP1U6QEuRkLf4FU7rgsbvLJGjgJOUTpou-Ho3Vi-XLAPpglpMO7uUCdLj7B4IIjTrfdVS26xpYiefYiioi8EnsnzlZXMbGx4oslqtd7bd8T331USoT1NwUwNCNainkpQwqbNCsiroKmerbBe_7POESNrl1DJFKX9tNrvqK589PVfdItVsyUHB36qNlvBZ-cHgntrO7lEa5cJc");'></div>
+<div class="min-w-0">
+<p class="text-text-main text-sm font-medium truncate group-hover:text-primary transition-colors">Breaking: Updates from the North</p>
+<p class="text-text-secondary text-xs">Published Nov 02, 2023</p>
+</div>
+</div>
+<div class="col-span-2 text-center text-text-main font-medium text-sm">98.2K</div>
+<div class="col-span-4 pl-4">
+<div class="flex items-center gap-2">
+<span class="text-text-main text-xs font-bold w-8">58%</span>
+<div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 58%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-12 items-center p-2 rounded-lg hover:bg-slate-50 transition-colors group cursor-pointer border border-transparent hover:border-slate-100">
+<div class="col-span-6 flex items-center gap-3">
+<div class="w-16 h-10 bg-cover bg-center rounded overflow-hidden shrink-0 shadow-sm" data-alt="Thumbnail showing interview with tech leader" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuA_eHqDew5GXshQjZgfP9irKjof59pqEzmH1s6qXXEWxDwG714rdovyyzg4vApfOW8BNf586NUQw-nLunRMYFo27L5smkID6UbV-l3DaK3PW8ImWCFY7YFsBxn-VKDh-hRoCmbG08K-hSkobMrE6tTTia5NOcZAvKXO3QTQrIrJSQdCk7rd7UnBcJOLnqgS8tLS1OptEgd1foXIh0fizgW6ZbBBQUiJmPDIdwotDneFatRT7AW4Qc7JEgg_Zl4B6u3QHbh2F0hoGtg");'></div>
+<div class="min-w-0">
+<p class="text-text-main text-sm font-medium truncate group-hover:text-primary transition-colors">Tech Innovation Summit Highlights</p>
+<p class="text-text-secondary text-xs">Published Oct 15, 2023</p>
+</div>
+</div>
+<div class="col-span-2 text-center text-text-main font-medium text-sm">76.8K</div>
+<div class="col-span-4 pl-4">
+<div class="flex items-center gap-2">
+<span class="text-text-main text-xs font-bold w-8">42%</span>
+<div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 42%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-12 items-center p-2 rounded-lg hover:bg-slate-50 transition-colors group cursor-pointer border border-transparent hover:border-slate-100">
+<div class="col-span-6 flex items-center gap-3">
+<div class="w-16 h-10 bg-cover bg-center rounded overflow-hidden shrink-0 shadow-sm" data-alt="Thumbnail showing economy graph analysis" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCTceuXlx9apS7UIkD45DGILwOcmbuXKmc3jSiVwvtmFglvFQIAkGBou4JsgAOvT9eef_eNNw9qoPdKPNV1LiZ-lpET89nmPoV75wuEC_SmeuPNl-rnKxftUnwRtDXqDM1tTpIKFvDIDC4_rLk7igNnITyNO-deSKGqrqdS34rMfF4q336szZvzVoZe29Oq-Bynisn2kXBEe99dRENYtWIuziXk1XUwoBGCydoGONi776WLVhlY14mQPcqOGTrI5e5xYQgclaYc4sc");'></div>
+<div class="min-w-0">
+<p class="text-text-main text-sm font-medium truncate group-hover:text-primary transition-colors">Global Market Trends 2024</p>
+<p class="text-text-secondary text-xs">Published Nov 10, 2023</p>
+</div>
+</div>
+<div class="col-span-2 text-center text-text-main font-medium text-sm">65.4K</div>
+<div class="col-span-4 pl-4">
+<div class="flex items-center gap-2">
+<span class="text-text-main text-xs font-bold w-8">71%</span>
+<div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 71%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-12 items-center p-2 rounded-lg hover:bg-slate-50 transition-colors group cursor-pointer border border-transparent hover:border-slate-100">
+<div class="col-span-6 flex items-center gap-3">
+<div class="w-16 h-10 bg-cover bg-center rounded overflow-hidden shrink-0 shadow-sm" data-alt="Thumbnail showing weather forecast map" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCyHXYM2CHGQQb7NiOWr07Hx3x00YLm2gFj9gLwZwxGgPecLkrZTfIf1N_7J2jfPqXSfDt88y1zZ84RpgfJG1FZyTIWey8geNz3zBOH1jId8_hlwmfgx98PKHmKJsV2sCvvEJEi2QaZJm-vKwyBeI5dX1vucQh23YBo3fh49-BW8hoJMo3XKt_kZvp4acVfkHS_uTXs8tQRHqlXzK7sNr2OQFg6aqZXi8dnQLLAhPcq_-cacZLXJdy80jGOf4_d9ROFE4n0vqPflyE");'></div>
+<div class="min-w-0">
+<p class="text-text-main text-sm font-medium truncate group-hover:text-primary transition-colors">Winter Storm Warning</p>
+<p class="text-text-secondary text-xs">Published Dec 01, 2023</p>
+</div>
+</div>
+<div class="col-span-2 text-center text-text-main font-medium text-sm">54.1K</div>
+<div class="col-span-4 pl-4">
+<div class="flex items-center gap-2">
+<span class="text-text-main text-xs font-bold w-8">85%</span>
+<div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 85%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-white rounded-xl border border-border-light p-6 shadow-sm flex flex-col">
+<h3 class="text-text-main text-lg font-bold mb-6">Traffic Sources</h3>
+<div class="flex-1 flex flex-col justify-center items-center gap-8">
+<div class="relative w-48 h-48 rounded-full shadow-sm" style="background: conic-gradient(#f47b25 0% 45%, #0d9488 45% 70%, #475569 70% 100%);">
+<div class="absolute inset-4 bg-white rounded-full flex flex-col items-center justify-center shadow-inner">
+<span class="text-text-secondary text-xs font-medium">Top Source</span>
+<span class="text-text-main text-2xl font-bold">Search</span>
+</div>
+</div>
+<div class="w-full flex flex-col gap-3">
+<div class="flex justify-between items-center text-sm">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-primary"></div>
+<span class="text-text-main">YouTube Search</span>
+</div>
+<span class="text-text-secondary font-bold">45%</span>
+</div>
+<div class="flex justify-between items-center text-sm">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-teal-custom"></div>
+<span class="text-text-main">Suggested Videos</span>
+</div>
+<span class="text-text-secondary font-bold">25%</span>
+</div>
+<div class="flex justify-between items-center text-sm">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-slate-blue"></div>
+<span class="text-text-main">External &amp; Other</span>
+</div>
+<span class="text-text-secondary font-bold">30%</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+
+</body></html>

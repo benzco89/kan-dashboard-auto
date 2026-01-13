@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Alerts &amp; Insights Center - Kan News</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f47b25",
+                        "background-light": "#f8f7f5",
+                        "background-dark": "#221710",
+                    },
+                    fontFamily: {
+                        "display": ["Manrope", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-[#1c130d] font-display antialiased">
+<div class="flex h-screen w-full overflow-hidden">
+<!-- Sidebar -->
+<aside class="flex w-72 flex-col justify-between border-r border-[#e8d9ce] bg-white px-6 py-8 h-full shrink-0 overflow-y-auto">
+<div class="flex flex-col gap-8">
+<!-- Brand -->
+<div class="flex items-center gap-3 px-2">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10" data-alt="Abstract orange and brown geometric logo pattern" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAVKVUAVpWSS1uqMxQnEPZO6RWOZOPitrGad8OxmsTI8TtsEjmY-gNGeVOxrk_yE9_tGNVwRN4pTs0305Ohl_tg3W3ntMYwOkGwV00Fx27tGkWe0steQT4EKYvnrUdEINtRmbi3X4Q3g33IzX1dT0b7WEQNM0hiUwutOrBIgRyFPMqGYHe5eV4yyQPB6mpkjt3zN_LJ3TIgZ8NkKLhHhgK3L0eLT4UIST9Uw7vOxurCLmXkCHn7_wI30LF8bV1hMVDgeS8Hb_9de_0");'>
+</div>
+<div class="flex flex-col">
+<h1 class="text-[#1c130d] text-lg font-bold leading-none">Kan News</h1>
+<p class="text-[#9c6c49] text-xs font-medium mt-1">Analytics Dashboard</p>
+</div>
+</div>
+<!-- Navigation -->
+<nav class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-[#f4ece7] transition-colors group" href="#">
+<span class="material-symbols-outlined text-[#9c6c49] group-hover:text-[#1c130d]">dashboard</span>
+<span class="text-[#1c130d] text-sm font-medium">Overview</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary/10 transition-colors" href="#">
+<span class="material-symbols-outlined text-primary icon-filled">notifications</span>
+<span class="text-primary text-sm font-bold">Alerts</span>
+<span class="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">12</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-[#f4ece7] transition-colors group" href="#">
+<span class="material-symbols-outlined text-[#9c6c49] group-hover:text-[#1c130d]">description</span>
+<span class="text-[#1c130d] text-sm font-medium">Reports</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-[#f4ece7] transition-colors group" href="#">
+<span class="material-symbols-outlined text-[#9c6c49] group-hover:text-[#1c130d]">settings</span>
+<span class="text-[#1c130d] text-sm font-medium">Settings</span>
+</a>
+</nav>
+</div>
+<!-- Bottom Actions -->
+<div class="flex flex-col gap-2 border-t border-[#e8d9ce] pt-6">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-[#f4ece7] transition-colors group" href="#">
+<div class="h-8 w-8 rounded-full bg-gray-200 bg-center bg-cover" data-alt="User profile picture placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBT4NEbSCBsaS7q5ODAGopZe86TWKqQ1NSOmAjYh8RziUdg9BL8oEY87QKZiCs06cu1KWewUKHhAWeymysTlGhX30WAwNJ6MEGoW1oig0TEeXQHA3bWhES_P1R-TWW035DpJ82I5lwJ6kpMPpGfa_VNzMxLE9V4wjxt0yDMY49LfbzZhUfDza8OfuPtVwZnA4-marQLqPHYMsA593YV9eVqmKbQTNf5zxk4VfDu2Zx-6XnFbpem1bCS9Pfd5h-7qGDxi0x5Er8NDJg")'></div>
+<div class="flex flex-col">
+<span class="text-[#1c130d] text-sm font-medium">David Cohen</span>
+<span class="text-[#9c6c49] text-xs">Social Lead</span>
+</div>
+</a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col h-full overflow-hidden bg-background-light relative">
+<!-- Header Section -->
+<header class="w-full border-b border-[#e8d9ce]/50 bg-background-light/80 backdrop-blur-md sticky top-0 z-10">
+<div class="max-w-6xl mx-auto px-8 py-6">
+<div class="flex justify-between items-start">
+<div class="flex flex-col gap-2">
+<h2 class="text-[#1c130d] text-3xl font-black leading-tight tracking-[-0.033em]">Alerts &amp; Insights</h2>
+<p class="text-[#9c6c49] text-base font-normal">Real-time monitoring for Kan News social channels.</p>
+</div>
+<button class="bg-white border border-[#e8d9ce] text-[#1c130d] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#f4ece7] transition flex items-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-lg">tune</span>
+                        Configure Rules
+                    </button>
+</div>
+</div>
+</header>
+<!-- Scrollable Content -->
+<div class="flex-1 overflow-y-auto p-8">
+<div class="max-w-6xl mx-auto flex flex-col gap-8">
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<!-- Stat Card 1 -->
+<div class="flex flex-col gap-3 rounded-xl bg-white p-5 border border-[#e8d9ce] shadow-sm relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-5xl">notifications_active</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">warning</span>
+<p class="text-[#9c6c49] text-sm font-medium uppercase tracking-wide">Active Alerts</p>
+</div>
+<div class="flex items-baseline gap-3">
+<p class="text-[#1c130d] text-3xl font-bold leading-tight">12</p>
+<div class="flex items-center text-[#07880e] text-sm font-bold bg-[#07880e]/10 px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-sm mr-0.5">trending_up</span>
+                                +20%
+                            </div>
+</div>
+</div>
+<!-- Stat Card 2 -->
+<div class="flex flex-col gap-3 rounded-xl bg-white p-5 border border-[#e8d9ce] shadow-sm relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-5xl">dangerous</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[#e71008]">error</span>
+<p class="text-[#9c6c49] text-sm font-medium uppercase tracking-wide">Critical Issues</p>
+</div>
+<div class="flex items-baseline gap-3">
+<p class="text-[#1c130d] text-3xl font-bold leading-tight">3</p>
+<div class="flex items-center text-[#e71008] text-sm font-bold bg-[#e71008]/10 px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-sm mr-0.5">trending_up</span>
+                                +2 New
+                            </div>
+</div>
+</div>
+<!-- Stat Card 3 -->
+<div class="flex flex-col gap-3 rounded-xl bg-white p-5 border border-[#e8d9ce] shadow-sm relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-5xl">check_circle</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[#07880e]">task_alt</span>
+<p class="text-[#9c6c49] text-sm font-medium uppercase tracking-wide">Resolved Today</p>
+</div>
+<div class="flex items-baseline gap-3">
+<p class="text-[#1c130d] text-3xl font-bold leading-tight">28</p>
+<div class="flex items-center text-[#07880e] text-sm font-bold bg-[#07880e]/10 px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-sm mr-0.5">trending_up</span>
+                                +5%
+                            </div>
+</div>
+</div>
+</div>
+<!-- Filters & Search -->
+<div class="flex flex-wrap items-center justify-between gap-4">
+<div class="flex flex-wrap gap-2">
+<button class="flex h-9 items-center justify-center gap-x-2 rounded-lg bg-white border border-[#e8d9ce] pl-3 pr-2 hover:bg-[#f4ece7] transition">
+<p class="text-[#1c130d] text-sm font-medium">Platform: All</p>
+<span class="material-symbols-outlined text-[#1c130d] text-[20px]">keyboard_arrow_down</span>
+</button>
+<button class="flex h-9 items-center justify-center gap-x-2 rounded-lg bg-white border border-[#e8d9ce] pl-3 pr-2 hover:bg-[#f4ece7] transition">
+<p class="text-[#1c130d] text-sm font-medium">Severity: All</p>
+<span class="material-symbols-outlined text-[#1c130d] text-[20px]">keyboard_arrow_down</span>
+</button>
+<button class="flex h-9 items-center justify-center gap-x-2 rounded-lg bg-white border border-[#e8d9ce] pl-3 pr-2 hover:bg-[#f4ece7] transition">
+<p class="text-[#1c130d] text-sm font-medium">Timeframe: Last 24h</p>
+<span class="material-symbols-outlined text-[#1c130d] text-[20px]">keyboard_arrow_down</span>
+</button>
+</div>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#9c6c49] text-[20px]">search</span>
+<input class="h-9 w-64 rounded-lg border border-[#e8d9ce] bg-white pl-10 pr-4 text-sm text-[#1c130d] placeholder-[#9c6c49] focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" placeholder="Search alerts..." type="text"/>
+</div>
+</div>
+<!-- Alerts List -->
+<div class="flex flex-col gap-3">
+<h3 class="text-[#9c6c49] text-xs font-bold uppercase tracking-wider mb-1">Today</h3>
+<!-- Alert Item 1: Critical (YouTube) -->
+<div class="flex flex-col md:flex-row md:items-center gap-4 bg-white rounded-xl p-5 border-l-4 border-l-[#e71008] shadow-sm hover:shadow-md transition-shadow">
+<!-- Icon -->
+<div class="shrink-0 flex items-center justify-center size-12 rounded-full bg-red-50 text-[#e71008]">
+<span class="material-symbols-outlined">smart_display</span>
+</div>
+<!-- Content -->
+<div class="flex flex-1 flex-col justify-center gap-1">
+<div class="flex items-center gap-2">
+<span class="bg-[#e71008] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Critical</span>
+<span class="text-[#9c6c49] text-xs">10 min ago</span>
+</div>
+<p class="text-[#1c130d] text-base font-bold leading-snug">Viral Spike Detected: 'Election Special'</p>
+<p class="text-[#4a4a4a] text-sm leading-normal">Video gained +400% views in 1 hour on YouTube. Comments sentiment is mixed.</p>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-3 shrink-0 mt-3 md:mt-0">
+<button class="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-orange-600 transition shadow-sm whitespace-nowrap">
+                                Boost Post
+                            </button>
+<button class="size-9 flex items-center justify-center rounded-lg border border-[#e8d9ce] text-[#9c6c49] hover:bg-gray-50 transition">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Alert Item 2: Warning (Facebook) -->
+<div class="flex flex-col md:flex-row md:items-center gap-4 bg-white rounded-xl p-5 border-l-4 border-l-primary shadow-sm hover:shadow-md transition-shadow">
+<!-- Icon -->
+<div class="shrink-0 flex items-center justify-center size-12 rounded-full bg-orange-50 text-primary">
+<span class="material-symbols-outlined">public</span>
+</div>
+<!-- Content -->
+<div class="flex flex-1 flex-col justify-center gap-1">
+<div class="flex items-center gap-2">
+<span class="bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Warning</span>
+<span class="text-[#9c6c49] text-xs">45 min ago</span>
+</div>
+<p class="text-[#1c130d] text-base font-bold leading-snug">Engagement Drop on Facebook</p>
+<p class="text-[#4a4a4a] text-sm leading-normal">Reach for 'Morning Show Clip' is down 15% compared to the 7-day average.</p>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-3 shrink-0 mt-3 md:mt-0">
+<button class="h-9 px-4 rounded-lg bg-white border border-primary text-primary text-sm font-medium hover:bg-orange-50 transition whitespace-nowrap">
+                                Analyze
+                            </button>
+<button class="size-9 flex items-center justify-center rounded-lg border border-[#e8d9ce] text-[#9c6c49] hover:bg-gray-50 transition">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Alert Item 3: Info (Twitter/X) -->
+<div class="flex flex-col md:flex-row md:items-center gap-4 bg-white rounded-xl p-5 border-l-4 border-l-blue-400 shadow-sm hover:shadow-md transition-shadow">
+<!-- Icon -->
+<div class="shrink-0 flex items-center justify-center size-12 rounded-full bg-blue-50 text-blue-500">
+<span class="material-symbols-outlined">tag</span>
+</div>
+<!-- Content -->
+<div class="flex flex-1 flex-col justify-center gap-1">
+<div class="flex items-center gap-2">
+<span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Info</span>
+<span class="text-[#9c6c49] text-xs">2 hours ago</span>
+</div>
+<p class="text-[#1c130d] text-base font-bold leading-snug">Trending Topic: 'Tel Aviv Marathon'</p>
+<p class="text-[#4a4a4a] text-sm leading-normal">This keyword is trending in your region. Consider creating related content.</p>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-3 shrink-0 mt-3 md:mt-0">
+<button class="h-9 px-4 rounded-lg bg-white border border-[#e8d9ce] text-[#1c130d] text-sm font-medium hover:bg-gray-50 transition whitespace-nowrap">
+                                Create Post
+                            </button>
+<button class="size-9 flex items-center justify-center rounded-lg border border-[#e8d9ce] text-[#9c6c49] hover:bg-gray-50 transition">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+<h3 class="text-[#9c6c49] text-xs font-bold uppercase tracking-wider mb-1 mt-4">Yesterday</h3>
+<!-- Alert Item 4: Success (General) -->
+<div class="flex flex-col md:flex-row md:items-center gap-4 bg-white rounded-xl p-5 border-l-4 border-l-[#07880e] shadow-sm hover:shadow-md transition-shadow">
+<!-- Icon -->
+<div class="shrink-0 flex items-center justify-center size-12 rounded-full bg-green-50 text-[#07880e]">
+<span class="material-symbols-outlined">emoji_events</span>
+</div>
+<!-- Content -->
+<div class="flex flex-1 flex-col justify-center gap-1">
+<div class="flex items-center gap-2">
+<span class="bg-green-100 text-[#07880e] text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Success</span>
+<span class="text-[#9c6c49] text-xs">Yesterday, 4:20 PM</span>
+</div>
+<p class="text-[#1c130d] text-base font-bold leading-snug">Milestone Reached: 100k Followers</p>
+<p class="text-[#4a4a4a] text-sm leading-normal">Your Twitter account has passed 100,000 followers. Great work!</p>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-3 shrink-0 mt-3 md:mt-0">
+<button class="h-9 px-4 rounded-lg bg-white border border-[#e8d9ce] text-[#1c130d] text-sm font-medium hover:bg-gray-50 transition whitespace-nowrap">
+                                Share Report
+                            </button>
+<button class="size-9 flex items-center justify-center rounded-lg border border-[#e8d9ce] text-[#9c6c49] hover:bg-gray-50 transition">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+</div>
+<!-- Alert Item 5: Critical (Instagram) -->
+<div class="flex flex-col md:flex-row md:items-center gap-4 bg-white rounded-xl p-5 border-l-4 border-l-[#e71008] shadow-sm hover:shadow-md transition-shadow">
+<!-- Icon -->
+<div class="shrink-0 flex items-center justify-center size-12 rounded-full bg-red-50 text-[#e71008]">
+<span class="material-symbols-outlined">sentiment_dissatisfied</span>
+</div>
+<!-- Content -->
+<div class="flex flex-1 flex-col justify-center gap-1">
+<div class="flex items-center gap-2">
+<span class="bg-[#e71008] text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Critical</span>
+<span class="text-[#9c6c49] text-xs">Yesterday, 10:00 AM</span>
+</div>
+<p class="text-[#1c130d] text-base font-bold leading-snug">Negative Sentiment Spike</p>
+<p class="text-[#4a4a4a] text-sm leading-normal">Unusual volume of negative comments detected on post 'Budget Analysis'.</p>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-3 shrink-0 mt-3 md:mt-0">
+<button class="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-orange-600 transition shadow-sm whitespace-nowrap">
+                                View Comments
+                            </button>
+<button class="size-9 flex items-center justify-center rounded-lg border border-[#e8d9ce] text-[#9c6c49] hover:bg-gray-50 transition">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>
