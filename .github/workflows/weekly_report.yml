@@ -2,7 +2,7 @@ name: Weekly Social Report
 
 on:
   schedule:
-    - cron: '0 8 * * 0'  # יום ראשון 10:00 ישראל (08:00 UTC)
+    - cron: '41 5 * * 0'  # יום ראשון ~08:41 קיץ / ~07:41 חורף (05:41 UTC) - דקה לא עמוסה למניעת עיכוב
   workflow_dispatch:      # כפתור להרצה ידנית
 
 jobs:
