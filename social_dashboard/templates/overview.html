@@ -66,13 +66,13 @@
       series: [
         { color: "var(--yt)", data: data.chart.youtube, name: "YouTube" },
         { color: "var(--fb)", data: data.chart.facebook, name: "Facebook" },
-        { color: "var(--ig)", data: data.chart.instagram, name: "Instagram" }
+        { color: "var(--ig-line)", data: data.chart.instagram, name: "Instagram" }
       ]
     });
     var legend = '<div class="legend">' +
       '<span><span class="dot" style="background:var(--yt);"></span>YouTube</span>' +
       '<span><span class="dot" style="background:var(--fb);"></span>Facebook</span>' +
-      '<span><span class="dot" style="background:var(--ig);"></span>Instagram</span></div>';
+      '<span><span class="dot" style="background:var(--ig-line);"></span>Instagram</span></div>';
 
     var platforms = [
       pcard({ name: "YouTube", color: "var(--yt)", bg: "var(--yt-bg)", icon: "yt", href: "/youtube", followers: data.platforms.youtube.followers, views: data.platforms.youtube.views, spark: data.platforms.youtube.spark }),

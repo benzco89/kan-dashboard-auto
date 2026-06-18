@@ -56,7 +56,8 @@
     var meanE = vids.length ? vids.reduce(function (a, v) { return a + v.likes + v.comments; }, 0) / vids.length : 0;
     var cols = "1fr 80px 92px 84px 84px 78px";
     var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span>כותרת</span><span class="center">סוג</span><span class="center">צפיות</span><span class="center">לייקים</span><span class="center">תגובות</span><span class="center">% לייקים</span></div>';
-    var rows = vids.map(function (v) {
+    var LIMIT = 40;
+    var rowOf = function (v) {
       var hlV = v.views > 2 * meanV, hlE = !hlV && (v.likes + v.comments) > 2 * meanE;
       var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : (hlE ? "border-inline-start-color:var(--hi-alt);background:var(--hi-alt-bg);" : "");
       var isShort = v.type === "Short";
@@ -68,7 +69,13 @@
         '<span class="cell">' + KS.fmt(v.likes) + '</span>' +
         '<span class="cell">' + KS.fmt(v.comments) + '</span>' +
         '<span class="cell">' + v.like_rate.toFixed(1) + '%</span></a>';
-    }).join("") || '<div style="padding:24px;text-align:center;color:var(--muted);">אין סרטונים בטווח שנבחר</div>';
+    };
+    var rows;
+    if (!vids.length) rows = '<div style="padding:24px;text-align:center;color:var(--muted);">אין סרטונים בטווח שנבחר</div>';
+    else {
+      rows = vids.slice(0, LIMIT).map(rowOf).join("");
+      if (vids.length > LIMIT) rows += '<div id="tbl-more" style="display:none">' + vids.slice(LIMIT).map(rowOf).join("") + '</div><button id="tbl-showall" class="showall-btn">הצג את כל ' + vids.length + ' הסרטונים ↓</button>';
+    }
 
     document.getElementById("main").innerHTML =
       '<div class="platform-head"><span class="pf-icon" style="background:var(--pf);">' + KS.fillIcon("yt", "#fff", 24) + '</span>' +
@@ -91,6 +98,8 @@
       '<span><span class="sq" style="background:var(--hi-alt);"></span>מעורבות גבוהה</span></div></div>' +
       thead + rows + '</div>';
     KS.wireCharts();
+    var _sa = document.getElementById("tbl-showall");
+    if (_sa) _sa.addEventListener("click", function () { document.getElementById("tbl-more").style.display = ""; _sa.style.display = "none"; });
   }
 
   KanSocial.init("youtube", render);

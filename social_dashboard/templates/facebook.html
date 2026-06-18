@@ -46,8 +46,9 @@
     var legend = '<div class="legend"><span><span class="dot" style="background:var(--pf);"></span>צפיות</span>' +
       '<span><span class="dot" style="background:var(--reach);"></span>חשיפה</span></div>';
 
-    var maxReach = Math.max.apply(null, data.types.map(function (t) { return t.reach; }).concat([1]));
-    var typebars = data.types.map(function (t) {
+    var shownTypes = data.types.filter(function (t) { return t.count > 0; });
+    var maxReach = Math.max.apply(null, shownTypes.map(function (t) { return t.reach; }).concat([1]));
+    var typebars = shownTypes.map(function (t) {
       return '<div class="typebar"><div class="typebar-top"><span class="typebar-name">' + t.name +
         '<span class="cnt">' + t.count + ' פוסטים</span></span><span class="typebar-val">' + KS.fmt(t.reach) + '</span></div>' +
         '<span class="typebar-track"><span class="typebar-fill" style="width:' + Math.round(t.reach / maxReach * 100) + '%;background:' + (TYPE_COLOR[t.name] || "var(--muted)") + ';"></span></span></div>';
@@ -61,7 +62,8 @@
     var meanR = posts.length ? posts.reduce(function (a, v) { return a + v.reach; }, 0) / posts.length : 0;
     var cols = "1fr 78px 88px 88px 80px 84px 78px";
     var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span>כותרת</span><span class="center">סוג</span><span class="center">צפיות</span><span class="center">חשיפה</span><span class="center">לייקים</span><span class="center">שיתופים</span><span class="center">% מעורבות</span></div>';
-    var rows = posts.map(function (p) {
+    var LIMIT = 40;
+    var rowOf = function (p) {
       var hlV = p.views > 2 * meanV, hlR = !hlV && p.reach > 2 * meanR;
       var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : (hlR ? "border-inline-start-color:var(--hi-alt);background:var(--hi-alt-bg);" : "");
       return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
@@ -72,7 +74,13 @@
         '<span class="cell">' + KS.fmt(p.likes) + '</span>' +
         '<span class="cell">' + KS.fmt(p.shares) + '</span>' +
         '<span class="cell">' + p.engagement.toFixed(1) + '%</span></a>';
-    }).join("") || '<div style="padding:24px;text-align:center;color:var(--muted);">אין פוסטים בטווח שנבחר</div>';
+    };
+    var rows;
+    if (!posts.length) rows = '<div style="padding:24px;text-align:center;color:var(--muted);">אין פוסטים בטווח שנבחר</div>';
+    else {
+      rows = posts.slice(0, LIMIT).map(rowOf).join("");
+      if (posts.length > LIMIT) rows += '<div id="tbl-more" style="display:none">' + posts.slice(LIMIT).map(rowOf).join("") + '</div><button id="tbl-showall" class="showall-btn">הצג את כל ' + posts.length + ' הפוסטים ↓</button>';
+    }
 
     document.getElementById("main").innerHTML =
       '<div class="platform-head"><span class="pf-icon" style="background:var(--pf);">' + KS.fillIcon("fb", "#fff", 24) + '</span>' +
@@ -80,7 +88,7 @@
 
       '<div class="grid-4 mb-s">' + kpis + '</div>' +
 
-      '<div class="split" style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;margin-bottom:14px;">' +
+      '<div class="split" style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;margin-bottom:14px;align-items:start;">' +
         '<div class="panel chart"><div class="panel-head"><div><div class="panel-title">צפיות וחשיפה לאורך זמן</div><div class="panel-sub">מדדים יומיים</div></div>' + legend + '</div>' + chart + '</div>' +
         '<div class="panel"><div class="panel-title">חשיפה לפי סוג</div><div class="panel-sub" style="margin-bottom:16px;">חשיפה לפי סוג תוכן</div>' + typebars + '</div>' +
       '</div>' +
@@ -93,6 +101,8 @@
       '<span><span class="sq" style="background:var(--hi-alt);"></span>חשיפה גבוהה</span></div></div>' +
       thead + rows + '</div>';
     KS.wireCharts();
+    var _sa = document.getElementById("tbl-showall");
+    if (_sa) _sa.addEventListener("click", function () { document.getElementById("tbl-more").style.display = ""; _sa.style.display = "none"; });
   }
 
   KanSocial.init("facebook", render);
