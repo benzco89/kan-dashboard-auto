@@ -1,9 +1,9 @@
 name: Daily Social Update
 
 on:
-  schedule:
-    - cron: '23 5 * * *'  # ~08:23 קיץ / ~07:23 חורף (05:23 UTC) - דקה לא עמוסה למניעת עיכוב בתור של GitHub
-  workflow_dispatch:      # כפתור להרצה ידנית
+  # התזמון מנוהל אמין ע"י systemd timer ב-VPS (kan-daily-dispatch.timer, 08:30 שעון ישראל)
+  # שמפעיל workflow_dispatch דרך ה-API. ה-cron של GitHub עצמו רץ באיחור של 4-6 שעות, לכן הוסר.
+  workflow_dispatch:      # מופעל ע"י ה-VPS ב-08:30, וגם כפתור ידני
 
 jobs:
   collect:
