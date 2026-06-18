@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>כאן חדשות · סושיאל — Instagram</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header id="header"></header>
+<main id="main" class="main"></main>
+<script src="/static/app.js"></script>
+<script>
+(function () {
+  var TYPE_COLOR = { Reel: "var(--pf)", Photo: "var(--amber)", Carousel: "var(--purp)" };
+
+  function kpi(k) {
+    var inner;
+    if (k.weekly !== undefined) {
+      var up = k.weekly >= 0;
+      inner = '<div class="kpi-delta ' + (up ? "up" : "down") + '">' + (up ? "▲" : "▼") + " " + KS.signed(k.weekly) + '<span class="sub">השבוע</span></div>';
+    } else {
+      var d = KS.delta(k.value, k.prev);
+      inner = '<div class="kpi-delta ' + d.cls + '">' + d.arrow + " " + d.txt + '<span class="sub">מהתקופה הקודמת</span></div>';
+    }
+    return '<div class="kpi pf sm"><div class="kpi-top"><div class="kpi-label">' + k.label + '</div>' +
+      '<span class="kpi-ic" style="background:var(--pf-bg);color:var(--pf);">' + KS.strokeIcon(k.icon) + '</span></div>' +
+      '<div class="kpi-val">' + KS.fmt(k.value) + '</div>' + inner + '</div>';
+  }
+  function stat(v, l) { return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+
+  function render(data, app) {
+    var rl = KS.RANGE_LABEL[data.range];
+    var k = data.kpis;
+    var kpis = [
+      kpi({ label: "עוקבים", value: data.followers.value, weekly: data.followers.weekly_change, icon: "users" }),
+      kpi({ label: "צפיות", value: k.views.value, prev: k.views.prev, icon: "eye" }),
+      kpi({ label: "שמירות", value: k.saved.value, prev: k.saved.prev, icon: "save" }),
+      kpi({ label: "שיתופים", value: k.shares.value, prev: k.shares.prev, icon: "share" })
+    ].join("");
+
+    var chart = KS.lineSvg({
+      dates: data.chart.dates, vbW: 700, vbH: 230,
+      series: [{ color: "var(--reach)", data: data.chart.reach }, { color: "var(--pf)", data: data.chart.views }]
+    });
+    var legend = '<div class="legend"><span><span class="dot" style="background:var(--pf);"></span>צפיות</span>' +
+      '<span><span class="dot" style="background:var(--reach);"></span>חשיפה</span></div>';
+
+    var total = data.donut.reel + data.donut.photo + data.donut.carousel;
+    function pct(v) { return total ? Math.round(v / total * 100) + "%" : "0%"; }
+    var donut = KS.donutSvg(
+      [{ color: "var(--pf)", value: data.donut.reel }, { color: "var(--amber)", value: data.donut.photo }, { color: "var(--purp)", value: data.donut.carousel }],
+      total, "פוסטים");
+    var dLegend =
+      '<div class="donut-legend"><span class="sq" style="background:var(--pf);"></span><span class="name">Reel</span><span class="val">' + data.donut.reel + " · " + pct(data.donut.reel) + '</span></div>' +
+      '<div class="donut-legend"><span class="sq" style="background:var(--amber);"></span><span class="name">Photo</span><span class="val">' + data.donut.photo + " · " + pct(data.donut.photo) + '</span></div>' +
+      '<div class="donut-legend"><span class="sq" style="background:var(--purp);"></span><span class="name">Carousel</span><span class="val">' + data.donut.carousel + " · " + pct(data.donut.carousel) + '</span></div>';
+
+    // saves vs shares bars
+    var bs = data.bars, maxB = Math.max.apply(null, bs.saved.concat(bs.shares).concat([1])) * 1.1;
+    var bars = bs.dates.map(function (d, i) {
+      var sv = Math.round(bs.saved[i] / maxB * 100), sh = Math.round(bs.shares[i] / maxB * 100);
+      var lbl = (i % 2 === 0) ? KS.fmtDate(d) : "";
+      return '<span class="col"><span class="pair"><span class="bar" style="height:' + sv + '%;background:var(--pf);"></span>' +
+        '<span class="bar" style="height:' + sh + '%;background:var(--reach);"></span></span><span class="lbl">' + lbl + '</span></span>';
+    }).join("");
+
+    var s = data.summary;
+    var summary = [stat("" + s.total, "סה״כ פוסטים"), stat("" + s.reels, "Reels"), stat("" + s.photos, "Photos"), stat("" + s.carousels, "Carousels"), stat(s.avg_engagement.toFixed(2) + "%", "ממוצע מעורבות")].join("");
+
+    var posts = data.posts;
+    var meanV = posts.length ? posts.reduce(function (a, v) { return a + v.views; }, 0) / posts.length : 0;
+    var meanR = posts.length ? posts.reduce(function (a, v) { return a + v.reach; }, 0) / posts.length : 0;
+    var cols = "1fr 80px 88px 88px 80px 84px 78px";
+    var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span>תיאור</span><span class="center">סוג</span><span class="center">צפיות</span><span class="center">חשיפה</span><span class="center">שמירות</span><span class="center">שיתופים</span><span class="center">% מעורבות</span></div>';
+    var rows = posts.map(function (p) {
+      var hlV = p.views > 2 * meanV, hlR = !hlV && p.reach > 2 * meanR;
+      var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : (hlR ? "border-inline-start-color:var(--hi-alt);background:var(--hi-alt-bg);" : "");
+      return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
+        '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + '</span><span class="t-date">' + KS.fmtDate(p.date) + '</span></span>' +
+        '<span class="center"><span class="tag" style="color:' + (TYPE_COLOR[p.type] || "var(--muted)") + ';">' + p.type + '</span></span>' +
+        '<span class="cell strong">' + KS.fmt(p.views) + '</span>' +
+        '<span class="cell">' + KS.fmt(p.reach) + '</span>' +
+        '<span class="cell">' + KS.fmt(p.saved) + '</span>' +
+        '<span class="cell">' + KS.fmt(p.shares) + '</span>' +
+        '<span class="cell">' + p.engagement.toFixed(1) + '%</span></a>';
+    }).join("") || '<div style="padding:24px;text-align:center;color:var(--muted);">אין פוסטים בטווח שנבחר</div>';
+
+    document.getElementById("main").innerHTML =
+      '<div class="platform-head"><span class="pf-icon" style="background:linear-gradient(135deg,#feda75,#d62976 45%,#962fbf 80%);">' + KS.fillIcon("ig", "#fff", 24) + '</span>' +
+      '<div><h1>Instagram Analytics</h1><p>ניתוח ביצועי עמוד האינסטגרם של כאן חדשות · ' + rl + '</p></div></div>' +
+
+      '<div class="grid-4 mb-s">' + kpis + '</div>' +
+
+      '<div class="split" style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px;margin-bottom:14px;">' +
+        '<div class="panel chart"><div class="panel-head"><div><div class="panel-title">צפיות וחשיפה לאורך זמן</div><div class="panel-sub">מדדים יומיים</div></div>' + legend + '</div>' + chart + '</div>' +
+        '<div class="panel"><div class="panel-title">סוג תוכן</div><div class="panel-sub">Reel / Photo / Carousel</div>' +
+        '<div style="display:flex;align-items:center;justify-content:center;margin:8px 0 12px;">' + donut + '</div>' + dLegend + '</div>' +
+      '</div>' +
+
+      '<div class="panel mb-s"><div class="panel-head"><div><div class="panel-title">שמירות לעומת שיתופים</div><div class="panel-sub">השוואה יומית · 14 ימים אחרונים</div></div>' +
+      '<div class="legend"><span><span class="sq" style="background:var(--pf);"></span>שמירות</span><span><span class="sq" style="background:var(--reach);"></span>שיתופים</span></div></div>' +
+      '<div class="bars">' + bars + '</div></div>' +
+
+      '<div class="grid-5 mb-m">' + summary + '</div>' +
+
+      '<div class="table"><div class="table-head"><div><div class="panel-title">פוסטים מובילים</div>' +
+      '<div class="panel-sub">' + data.summary.total + ' פוסטים · ' + rl + '</div></div>' +
+      '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span>' +
+      '<span><span class="sq" style="background:var(--hi-alt);"></span>חשיפה גבוהה</span></div></div>' +
+      thead + rows + '</div>';
+  }
+
+  KanSocial.init("instagram", render);
+})();
+</script>
+</body>
+</html>

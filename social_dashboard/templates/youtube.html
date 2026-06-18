@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>כאן חדשות · סושיאל — YouTube</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header id="header"></header>
+<main id="main" class="main"></main>
+<script src="/static/app.js"></script>
+<script>
+(function () {
+  function kpi(k) {
+    var inner;
+    if (k.weekly !== undefined) {
+      var up = k.weekly >= 0;
+      inner = '<div class="kpi-delta ' + (up ? "up" : "down") + '">' + (up ? "▲" : "▼") + " " + KS.signed(k.weekly) + '<span class="sub">השבוע</span></div>';
+    } else {
+      var d = KS.delta(k.value, k.prev);
+      inner = '<div class="kpi-delta ' + d.cls + '">' + d.arrow + " " + d.txt + '<span class="sub">מהתקופה הקודמת</span></div>';
+    }
+    return '<div class="kpi pf sm"><div class="kpi-top"><div class="kpi-label">' + k.label + '</div>' +
+      '<span class="kpi-ic" style="background:var(--pf-bg);color:var(--pf);">' + KS.strokeIcon(k.icon) + '</span></div>' +
+      '<div class="kpi-val">' + KS.fmt(k.value) + '</div>' + inner + '</div>';
+  }
+  function stat(v, l) { return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+
+  function render(data, app) {
+    var rl = KS.RANGE_LABEL[data.range];
+    var k = data.kpis;
+    var kpis = [
+      kpi({ label: "מנויים", value: data.subscribers.value, weekly: data.subscribers.weekly_change, icon: "users" }),
+      kpi({ label: "צפיות", value: k.views.value, prev: k.views.prev, icon: "eye" }),
+      kpi({ label: "לייקים", value: k.likes.value, prev: k.likes.prev, icon: "like" }),
+      kpi({ label: "תגובות", value: k.comments.value, prev: k.comments.prev, icon: "comment" })
+    ].join("");
+
+    var chart = KS.lineSvg({ dates: data.chart.dates, vbW: 700, vbH: 230, area: true, series: [{ color: "var(--pf)", data: data.chart.views, w: 2.6 }] });
+
+    var totV = data.donut.shorts_views + data.donut.regular_views;
+    function pct(v) { return totV ? Math.round(v / totV * 100) + "%" : "0%"; }
+    var donut = KS.donutSvg(
+      [{ color: "var(--pf)", value: data.donut.shorts_views }, { color: "var(--muted)", value: data.donut.regular_views }],
+      data.summary.total, "סרטונים");
+    var dLegend =
+      '<div class="donut-legend"><span class="sq" style="background:var(--pf);"></span><span class="name">Shorts</span><span class="val">' + KS.fmt(data.donut.shorts_views) + " · " + pct(data.donut.shorts_views) + '</span></div>' +
+      '<div class="donut-legend"><span class="sq" style="background:var(--muted);"></span><span class="name">סרטונים רגילים</span><span class="val">' + KS.fmt(data.donut.regular_views) + " · " + pct(data.donut.regular_views) + '</span></div>';
+
+    var s = data.summary;
+    var summary = [stat("" + s.total, "סה״כ סרטונים"), stat("" + s.shorts, "Shorts"), stat("" + s.regular, "סרטונים רגילים"), stat(s.avg_like_rate.toFixed(2) + "%", "ממוצע לייקים")].join("");
+
+    var vids = data.videos;
+    var meanV = vids.length ? vids.reduce(function (a, v) { return a + v.views; }, 0) / vids.length : 0;
+    var meanE = vids.length ? vids.reduce(function (a, v) { return a + v.likes + v.comments; }, 0) / vids.length : 0;
+    var cols = "1fr 80px 92px 84px 84px 78px";
+    var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span>כותרת</span><span class="center">סוג</span><span class="center">צפיות</span><span class="center">לייקים</span><span class="center">תגובות</span><span class="center">% לייקים</span></div>';
+    var rows = vids.map(function (v) {
+      var hlV = v.views > 2 * meanV, hlE = !hlV && (v.likes + v.comments) > 2 * meanE;
+      var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : (hlE ? "border-inline-start-color:var(--hi-alt);background:var(--hi-alt-bg);" : "");
+      var isShort = v.type === "Short";
+      var tagStyle = isShort ? "color:var(--pf);border-color:var(--pf);" : "color:var(--muted);";
+      return '<a class="trow" href="' + KS.esc(v.url || "#") + '" target="_blank" rel="noopener" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
+        '<span style="min-width:0;"><span class="t-title">' + KS.esc(v.title) + '</span><span class="t-date">' + KS.fmtDate(v.date) + '</span></span>' +
+        '<span class="center"><span class="tag" style="' + tagStyle + '">' + v.type + '</span></span>' +
+        '<span class="cell strong">' + KS.fmt(v.views) + '</span>' +
+        '<span class="cell">' + KS.fmt(v.likes) + '</span>' +
+        '<span class="cell">' + KS.fmt(v.comments) + '</span>' +
+        '<span class="cell">' + v.like_rate.toFixed(1) + '%</span></a>';
+    }).join("") || '<div style="padding:24px;text-align:center;color:var(--muted);">אין סרטונים בטווח שנבחר</div>';
+
+    document.getElementById("main").innerHTML =
+      '<div class="platform-head"><span class="pf-icon" style="background:var(--pf);">' + KS.fillIcon("yt", "#fff", 24) + '</span>' +
+      '<div><h1>YouTube Analytics</h1><p>ניתוח ביצועי ערוץ היוטיוב של כאן חדשות · ' + rl + '</p></div></div>' +
+
+      '<div class="grid-4 mb-s">' + kpis + '</div>' +
+
+      '<div class="split" style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px;margin-bottom:14px;">' +
+        '<div class="panel chart"><div class="panel-head"><div><div class="panel-title">צפיות לאורך זמן</div><div class="panel-sub">צפיות יומיות בסרטונים</div></div>' +
+        '<span class="legend"><span><span class="dot" style="background:var(--pf);"></span>צפיות</span></span></div>' + chart + '</div>' +
+        '<div class="panel"><div class="panel-title">סוג תוכן</div><div class="panel-sub">Shorts מול סרטונים רגילים</div>' +
+        '<div style="display:flex;align-items:center;justify-content:center;margin:8px 0 12px;">' + donut + '</div>' + dLegend + '</div>' +
+      '</div>' +
+
+      '<div class="grid-4 mb-m">' + summary + '</div>' +
+
+      '<div class="table"><div class="table-head"><div><div class="panel-title">סרטונים מובילים</div>' +
+      '<div class="panel-sub">' + data.summary.total + ' סרטונים · ' + rl + '</div></div>' +
+      '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span>' +
+      '<span><span class="sq" style="background:var(--hi-alt);"></span>מעורבות גבוהה</span></div></div>' +
+      thead + rows + '</div>';
+  }
+
+  KanSocial.init("youtube", render);
+})();
+</script>
+</body>
+</html>

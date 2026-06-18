@@ -1,0 +1,16 @@
+[Unit]
+Description=Kan Social Dashboard (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/social-dashboard
+Environment=TZ=Asia/Jerusalem
+Environment=SERVICE_ACCOUNT_FILE=/opt/social-dashboard/service-account.json
+ExecStart=/opt/social-dashboard/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8430
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

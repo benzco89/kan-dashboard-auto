@@ -19,7 +19,9 @@ except ImportError:
 # --- Config ---
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN')
 PAGE_ID = "220634478361516"
-API_VERSION = "v24.0"
+API_VERSION = "v25.0"  # bumped from v24: the legacy reach metric (post_impressions_unique)
+                       # was removed for ALL versions on 2026-06-15; v25 exposes the
+                       # unified media-view metrics (post_total_media_view_unique / post_media_view).
 DAYS_BACK = 7
 
 SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
@@ -39,119 +41,91 @@ def get_video_direct_metrics(video_id):
     except:
         return 0
 
+def _flatten_value(v):
+    """post_media_view may return a number or a paid/organic dict; reduce to a total."""
+    if isinstance(v, dict):
+        total = 0
+        for x in v.values():
+            try:
+                total += float(x)
+            except (TypeError, ValueError):
+                pass
+        return int(total)
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _insight(obj_id, metric, endpoint="insights"):
+    """Fetch one lifetime insight metric on its own (so one bad name can't fail the batch). 0 on error/missing."""
+    params = {'access_token': ACCESS_TOKEN, 'metric': metric}
+    if endpoint == "insights":
+        params['period'] = 'lifetime'
+    try:
+        res = requests.get(f"https://graph.facebook.com/{API_VERSION}/{obj_id}/{endpoint}", params=params).json()
+        if 'error' in res:
+            return 0
+        data = res.get('data', [])
+        if not data:
+            return 0
+        values = data[0].get('values', [])
+        return _flatten_value(values[0].get('value')) if values else 0
+    except Exception:
+        return 0
+
+
+def get_video_id(post):
+    """Extract the underlying video object id from a post's attachment (for video_insights)."""
+    try:
+        return post['attachments']['data'][0]['target']['id']
+    except Exception:
+        return None
+
+
 def get_base_insights(post_id):
     """
-    משיכת מדדים בסיסיים - עובד לכל סוגי הפוסטים
+    מדדים בסיסיים לכל סוגי הפוסטים, במטריקות העדכניות (Graph API v25):
+      reach  = post_total_media_view_unique  (צופים ייחודיים; מחליף post_impressions_unique שהוסר 15.6.2026)
+      views  = post_media_view               (צפיות מאוחדות לכל סוגי התוכן, כולל תמונות/טקסט)
+      clicks = post_clicks
+    כל מטריקה נמשכת בנפרד כדי ששם לא-תקין אחד לא יפיל את כל הקריאה.
+    (שמות המדויקים מאומתים מול הדף דרך fb_metric_probe.py לפני מיזוג.)
     """
-    url = f"https://graph.facebook.com/{API_VERSION}/{post_id}/insights"
-    params = {
-        'access_token': ACCESS_TOKEN,
-        'metric': 'post_impressions_unique,post_clicks',
-        'period': 'lifetime'
+    return {
+        'reach': _insight(post_id, 'post_total_media_view_unique'),
+        'views': _insight(post_id, 'post_media_view'),
+        'clicks': _insight(post_id, 'post_clicks'),
     }
-    
-    result = {'reach': 0, 'clicks': 0}
-    
-    try:
-        res = requests.get(url, params=params).json()
-        
-        if 'error' in res:
-            # לא מדפיסים שגיאה - זה צפוי לפעמים
-            return result
-        
-        for item in res.get('data', []):
-            name = item.get('name')
-            values = item.get('values', [])
-            v = values[0].get('value', 0) if values else 0
-            
-            if name == 'post_impressions_unique':
-                result['reach'] = v
-            elif name == 'post_clicks':
-                result['clicks'] = v
-                
-    except Exception as e:
-        print(f"⚠️ Base insights error for {post_id}: {e}")
-    
-    return result
 
 
-def get_video_insights(post_id):
+def get_video_insights(video_id):
     """
-    משיכת מדדי וידאו - רק ל-Reels/Video
-    קריאה נפרדת כדי לא להכשיל את המדדים הבסיסיים
+    מדדי וידאו/רילז (watch-time) מאובייקט הוידאו דרך video_insights (Graph API v25).
+    שמות מאומתים מול הדף (probe): עבור רילז עובדים post_video_* על endpoint זה,
+    בעוד total_video_* מוחזרים ריקים (הם לוידאו רגיל בלבד):
+      plays           = blue_reels_play_count  (fallback: total_video_views לוידאו רגיל)
+      avg_watch_sec   = post_video_avg_time_watched  (ms -> sec)
+      total_watch_min = post_video_view_time          (ms -> min)
+      views_30s       = total_video_30s_views (זמין לוידאו רגיל; לרילז מוחזר 0)
     """
-    result = {
-        'views': 0,
-        'avg_watch_sec': 0,
-        'views_30s': 0,
-        'total_watch_min': 0,
-    }
-    
-    url = f"https://graph.facebook.com/{API_VERSION}/{post_id}/insights"
-    
-    # ניסיון 1: מדדי Reels חדשים
-    params = {
-        'access_token': ACCESS_TOKEN,
-        'metric': 'blue_reels_play_count,post_video_avg_time_watched',
-        'period': 'lifetime'
-    }
-    
-    try:
-        res = requests.get(url, params=params).json()
-        
-        if 'data' in res:
-            for item in res.get('data', []):
-                name = item.get('name')
-                values = item.get('values', [])
-                v = values[0].get('value', 0) if values else 0
-                
-                if name == 'blue_reels_play_count':
-                    result['views'] = v
-                elif name == 'post_video_avg_time_watched':
-                    result['avg_watch_sec'] = round(v / 1000, 1) if v else 0
-    except:
-        pass
-    
-    # ניסיון 2: מדדי וידאו מורחבים (אם קיימים)
-    try:
-        params2 = {
-            'access_token': ACCESS_TOKEN,
-            'metric': 'post_video_views_30s,post_video_view_time',
-            'period': 'lifetime'
-        }
-        res2 = requests.get(url, params=params2).json()
-        
-        if 'data' in res2:
-            for item in res2.get('data', []):
-                name = item.get('name')
-                values = item.get('values', [])
-                v = values[0].get('value', 0) if values else 0
-                
-                if name == 'post_video_views_30s':
-                    result['views_30s'] = v
-                elif name == 'post_video_view_time':
-                    result['total_watch_min'] = round(v / 60000, 1) if v else 0
-    except:
-        pass  # מדדים אלה לא תמיד זמינים
-    
-    # ניסיון 3: fallback ל-post_media_view אם אין צפיות
-    if result['views'] == 0:
-        try:
-            params3 = {
-                'access_token': ACCESS_TOKEN,
-                'metric': 'post_media_view',
-                'period': 'lifetime'
-            }
-            res3 = requests.get(url, params=params3).json()
-            
-            if 'data' in res3:
-                for item in res3.get('data', []):
-                    if item.get('name') == 'post_media_view':
-                        values = item.get('values', [])
-                        result['views'] = values[0].get('value', 0) if values else 0
-        except:
-            pass
-    
+    result = {'plays': 0, 'avg_watch_sec': 0, 'views_30s': 0, 'total_watch_min': 0}
+    if not video_id:
+        return result
+
+    plays = _insight(video_id, 'blue_reels_play_count', endpoint='video_insights')
+    if not plays:
+        plays = _insight(video_id, 'total_video_views', endpoint='video_insights')
+    result['plays'] = plays
+
+    avg_ms = _insight(video_id, 'post_video_avg_time_watched', endpoint='video_insights')
+    result['avg_watch_sec'] = round(avg_ms / 1000, 1) if avg_ms else 0
+
+    total_ms = _insight(video_id, 'post_video_view_time', endpoint='video_insights')
+    result['total_watch_min'] = round(total_ms / 60000, 1) if total_ms else 0
+
+    result['views_30s'] = _insight(video_id, 'total_video_30s_views', endpoint='video_insights')
+
     return result
 
 
@@ -230,36 +204,24 @@ def fetch_facebook_data():
             post_id = post['id']
             media_type = detect_media_type(post)
 
-            # 1. משיכת מדדים בסיסיים (עובד לכולם)
+            # 1. מדדים בסיסיים לכל הסוגים (reach + views + clicks במטריקות v25)
             base = get_base_insights(post_id)
-            
-            # 2. משיכת מדדי וידאו (רק לוידאו/Reels)
-            video = {'views': 0, 'avg_watch_sec': 0, 'views_30s': 0, 'total_watch_min': 0}
+            reach = base['reach']
+            views = base['views']
+            clicks = base['clicks']
+
+            # 2. מדדי וידאו/רילז (watch-time) מאובייקט הוידאו
+            video = {'plays': 0, 'avg_watch_sec': 0, 'views_30s': 0, 'total_watch_min': 0}
             if media_type in ['Video', 'Reel']:
-                video = get_video_insights(post_id)
-                
-                # fallback לצפיות ישירות מהוידאו
-                if video['views'] == 0:
-                    try:
-                        if 'attachments' in post:
-                            vid_id = post['attachments']['data'][0]['target']['id']
-                            video['views'] = get_video_direct_metrics(vid_id)
-                    except:
-                        pass
-            
+                video = get_video_insights(get_video_id(post))
+                # אם post_media_view לא החזיר צפיות לריל, ניפול למספר ה-plays
+                if views == 0 and video['plays'] > 0:
+                    views = video['plays']
+
             # 3. משיכת מדדים ציבוריים
             public = get_public_metrics(post_id)
 
-            # 4. חישובים
-            reach = base['reach']
-            clicks = base['clicks']
-            views = video['views']
-            
-            # אם אין reach, נשתמש בviews
-            if reach == 0 and views > 0:
-                reach = views
-            
-            # חישוב מעורבות
+            # 4. חישובים (ללא ה-fallback הישן reach=views — reach ו-views הם מדדים נפרדים)
             total_eng = clicks + public['likes'] + public['comments'] + public['shares']
             engagement_rate = round((total_eng / reach) * 100, 2) if reach > 0 else 0
 

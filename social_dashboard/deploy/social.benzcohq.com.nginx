@@ -1,0 +1,25 @@
+# social.benzcohq.com — Kan social dashboard (behind Authelia SSO, same as pushstat).
+# Written with `listen 80` only; `certbot --nginx -d social.benzcohq.com` adds the
+# 443 server block + http->https redirect on first run.
+server {
+    server_name social.benzcohq.com;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    client_max_body_size 10m;
+
+    include /etc/nginx/snippets/authelia-location.conf;
+
+    location / {
+        include /etc/nginx/snippets/authelia-authrequest.conf;
+        proxy_pass http://127.0.0.1:8430;
+        proxy_read_timeout 120s;
+    }
+
+    listen 80;
+    listen [::]:80;
+}
