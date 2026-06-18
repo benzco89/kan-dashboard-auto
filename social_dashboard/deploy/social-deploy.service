@@ -1,0 +1,7 @@
+[Unit]
+Description=Auto-deploy Kan social dashboard from git (origin/main)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/kan-social-deploy
