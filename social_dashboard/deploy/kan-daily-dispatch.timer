@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the daily social pipeline at 08:30 Israel time (DST-aware)
+
+[Timer]
+# systemd v252+ honours the timezone suffix; handles IDT/IST automatically.
+OnCalendar=*-*-* 08:30:00 Asia/Jerusalem
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Trigger the Daily Social Update GitHub workflow (reliable local-time dispatch)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/kan-dispatch.env
+ExecStart=/usr/local/bin/kan-daily-dispatch
