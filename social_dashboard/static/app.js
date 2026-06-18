@@ -41,6 +41,11 @@
     if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1).replace(/\.0$/, "") + "K";
     return "" + n;
   }
+  function fmtHtml(n) {
+    // big-number value with the K/M shown as a small, lighter unit (not glued black)
+    var s = fmt(n), m = s.match(/^([\d.]+)([KM])$/);
+    return m ? m[1] + '<span class="unit">' + m[2] + "</span>" : s;
+  }
   function fmtDate(iso) {
     if (!iso) return "";
     var p = iso.split("-");
@@ -109,7 +114,7 @@
     }).join("");
     return '<svg viewBox="0 0 150 150" width="158" height="158"><g transform="rotate(-90 75 75)">'
       + '<circle cx="75" cy="75" r="' + r + '" fill="none" stroke="var(--chip)" stroke-width="20"></circle>' + arcs + "</g>"
-      + '<text x="75" y="70" text-anchor="middle" style="fill:var(--text);font-weight:900;font-size:26px;font-family:\'SimplerPro\',sans-serif;">' + centerNum + "</text>"
+      + '<text x="75" y="70" text-anchor="middle" style="fill:var(--text);font-weight:700;font-size:26px;font-family:\'SimplerPro\',sans-serif;">' + centerNum + "</text>"
       + '<text x="75" y="89" text-anchor="middle" style="fill:var(--muted);font-size:11px;font-family:ui-monospace,monospace;">' + centerLabel + "</text></svg>";
   }
 
@@ -306,7 +311,7 @@
   // expose helpers
   window.KanSocial = app;
   window.KS = {
-    fmt: fmt, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc,
+    fmt: fmt, fmtHtml: fmtHtml, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc,
     fillIcon: fillIcon, strokeIcon: strokeIcon, lineSvg: lineSvg, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
     RANGE_LABEL: RANGE_LABEL, FILL: FILL
   };

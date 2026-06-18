@@ -17,22 +17,22 @@
   function follCard(f) {
     var up = f.weekly_change >= 0;
     return '<div class="card foll"><div class="foll-top"><span class="foll-ic" style="background:' + f.bg + ';">' + KS.fillIcon(f.icon, f.color) + '</span>' +
-      '<div style="min-width:0;flex:1;"><div class="foll-label">' + f.label + '</div><div class="foll-val">' + KS.fmt(f.value) + '</div></div></div>' +
+      '<div style="min-width:0;flex:1;"><div class="foll-label">' + f.label + '</div><div class="foll-val">' + KS.fmtHtml(f.value) + '</div></div></div>' +
       '<div class="foll-change ' + (up ? "up" : "down") + '">' + (up ? "▲" : "▼") + " " + KS.signed(f.weekly_change) + '<span class="sub"> השבוע</span></div></div>';
   }
   function kpiCard(k) {
     var d = KS.delta(k.value, k.prev);
     return '<div class="kpi"><div class="kpi-top"><div class="kpi-label">' + k.label + '</div>' +
       '<span class="kpi-ic" style="background:' + k.bg + ";color:" + k.color + ';">' + KS.strokeIcon(k.icon) + '</span></div>' +
-      '<div class="kpi-val">' + KS.fmt(k.value) + '</div>' +
+      '<div class="kpi-val">' + KS.fmtHtml(k.value) + '</div>' +
       '<div class="kpi-delta ' + d.cls + '">' + d.arrow + " " + d.txt + '<span class="sub">מהתקופה הקודמת</span></div></div>';
   }
   function pcard(p) {
     return '<a class="pcard" href="' + p.href + '" style="--c:' + p.color + ';">' +
       '<div class="pcard-head"><span class="pcard-ic" style="background:' + p.bg + ';">' + KS.fillIcon(p.icon, p.color, 17) + '</span>' +
       '<span class="pcard-name">' + p.name + '</span><span class="spacer"></span><span class="pcard-more">פירוט ←</span></div>' +
-      '<div class="pcard-stats"><div><div class="k">עוקבים</div><div class="v">' + KS.fmt(p.followers) + '</div></div>' +
-      '<div><div class="k">צפיות בתקופה</div><div class="v">' + KS.fmt(p.views) + '</div></div></div>' +
+      '<div class="pcard-stats"><div><div class="k">עוקבים</div><div class="v">' + KS.fmtHtml(p.followers) + '</div></div>' +
+      '<div><div class="k">צפיות בתקופה</div><div class="v">' + KS.fmtHtml(p.views) + '</div></div></div>' +
       KS.sparkSvg(p.spark, p.color) + '</a>';
   }
   function topRow(c, i) {
@@ -91,7 +91,7 @@
     var q = data.quick;
     var quick = [
       { v: q.avg_engagement.toFixed(2) + "%", l: "ממוצע מעורבות" },
-      { v: KS.fmt(q.total_reach), l: "חשיפה כוללת" },
+      { v: KS.fmtHtml(q.total_reach), l: "חשיפה כוללת" },
       { v: "" + q.yt_videos, l: "סרטוני YouTube" },
       { v: "" + q.fb_ig_posts, l: "פוסטים FB + IG" }
     ].map(function (x) { return '<div><div class="v">' + x.v + '</div><div class="l">' + x.l + "</div></div>"; }).join("");

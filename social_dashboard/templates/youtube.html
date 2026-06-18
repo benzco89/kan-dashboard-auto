@@ -23,7 +23,7 @@
     }
     return '<div class="kpi pf sm"><div class="kpi-top"><div class="kpi-label">' + k.label + '</div>' +
       '<span class="kpi-ic" style="background:var(--pf-bg);color:var(--pf);">' + KS.strokeIcon(k.icon) + '</span></div>' +
-      '<div class="kpi-val">' + KS.fmt(k.value) + '</div>' + inner + '</div>';
+      '<div class="kpi-val">' + KS.fmtHtml(k.value) + '</div>' + inner + '</div>';
   }
   function stat(v, l) { return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
 
