@@ -5,6 +5,10 @@
 # stay in $APP and are never overwritten.
 set -euo pipefail
 
+# Serialize: never let two deploys (timer + manual, or overlapping ticks) collide.
+exec 9>/var/lock/kan-social-deploy.lock
+flock -n 9 || { echo "$(date -Is) deploy already running, skipping"; exit 0; }
+
 REPO=/opt/kan-dashboard-auto
 APP=/opt/social-dashboard
 BRANCH=main
