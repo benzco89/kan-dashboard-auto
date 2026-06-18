@@ -23,6 +23,7 @@ git reset --hard "origin/$BRANCH" --quiet
 rsync -a --delete \
     --exclude venv --exclude __pycache__ --exclude '*.pyc' \
     --exclude service-account.json --exclude config.json \
+    --exclude static/fonts \
     "$REPO/social_dashboard/" "$APP/"
 
 "$APP/venv/bin/pip" install -q -r "$APP/requirements.txt"
