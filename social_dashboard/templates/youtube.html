@@ -37,7 +37,7 @@
       kpi({ label: "תגובות", value: k.comments.value, prev: k.comments.prev, icon: "comment" })
     ].join("");
 
-    var chart = KS.lineSvg({ dates: data.chart.dates, vbW: 700, vbH: 230, area: true, series: [{ color: "var(--pf)", data: data.chart.views, w: 2.6 }] });
+    var chart = KS.chart({ dates: data.chart.dates, vbW: 700, vbH: 230, area: true, series: [{ color: "var(--pf)", data: data.chart.views, w: 2.6, name: "צפיות" }] });
 
     var totV = data.donut.shorts_views + data.donut.regular_views;
     function pct(v) { return totV ? Math.round(v / totV * 100) + "%" : "0%"; }
@@ -90,6 +90,7 @@
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span>' +
       '<span><span class="sq" style="background:var(--hi-alt);"></span>מעורבות גבוהה</span></div></div>' +
       thead + rows + '</div>';
+    KS.wireCharts();
   }
 
   KanSocial.init("youtube", render);

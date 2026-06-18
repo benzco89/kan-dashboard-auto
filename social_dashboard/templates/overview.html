@@ -61,12 +61,12 @@
       kpiCard({ label: "תכנים", value: data.kpis.content.value, prev: data.kpis.content.prev, icon: "video", color: "var(--teal)", bg: "var(--teal-bg)" })
     ].join("");
 
-    var chart = KS.lineSvg({
+    var chart = KS.chart({
       dates: data.chart.dates, vbW: 720, vbH: 240,
       series: [
-        { color: "var(--yt)", data: data.chart.youtube },
-        { color: "var(--fb)", data: data.chart.facebook },
-        { color: "var(--ig)", data: data.chart.instagram }
+        { color: "var(--yt)", data: data.chart.youtube, name: "YouTube" },
+        { color: "var(--fb)", data: data.chart.facebook, name: "Facebook" },
+        { color: "var(--ig)", data: data.chart.instagram, name: "Instagram" }
       ]
     });
     var legend = '<div class="legend">' +
@@ -80,7 +80,9 @@
       pcard({ name: "Instagram", color: "var(--ig)", bg: "var(--ig-bg)", icon: "ig", href: "/instagram", followers: data.platforms.instagram.followers, views: data.platforms.instagram.views, spark: data.platforms.instagram.spark })
     ].join("");
 
-    var top = data.top_content.length ? data.top_content.map(topRow).join("") : '<div style="padding:24px;text-align:center;color:var(--muted);">אין תכנים בטווח שנבחר</div>';
+    var emptyTc = '<div style="padding:24px;text-align:center;color:var(--muted);">אין תכנים בטווח שנבחר</div>';
+    var topRows = data.top_content.length ? data.top_content.map(topRow).join("") : emptyTc;
+    var bottomRows = (data.bottom_content && data.bottom_content.length) ? data.bottom_content.map(topRow).join("") : emptyTc;
 
     var insight = data.insight.paragraphs.length
       ? data.insight.paragraphs.map(function (p) { return "<p>" + KS.esc(p) + "</p>"; }).join("")
@@ -112,8 +114,10 @@
       '<div class="grid-3 mb">' + platforms + '</div>' +
 
       '<div class="split" style="display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;align-items:start;">' +
-        '<div class="card" style="padding:6px 8px 8px;"><div class="toplist-head"><span class="panel-title">תכנים מובילים</span>' +
-        '<span style="font-family:ui-monospace,monospace;font-size:11px;color:var(--faint);">לפי צפיות · ' + rl + '</span></div>' + top + '</div>' +
+        '<div class="card" style="padding:6px 8px 8px;"><div class="toplist-head">' +
+        '<div id="tc-toggle" class="ranges" style="padding:2px;"><button class="range active" data-tc="top">מובילים</button><button class="range" data-tc="bottom">חלשים</button></div>' +
+        '<span style="font-family:ui-monospace,monospace;font-size:11px;color:var(--faint);">לפי צפיות · ' + rl + '</span></div>' +
+        '<div id="tc-list">' + topRows + '</div></div>' +
         '<div style="display:flex;flex-direction:column;gap:12px;">' +
           '<div class="insight"><div class="insight-head"><span class="insight-ic">' +
             '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="stroke:var(--orange);" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></svg>' +
@@ -123,6 +127,16 @@
           '<div class="quick-grid">' + quick + '</div></div>' +
         '</div>' +
       '</div>';
+
+    KS.wireCharts();
+    var tcList = document.getElementById("tc-list");
+    document.querySelectorAll("#tc-toggle [data-tc]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        document.querySelectorAll("#tc-toggle [data-tc]").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active");
+        tcList.innerHTML = b.getAttribute("data-tc") === "top" ? topRows : bottomRows;
+      });
+    });
   }
 
   KanSocial.init("overview", render);

@@ -230,7 +230,10 @@ def build_overview(data, days):
         top.append({"platform": "instagram", "title": it.get("caption", ""), "views": _int(it.get("views")),
                     "type": _ig_type(it.get("type")), "url": it.get("permalink", "")})
     top.sort(key=lambda x: x["views"], reverse=True)
-    top = top[:8]
+    top_content = top[:8]
+    # "what didn't land": the lowest-viewed *measured* items in the period
+    # (views>0 so we don't surface posts that simply haven't accrued yet).
+    bottom_content = sorted([x for x in top if x["views"] > 0], key=lambda x: x["views"])[:8]
 
     # latest AI insight
     insight = {"date": "", "paragraphs": []}
@@ -263,7 +266,8 @@ def build_overview(data, days):
             "facebook": {"followers": foll_fb["value"], "views": round(_sum(fb_p, "views")), "spark": fb_sp["views"]},
             "instagram": {"followers": foll_ig["value"], "views": round(_sum(ig_p, "views")), "spark": ig_sp["views"]},
         },
-        "top_content": top,
+        "top_content": top_content,
+        "bottom_content": bottom_content,
         "insight": insight,
         "quick": {
             "avg_engagement": round(avg_eng, 2),

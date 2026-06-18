@@ -125,6 +125,88 @@
       + '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline></svg>';
   }
 
+  // ---------- interactive line chart (hover guide + dots + tooltip) ----------
+  var _charts = {}, _cn = 0, _tip = null;
+
+  function _tooltip() {
+    if (_tip) return _tip;
+    _tip = document.createElement("div");
+    _tip.style.cssText = "position:fixed;z-index:50;pointer-events:none;display:none;min-width:120px;white-space:nowrap;" +
+      "background:var(--panel);border:1px solid var(--line2);border-radius:7px;padding:7px 10px;font-size:12px;" +
+      "color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,.25);font-family:'SimplerPro','Segoe UI',sans-serif;";
+    document.body.appendChild(_tip);
+    return _tip;
+  }
+
+  function chart(opts) {
+    var id = "c" + (++_cn);
+    var dates = opts.dates, series = opts.series, vbW = opts.vbW || 720, vbH = opts.vbH || 240;
+    var padT = opts.padT || 12, padB = opts.padB || 28, n = dates.length;
+    var all = []; series.forEach(function (s) { all = all.concat(s.data); });
+    var max = Math.max.apply(null, all.concat([1])) * 1.12;
+    var iH = vbH - padT - padB;
+    var X = function (i) { return n <= 1 ? 0 : i * vbW / (n - 1); };
+    var Y = function (v) { return padT + (1 - v / max) * iH; };
+    var grid = [0, .25, .5, .75, 1].map(function (f) {
+      var y = padT + (1 - f) * iH;
+      return '<line class="grid-line" x1="0" x2="' + vbW + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) + '"></line>'
+        + '<text class="grid-text" x="' + (vbW - 2) + '" y="' + (y - 3).toFixed(1) + '" text-anchor="end">' + fmt(max * f) + '</text>';
+    }).join("");
+    var areas = "", lines = "", dots = "";
+    series.forEach(function (s, si) {
+      var pts = s.data.map(function (v, i) { return X(i).toFixed(1) + "," + Y(v).toFixed(1); }).join(" ");
+      if (s.area) {
+        var baseY = (padT + iH).toFixed(1);
+        areas += '<path d="M ' + X(0).toFixed(1) + "," + baseY + " L " + s.data.map(function (v, i) { return X(i).toFixed(1) + "," + Y(v).toFixed(1); }).join(" L ") + " L " + X(n - 1).toFixed(1) + "," + baseY + ' Z" fill="' + s.color + '" fill-opacity="0.13"></path>';
+      }
+      lines += '<polyline points="' + pts + '" fill="none" stroke="' + s.color + '" stroke-width="' + (s.w || 2.4) + '" stroke-linejoin="round" stroke-linecap="round"></polyline>';
+      dots += '<circle class="ch-dot" data-si="' + si + '" r="3.6" fill="' + s.color + '" stroke="var(--panel)" stroke-width="1.5" style="display:none"></circle>';
+    });
+    var lc = Math.min(6, n), xl = "";
+    for (var k = 0; k < lc; k++) {
+      var i = Math.round(k * (n - 1) / (lc - 1 || 1));
+      xl += '<text class="grid-text" x="' + X(i).toFixed(1) + '" y="' + (vbH - 4) + '" text-anchor="middle">' + fmtDate(dates[i]) + "</text>";
+    }
+    var guide = '<line class="ch-guide" y1="' + padT + '" y2="' + (padT + iH).toFixed(1) + '" style="display:none;stroke:var(--line2);stroke-width:1;stroke-dasharray:3 3;"></line>';
+    _charts[id] = { dates: dates, series: series, vbW: vbW, padT: padT, iH: iH, max: max, n: n };
+    return '<svg data-chart="' + id + '" viewBox="0 0 ' + vbW + " " + vbH + '" width="100%" style="display:block;overflow:visible;cursor:crosshair;">' + grid + areas + lines + guide + dots + xl + '</svg>';
+  }
+
+  function wireCharts() {
+    document.querySelectorAll("svg[data-chart]").forEach(function (svg) {
+      if (svg._wired) return; svg._wired = true;
+      var cfg = _charts[svg.getAttribute("data-chart")]; if (!cfg) return;
+      var guide = svg.querySelector(".ch-guide"), dots = svg.querySelectorAll(".ch-dot"), tip = _tooltip();
+      var X = function (i) { return cfg.n <= 1 ? 0 : i * cfg.vbW / (cfg.n - 1); };
+      var Y = function (v) { return cfg.padT + (1 - v / cfg.max) * cfg.iH; };
+      function move(e) {
+        var r = svg.getBoundingClientRect();
+        if (!r.width) return;
+        var i = Math.round((e.clientX - r.left) / r.width * cfg.vbW / (cfg.vbW / ((cfg.n - 1) || 1)));
+        if (i < 0) i = 0; if (i > cfg.n - 1) i = cfg.n - 1;
+        var gx = X(i).toFixed(1);
+        guide.setAttribute("x1", gx); guide.setAttribute("x2", gx); guide.style.display = "";
+        var rows = "";
+        cfg.series.forEach(function (s, si) {
+          var v = s.data[i], d = dots[si];
+          d.setAttribute("cx", gx); d.setAttribute("cy", Y(v).toFixed(1)); d.style.display = "";
+          rows += '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;">' +
+            '<span style="width:9px;height:9px;border-radius:2px;background:' + s.color + ';flex:none;"></span>' +
+            (s.name ? '<span style="color:var(--muted);">' + s.name + "</span>" : "") +
+            '<b style="margin-inline-start:auto;font-family:ui-monospace,monospace;">' + fmt(v) + "</b></div>";
+        });
+        tip.innerHTML = '<div style="font-family:ui-monospace,monospace;font-size:11px;color:var(--faint);">' + fmtDate(cfg.dates[i]) + "</div>" + rows;
+        tip.style.display = "";
+        var tx = e.clientX + 14, ty = e.clientY + 14;
+        if (tx + 170 > window.innerWidth) tx = e.clientX - 170;
+        tip.style.left = tx + "px"; tip.style.top = ty + "px";
+      }
+      function leave() { guide.style.display = "none"; dots.forEach(function (d) { d.style.display = "none"; }); tip.style.display = "none"; }
+      svg.addEventListener("pointermove", move);
+      svg.addEventListener("pointerleave", leave);
+    });
+  }
+
   // ---------- theme + state ----------
   function getTheme() { try { return localStorage.getItem("pm_theme") || "dark"; } catch (e) { return "dark"; } }
   function setTheme(t) { try { localStorage.setItem("pm_theme", t); } catch (e) {} document.documentElement.setAttribute("data-theme", t); }
@@ -225,7 +307,7 @@
   window.KanSocial = app;
   window.KS = {
     fmt: fmt, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc,
-    fillIcon: fillIcon, strokeIcon: strokeIcon, lineSvg: lineSvg, donutSvg: donutSvg, sparkSvg: sparkSvg,
+    fillIcon: fillIcon, strokeIcon: strokeIcon, lineSvg: lineSvg, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
     RANGE_LABEL: RANGE_LABEL, FILL: FILL
   };
 })();

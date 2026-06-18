@@ -39,9 +39,9 @@
       kpi({ label: "שיתופים", value: k.shares.value, prev: k.shares.prev, icon: "share" })
     ].join("");
 
-    var chart = KS.lineSvg({
+    var chart = KS.chart({
       dates: data.chart.dates, vbW: 700, vbH: 230,
-      series: [{ color: "var(--reach)", data: data.chart.reach }, { color: "var(--pf)", data: data.chart.views }]
+      series: [{ color: "var(--reach)", data: data.chart.reach, name: "חשיפה" }, { color: "var(--pf)", data: data.chart.views, name: "צפיות" }]
     });
     var legend = '<div class="legend"><span><span class="dot" style="background:var(--pf);"></span>צפיות</span>' +
       '<span><span class="dot" style="background:var(--reach);"></span>חשיפה</span></div>';
@@ -109,6 +109,7 @@
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span>' +
       '<span><span class="sq" style="background:var(--hi-alt);"></span>חשיפה גבוהה</span></div></div>' +
       thead + rows + '</div>';
+    KS.wireCharts();
   }
 
   KanSocial.init("instagram", render);
