@@ -70,6 +70,11 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
     });
   }
+  // minimal, safe inline markdown for the AI insight text: escape first (so the
+  // sheet/Gemini content can't inject HTML), then render **bold** only.
+  function mdInline(s) {
+    return esc(s).replace(/\*\*([^*]+?)\*\*/g, "<strong>$1</strong>");
+  }
 
   // ---------- charts (return SVG strings; colors may be CSS vars) ----------
   function lineSvg(opts) {
@@ -311,7 +316,7 @@
   // expose helpers
   window.KanSocial = app;
   window.KS = {
-    fmt: fmt, fmtHtml: fmtHtml, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc,
+    fmt: fmt, fmtHtml: fmtHtml, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc, mdInline: mdInline,
     fillIcon: fillIcon, strokeIcon: strokeIcon, lineSvg: lineSvg, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
     RANGE_LABEL: RANGE_LABEL, FILL: FILL
   };

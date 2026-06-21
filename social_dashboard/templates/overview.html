@@ -85,7 +85,7 @@
     var bottomRows = (data.bottom_content && data.bottom_content.length) ? data.bottom_content.map(topRow).join("") : emptyTc;
 
     var insight = data.insight.paragraphs.length
-      ? data.insight.paragraphs.map(function (p) { return "<p>" + KS.esc(p) + "</p>"; }).join("")
+      ? data.insight.paragraphs.map(function (p) { return "<p>" + KS.mdInline(p) + "</p>"; }).join("")
       : '<p style="color:var(--muted);">אין תובנה זמינה</p>';
 
     var q = data.quick;
