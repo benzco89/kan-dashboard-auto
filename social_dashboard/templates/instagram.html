@@ -18,7 +18,7 @@
     var inner;
     if (k.weekly !== undefined) {
       var up = k.weekly >= 0;
-      inner = '<div class="kpi-delta ' + (up ? "up" : "down") + '">' + (up ? "▲" : "▼") + " " + KS.signed(k.weekly) + '<span class="sub">השבוע</span></div>';
+      inner = '<div class="kpi-delta ' + (up ? "up" : "down") + '">' + (up ? "▲" : "▼") + " " + KS.signed(k.weekly) + (k.growth ? ' · ' + Math.abs(k.growth).toFixed(1) + '%' : '') + '<span class="sub">השבוע</span></div>';
     } else {
       var d = KS.delta(k.value, k.prev);
       inner = '<div class="kpi-delta ' + d.cls + '">' + d.arrow + " " + d.txt + '<span class="sub">מהתקופה הקודמת</span></div>';
@@ -33,7 +33,7 @@
     var rl = KS.RANGE_LABEL[data.range];
     var k = data.kpis;
     var kpis = [
-      kpi({ label: "עוקבים", value: data.followers.value, weekly: data.followers.weekly_change, icon: "users" }),
+      kpi({ label: "עוקבים", value: data.followers.value, weekly: data.followers.weekly_change, growth: data.followers.growth_pct, icon: "users" }),
       kpi({ label: "צפיות", value: k.views.value, prev: k.views.prev, icon: "eye" }),
       kpi({ label: "שמירות", value: k.saved.value, prev: k.saved.prev, icon: "save" }),
       kpi({ label: "שיתופים", value: k.shares.value, prev: k.shares.prev, icon: "share" })
@@ -66,7 +66,7 @@
     }).join("");
 
     var s = data.summary;
-    var summary = [stat("" + s.total, "סה״כ פוסטים"), stat("" + s.reels, "Reels"), stat("" + s.photos, "Photos"), stat("" + s.carousels, "Carousels"), stat(s.avg_engagement.toFixed(2) + "%", "ממוצע מעורבות")].join("");
+    var summary = [stat("" + s.total, "סה״כ פוסטים"), stat("" + s.reels, "Reels"), stat(s.virality.toFixed(2) + "%", "ויראליות"), stat(s.save_rate.toFixed(2) + "%", "שיעור שמירה"), stat(s.avg_engagement.toFixed(2) + "%", "ממוצע מעורבות")].join("");
 
     var posts = data.posts;
     var meanV = posts.length ? posts.reduce(function (a, v) { return a + v.views; }, 0) / posts.length : 0;

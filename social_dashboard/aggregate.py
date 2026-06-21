@@ -158,7 +158,9 @@ def _follower_metric(rows, value_key, change_key):
             value = v
             break
     weekly = sum(_int(r.get(change_key)) for r in rows[-7:])
-    return {"value": value, "weekly_change": weekly}
+    base = value - weekly
+    growth_pct = round(weekly / base * 100, 2) if base > 0 else 0.0
+    return {"value": value, "weekly_change": weekly, "growth_pct": growth_pct}
 
 
 def _last_data_date(data):
@@ -216,6 +218,8 @@ def build_overview(data, days):
     foll_ig = _follower_metric(foll, "ig_followers", "ig_followers_change")
     total_val = foll_yt["value"] + foll_fb["value"] + foll_ig["value"]
     total_week = foll_yt["weekly_change"] + foll_fb["weekly_change"] + foll_ig["weekly_change"]
+    total_base = total_val - total_week
+    total_growth = round(total_week / total_base * 100, 2) if total_base > 0 else 0.0
 
     # top content across platforms in period
     top = []
@@ -252,7 +256,7 @@ def build_overview(data, days):
         "last_date": _last_data_date(data),
         "followers": {
             "youtube": foll_yt, "facebook": foll_fb, "instagram": foll_ig,
-            "total": {"value": total_val, "weekly_change": total_week},
+            "total": {"value": total_val, "weekly_change": total_week, "growth_pct": total_growth},
         },
         "kpis": {
             "views": {"value": round(views), "prev": round(prev_views)},
@@ -345,7 +349,9 @@ def build_facebook(data, days):
 
     total_eng = sum(_num(p.get("total_engagement")) for p in cur)
     total_reach = sum(_num(p.get("reach")) for p in cur)
+    total_shares = sum(_num(p.get("shares")) for p in cur)
     avg_eng = (total_eng / total_reach * 100) if total_reach else 0
+    virality = (total_shares / total_reach * 100) if total_reach else 0
 
     posts = []
     for p in cur:
@@ -381,6 +387,7 @@ def build_facebook(data, days):
             "reels": types["Reels"]["count"],
             "videos": types["Videos"]["count"],
             "images": types["Images"]["count"],
+            "virality": round(virality, 2),
             "avg_engagement": round(avg_eng, 2),
         },
         "posts": posts,
@@ -405,7 +412,11 @@ def build_instagram(data, days):
 
     total_inter = sum(_num(p.get("total_interactions")) for p in cur)
     total_reach = sum(_num(p.get("reach")) for p in cur)
+    total_shares = sum(_num(p.get("shares")) for p in cur)
+    total_saved = sum(_num(p.get("saved")) for p in cur)
     avg_eng = (total_inter / total_reach * 100) if total_reach else 0
+    virality = (total_shares / total_reach * 100) if total_reach else 0
+    save_rate = (total_saved / total_reach * 100) if total_reach else 0
 
     posts = []
     for p in cur:
@@ -442,6 +453,8 @@ def build_instagram(data, days):
             "reels": len(reel),
             "photos": len(photo),
             "carousels": len(carousel),
+            "virality": round(virality, 2),
+            "save_rate": round(save_rate, 2),
             "avg_engagement": round(avg_eng, 2),
         },
         "posts": posts,

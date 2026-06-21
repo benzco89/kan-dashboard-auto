@@ -18,7 +18,7 @@
     var up = f.weekly_change >= 0;
     return '<div class="card foll"><div class="foll-top"><span class="foll-ic" style="background:' + f.bg + ';">' + KS.fillIcon(f.icon, f.color) + '</span>' +
       '<div style="min-width:0;flex:1;"><div class="foll-label">' + f.label + '</div><div class="foll-val">' + KS.fmtHtml(f.value) + '</div></div></div>' +
-      '<div class="foll-change ' + (up ? "up" : "down") + '">' + (up ? "▲" : "▼") + " " + KS.signed(f.weekly_change) + '<span class="sub"> השבוע</span></div></div>';
+      '<div class="foll-change ' + (up ? "up" : "down") + '">' + (up ? "▲" : "▼") + " " + KS.signed(f.weekly_change) + (f.growth_pct ? ' · ' + Math.abs(f.growth_pct).toFixed(1) + '%' : '') + '<span class="sub"> השבוע</span></div></div>';
   }
   function kpiCard(k) {
     var d = KS.delta(k.value, k.prev);
@@ -48,10 +48,10 @@
   function render(data, app) {
     var rl = KS.RANGE_LABEL[data.range];
     var foll = [
-      follCard({ label: "YouTube", value: data.followers.youtube.value, weekly_change: data.followers.youtube.weekly_change, icon: "yt", color: "var(--yt)", bg: "var(--yt-bg)" }),
-      follCard({ label: "Facebook", value: data.followers.facebook.value, weekly_change: data.followers.facebook.weekly_change, icon: "fb", color: "var(--fb)", bg: "var(--fb-bg)" }),
-      follCard({ label: "Instagram", value: data.followers.instagram.value, weekly_change: data.followers.instagram.weekly_change, icon: "ig", color: "var(--ig)", bg: "var(--ig-bg)" }),
-      follCard({ label: "סה״כ עוקבים", value: data.followers.total.value, weekly_change: data.followers.total.weekly_change, icon: "users", color: "var(--orange)", bg: "var(--orange-bg)" })
+      follCard({ label: "YouTube", value: data.followers.youtube.value, weekly_change: data.followers.youtube.weekly_change, growth_pct: data.followers.youtube.growth_pct, icon: "yt", color: "var(--yt)", bg: "var(--yt-bg)" }),
+      follCard({ label: "Facebook", value: data.followers.facebook.value, weekly_change: data.followers.facebook.weekly_change, growth_pct: data.followers.facebook.growth_pct, icon: "fb", color: "var(--fb)", bg: "var(--fb-bg)" }),
+      follCard({ label: "Instagram", value: data.followers.instagram.value, weekly_change: data.followers.instagram.weekly_change, growth_pct: data.followers.instagram.growth_pct, icon: "ig", color: "var(--ig)", bg: "var(--ig-bg)" }),
+      follCard({ label: "סה״כ עוקבים", value: data.followers.total.value, weekly_change: data.followers.total.weekly_change, growth_pct: data.followers.total.growth_pct, icon: "users", color: "var(--orange)", bg: "var(--orange-bg)" })
     ].join("");
 
     var kpis = [

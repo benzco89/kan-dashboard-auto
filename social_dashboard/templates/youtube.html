@@ -16,7 +16,7 @@
     var inner;
     if (k.weekly !== undefined) {
       var up = k.weekly >= 0;
-      inner = '<div class="kpi-delta ' + (up ? "up" : "down") + '">' + (up ? "▲" : "▼") + " " + KS.signed(k.weekly) + '<span class="sub">השבוע</span></div>';
+      inner = '<div class="kpi-delta ' + (up ? "up" : "down") + '">' + (up ? "▲" : "▼") + " " + KS.signed(k.weekly) + (k.growth ? ' · ' + Math.abs(k.growth).toFixed(1) + '%' : '') + '<span class="sub">השבוע</span></div>';
     } else {
       var d = KS.delta(k.value, k.prev);
       inner = '<div class="kpi-delta ' + d.cls + '">' + d.arrow + " " + d.txt + '<span class="sub">מהתקופה הקודמת</span></div>';
@@ -31,7 +31,7 @@
     var rl = KS.RANGE_LABEL[data.range];
     var k = data.kpis;
     var kpis = [
-      kpi({ label: "מנויים", value: data.subscribers.value, weekly: data.subscribers.weekly_change, icon: "users" }),
+      kpi({ label: "מנויים", value: data.subscribers.value, weekly: data.subscribers.weekly_change, growth: data.subscribers.growth_pct, icon: "users" }),
       kpi({ label: "צפיות", value: k.views.value, prev: k.views.prev, icon: "eye" }),
       kpi({ label: "לייקים", value: k.likes.value, prev: k.likes.prev, icon: "like" }),
       kpi({ label: "תגובות", value: k.comments.value, prev: k.comments.prev, icon: "comment" })
