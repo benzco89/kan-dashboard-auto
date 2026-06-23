@@ -52,30 +52,38 @@
     var summary = [stat("" + s.total, "סה״כ סרטונים"), stat("" + s.shorts, "Shorts"), stat("" + s.regular, "סרטונים רגילים"), stat(s.avg_like_rate.toFixed(2) + "%", "ממוצע לייקים")].join("");
 
     var vids = data.videos;
+    vids.forEach(function (v) { v.eng = v.views > 0 ? (v.likes + v.comments) / v.views * 100 : 0; });
     var meanV = vids.length ? vids.reduce(function (a, v) { return a + v.views; }, 0) / vids.length : 0;
     var meanE = vids.length ? vids.reduce(function (a, v) { return a + v.likes + v.comments; }, 0) / vids.length : 0;
-    var cols = "1fr 80px 92px 84px 84px 78px";
-    var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span>כותרת</span><span class="center">סוג</span><span class="center">צפיות</span><span class="center">לייקים</span><span class="center">תגובות</span><span class="center">% לייקים</span></div>';
+    var cols = "40px 1fr 80px 92px 84px 84px 78px 86px";
+    var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span class="center">#</span><span>כותרת</span><span class="center">סוג</span><span class="center">צפיות</span><span class="center">לייקים</span><span class="center">תגובות</span><span class="center">% לייקים</span><span class="center">% מעורבות</span></div>';
     var LIMIT = 40;
-    var rowOf = function (v) {
+    var rowOf = function (v, idx) {
+      var rank = idx + 1;
+      var rankStyle = rank <= 3 ? "color:var(--pf);font-weight:700;" : "color:var(--faint);";
       var hlV = v.views > 2 * meanV, hlE = !hlV && (v.likes + v.comments) > 2 * meanE;
       var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : (hlE ? "border-inline-start-color:var(--hi-alt);background:var(--hi-alt-bg);" : "");
       var isShort = v.type === "Short";
       var tagStyle = isShort ? "color:var(--pf);border-color:var(--pf);" : "color:var(--muted);";
       return '<a class="trow" href="' + KS.esc(v.url || "#") + '" target="_blank" rel="noopener" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
+        '<span class="cell" style="' + rankStyle + '">' + rank + '</span>' +
         '<span style="min-width:0;"><span class="t-title">' + KS.esc(v.title) + '</span><span class="t-date">' + KS.fmtDate(v.date) + '</span></span>' +
         '<span class="center"><span class="tag" style="' + tagStyle + '">' + v.type + '</span></span>' +
         '<span class="cell strong">' + KS.fmt(v.views) + '</span>' +
         '<span class="cell">' + KS.fmt(v.likes) + '</span>' +
         '<span class="cell">' + KS.fmt(v.comments) + '</span>' +
-        '<span class="cell">' + v.like_rate.toFixed(1) + '%</span></a>';
+        '<span class="cell">' + v.like_rate.toFixed(1) + '%</span>' +
+        '<span class="cell strong">' + v.eng.toFixed(1) + '%</span></a>';
     };
-    var rows;
-    if (!vids.length) rows = '<div style="padding:24px;text-align:center;color:var(--muted);">אין סרטונים בטווח שנבחר</div>';
-    else {
-      rows = vids.slice(0, LIMIT).map(rowOf).join("");
-      if (vids.length > LIMIT) rows += '<div id="tbl-more" style="display:none">' + vids.slice(LIMIT).map(rowOf).join("") + '</div><button id="tbl-showall" class="showall-btn">הצג את כל ' + vids.length + ' הסרטונים ↓</button>';
+    var sortedDesc = vids.slice().sort(function (a, b) { return b.eng - a.eng; });
+    var sortedAsc = vids.slice().sort(function (a, b) { return a.eng - b.eng; });
+    function buildRows(list) {
+      if (!list.length) return '<div style="padding:24px;text-align:center;color:var(--muted);">אין סרטונים בטווח שנבחר</div>';
+      var html = list.slice(0, LIMIT).map(function (v, i) { return rowOf(v, i); }).join("");
+      if (list.length > LIMIT) html += '<div id="tbl-more" style="display:none">' + list.slice(LIMIT).map(function (v, i) { return rowOf(v, i + LIMIT); }).join("") + '</div><button id="tbl-showall" class="showall-btn">הצג את כל ' + list.length + ' הסרטונים ↓</button>';
+      return html;
     }
+    var rows = buildRows(sortedDesc);
 
     document.getElementById("main").innerHTML =
       '<div class="platform-head"><span class="pf-icon" style="background:var(--pf);">' + KS.fillIcon("yt", "#fff", 24) + '</span>' +
@@ -92,14 +100,28 @@
 
       '<div class="grid-4 mb-m">' + summary + '</div>' +
 
-      '<div class="table"><div class="table-head"><div><div class="panel-title">סרטונים מובילים</div>' +
+      '<div class="table"><div class="table-head"><div><div class="panel-title">סרטונים מדורגים לפי מעורבות</div>' +
       '<div class="panel-sub">' + data.summary.total + ' סרטונים · ' + rl + '</div></div>' +
+      '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">' +
+      '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span>' +
-      '<span><span class="sq" style="background:var(--hi-alt);"></span>מעורבות גבוהה</span></div></div>' +
-      thead + rows + '</div>';
+      '<span><span class="sq" style="background:var(--hi-alt);"></span>מעורבות גבוהה</span></div></div></div>' +
+      thead + '<div id="tbl-body">' + rows + '</div></div>';
     KS.wireCharts();
-    var _sa = document.getElementById("tbl-showall");
-    if (_sa) _sa.addEventListener("click", function () { document.getElementById("tbl-more").style.display = ""; _sa.style.display = "none"; });
+    function wireShowAll() {
+      var sa = document.getElementById("tbl-showall");
+      if (sa) sa.addEventListener("click", function () { document.getElementById("tbl-more").style.display = ""; sa.style.display = "none"; });
+    }
+    wireShowAll();
+    var tblBody = document.getElementById("tbl-body");
+    document.querySelectorAll("#rank-toggle [data-rk]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        document.querySelectorAll("#rank-toggle [data-rk]").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active");
+        tblBody.innerHTML = buildRows(b.getAttribute("data-rk") === "top" ? sortedDesc : sortedAsc);
+        wireShowAll();
+      });
+    });
   }
 
   KanSocial.init("youtube", render);
