@@ -41,7 +41,7 @@
       '<span class="rank">' + (i + 1) + '</span>' +
       '<span class="pic" style="background:' + p.c + ';">' + KS.fillIcon(p.icon, "#fff", 16) + '</span>' +
       '<span class="txt"><span class="title">' + KS.esc(c.title || "(ללא כותרת)") + '</span>' +
-      '<span class="meta">' + KS.fmt(c.views) + " צפיות · " + KS.esc(c.type) + '</span></span>' +
+      '<span class="meta">' + KS.fmt(c.views) + " צפיות · " + KS.esc(c.type) + (c.date ? " · " + KS.fmtDate(c.date) : "") + '</span></span>' +
       '<span class="tag" style="color:' + p.c + ';">' + KS.esc(c.type) + '</span></a>';
   }
 

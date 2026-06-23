@@ -56,7 +56,9 @@
     var meanV = vids.length ? vids.reduce(function (a, v) { return a + v.views; }, 0) / vids.length : 0;
     var meanE = vids.length ? vids.reduce(function (a, v) { return a + v.likes + v.comments; }, 0) / vids.length : 0;
     var cols = "40px 1fr 80px 92px 84px 84px 78px 86px";
-    var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span class="center">#</span><span>כותרת</span><span class="center">סוג</span><span class="center">צפיות</span><span class="center">לייקים</span><span class="center">תגובות</span><span class="center">% לייקים</span><span class="center">% מעורבות</span></div>';
+    var thd = function (key, label) { return '<span class="center th-sort" data-sk="' + key + '" style="cursor:pointer;user-select:none;">' + label + '<span class="sk-ar"></span></span>'; };
+    var thead = '<div class="thead" id="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span class="center">#</span><span>כותרת</span>' +
+      thd("type", "סוג") + thd("views", "צפיות") + thd("likes", "לייקים") + thd("comments", "תגובות") + thd("like_rate", "% לייקים") + thd("eng", "% מעורבות") + '</div>';
     var LIMIT = 40;
     var rowOf = function (v, idx) {
       var rank = idx + 1;
@@ -75,15 +77,20 @@
         '<span class="cell">' + v.like_rate.toFixed(1) + '%</span>' +
         '<span class="cell strong">' + v.eng.toFixed(1) + '%</span></a>';
     };
-    var sortedDesc = vids.slice().sort(function (a, b) { return b.eng - a.eng; });
-    var sortedAsc = vids.slice().sort(function (a, b) { return a.eng - b.eng; });
+    var ENG_KEY = "eng";
+    var sortState = { key: ENG_KEY, dir: "desc" };
+    function cmpFn(a, b) {
+      var k = sortState.key, dir = sortState.dir === "asc" ? 1 : -1;
+      if (k === "type") return dir * String(a.type || "").localeCompare(String(b.type || ""));
+      return dir * ((Number(a[k]) || 0) - (Number(b[k]) || 0));
+    }
     function buildRows(list) {
       if (!list.length) return '<div style="padding:24px;text-align:center;color:var(--muted);">אין סרטונים בטווח שנבחר</div>';
       var html = list.slice(0, LIMIT).map(function (v, i) { return rowOf(v, i); }).join("");
       if (list.length > LIMIT) html += '<div id="tbl-more" style="display:none">' + list.slice(LIMIT).map(function (v, i) { return rowOf(v, i + LIMIT); }).join("") + '</div><button id="tbl-showall" class="showall-btn">הצג את כל ' + list.length + ' הסרטונים ↓</button>';
       return html;
     }
-    var rows = buildRows(sortedDesc);
+    var rows = buildRows(vids.slice().sort(cmpFn));
 
     document.getElementById("main").innerHTML =
       '<div class="platform-head"><span class="pf-icon" style="background:var(--pf);">' + KS.fillIcon("yt", "#fff", 24) + '</span>' +
@@ -114,14 +121,30 @@
     }
     wireShowAll();
     var tblBody = document.getElementById("tbl-body");
-    document.querySelectorAll("#rank-toggle [data-rk]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        document.querySelectorAll("#rank-toggle [data-rk]").forEach(function (x) { x.classList.remove("active"); });
-        b.classList.add("active");
-        tblBody.innerHTML = buildRows(b.getAttribute("data-rk") === "top" ? sortedDesc : sortedAsc);
-        wireShowAll();
+    function renderBody() { tblBody.innerHTML = buildRows(vids.slice().sort(cmpFn)); wireShowAll(); }
+    function refreshHeader() {
+      document.querySelectorAll("#thead [data-sk]").forEach(function (h) {
+        var ar = h.querySelector(".sk-ar");
+        if (ar) ar.textContent = h.getAttribute("data-sk") === sortState.key ? (sortState.dir === "desc" ? " ▼" : " ▲") : "";
+      });
+      var t = document.querySelector('#rank-toggle [data-rk="top"]'), b = document.querySelector('#rank-toggle [data-rk="bottom"]');
+      if (t && b) { t.classList.remove("active"); b.classList.remove("active"); if (sortState.key === ENG_KEY) (sortState.dir === "desc" ? t : b).classList.add("active"); }
+    }
+    document.querySelectorAll("#thead [data-sk]").forEach(function (h) {
+      h.addEventListener("click", function () {
+        var k = h.getAttribute("data-sk");
+        if (sortState.key === k) sortState.dir = sortState.dir === "desc" ? "asc" : "desc";
+        else { sortState.key = k; sortState.dir = "desc"; }
+        renderBody(); refreshHeader();
       });
     });
+    document.querySelectorAll("#rank-toggle [data-rk]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        sortState.key = ENG_KEY; sortState.dir = b.getAttribute("data-rk") === "top" ? "desc" : "asc";
+        renderBody(); refreshHeader();
+      });
+    });
+    refreshHeader();
   }
 
   KanSocial.init("youtube", render);

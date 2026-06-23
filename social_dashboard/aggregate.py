@@ -226,13 +226,16 @@ def build_overview(data, days):
     for it in yt_p:
         top.append({"platform": "youtube", "title": it.get("title", ""), "views": _int(it.get("views")),
                     "type": "Short" if _yt_type(it.get("video_type")) == "Shorts" else "Video",
-                    "url": it.get("video_url", "")})
+                    "url": it.get("video_url", ""),
+                    "date": (_parse_date(it.get("published_at")) or "").__str__() if it.get("published_at") else ""})
     for it in fb_p:
         top.append({"platform": "facebook", "title": it.get("title", ""), "views": _int(it.get("views")),
-                    "type": _fb_type(it.get("type")), "url": it.get("permalink", "")})
+                    "type": _fb_type(it.get("type")), "url": it.get("permalink", ""),
+                    "date": (_parse_date(it.get("date")) or "").__str__() if it.get("date") else ""})
     for it in ig_p:
         top.append({"platform": "instagram", "title": it.get("caption", ""), "views": _int(it.get("views")),
-                    "type": _ig_type(it.get("type")), "url": it.get("permalink", "")})
+                    "type": _ig_type(it.get("type")), "url": it.get("permalink", ""),
+                    "date": (_parse_date(it.get("date")) or "").__str__() if it.get("date") else ""})
     top.sort(key=lambda x: x["views"], reverse=True)
     top_content = top[:8]
     # "what didn't land": the lowest-viewed *measured* items in the period

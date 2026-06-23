@@ -61,7 +61,9 @@
     var meanV = posts.length ? posts.reduce(function (a, v) { return a + v.views; }, 0) / posts.length : 0;
     var meanR = posts.length ? posts.reduce(function (a, v) { return a + v.reach; }, 0) / posts.length : 0;
     var cols = "40px 1fr 78px 88px 88px 80px 84px 78px";
-    var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span class="center">#</span><span>כותרת</span><span class="center">סוג</span><span class="center">צפיות</span><span class="center">חשיפה</span><span class="center">לייקים</span><span class="center">שיתופים</span><span class="center">% מעורבות</span></div>';
+    var thd = function (key, label) { return '<span class="center th-sort" data-sk="' + key + '" style="cursor:pointer;user-select:none;">' + label + '<span class="sk-ar"></span></span>'; };
+    var thead = '<div class="thead" id="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span class="center">#</span><span>כותרת</span>' +
+      thd("type", "סוג") + thd("views", "צפיות") + thd("reach", "חשיפה") + thd("likes", "לייקים") + thd("shares", "שיתופים") + thd("engagement", "% מעורבות") + '</div>';
     var LIMIT = 40;
     var rowOf = function (p, idx) {
       var rank = idx + 1;
@@ -78,15 +80,20 @@
         '<span class="cell">' + KS.fmt(p.shares) + '</span>' +
         '<span class="cell strong">' + p.engagement.toFixed(1) + '%</span></a>';
     };
-    var sortedDesc = posts.slice().sort(function (a, b) { return b.engagement - a.engagement; });
-    var sortedAsc = posts.slice().sort(function (a, b) { return a.engagement - b.engagement; });
+    var ENG_KEY = "engagement";
+    var sortState = { key: ENG_KEY, dir: "desc" };
+    function cmpFn(a, b) {
+      var k = sortState.key, dir = sortState.dir === "asc" ? 1 : -1;
+      if (k === "type") return dir * String(a.type || "").localeCompare(String(b.type || ""));
+      return dir * ((Number(a[k]) || 0) - (Number(b[k]) || 0));
+    }
     function buildRows(list) {
       if (!list.length) return '<div style="padding:24px;text-align:center;color:var(--muted);">אין פוסטים בטווח שנבחר</div>';
       var html = list.slice(0, LIMIT).map(function (p, i) { return rowOf(p, i); }).join("");
       if (list.length > LIMIT) html += '<div id="tbl-more" style="display:none">' + list.slice(LIMIT).map(function (p, i) { return rowOf(p, i + LIMIT); }).join("") + '</div><button id="tbl-showall" class="showall-btn">הצג את כל ' + list.length + ' הפוסטים ↓</button>';
       return html;
     }
-    var rows = buildRows(sortedDesc);
+    var rows = buildRows(posts.slice().sort(cmpFn));
 
     document.getElementById("main").innerHTML =
       '<div class="platform-head"><span class="pf-icon" style="background:var(--pf);">' + KS.fillIcon("fb", "#fff", 24) + '</span>' +
@@ -115,14 +122,30 @@
     }
     wireShowAll();
     var tblBody = document.getElementById("tbl-body");
-    document.querySelectorAll("#rank-toggle [data-rk]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        document.querySelectorAll("#rank-toggle [data-rk]").forEach(function (x) { x.classList.remove("active"); });
-        b.classList.add("active");
-        tblBody.innerHTML = buildRows(b.getAttribute("data-rk") === "top" ? sortedDesc : sortedAsc);
-        wireShowAll();
+    function renderBody() { tblBody.innerHTML = buildRows(posts.slice().sort(cmpFn)); wireShowAll(); }
+    function refreshHeader() {
+      document.querySelectorAll("#thead [data-sk]").forEach(function (h) {
+        var ar = h.querySelector(".sk-ar");
+        if (ar) ar.textContent = h.getAttribute("data-sk") === sortState.key ? (sortState.dir === "desc" ? " ▼" : " ▲") : "";
+      });
+      var t = document.querySelector('#rank-toggle [data-rk="top"]'), b = document.querySelector('#rank-toggle [data-rk="bottom"]');
+      if (t && b) { t.classList.remove("active"); b.classList.remove("active"); if (sortState.key === ENG_KEY) (sortState.dir === "desc" ? t : b).classList.add("active"); }
+    }
+    document.querySelectorAll("#thead [data-sk]").forEach(function (h) {
+      h.addEventListener("click", function () {
+        var k = h.getAttribute("data-sk");
+        if (sortState.key === k) sortState.dir = sortState.dir === "desc" ? "asc" : "desc";
+        else { sortState.key = k; sortState.dir = "desc"; }
+        renderBody(); refreshHeader();
       });
     });
+    document.querySelectorAll("#rank-toggle [data-rk]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        sortState.key = ENG_KEY; sortState.dir = b.getAttribute("data-rk") === "top" ? "desc" : "asc";
+        renderBody(); refreshHeader();
+      });
+    });
+    refreshHeader();
   }
 
   KanSocial.init("facebook", render);
