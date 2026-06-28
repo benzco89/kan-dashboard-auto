@@ -1,0 +1,38 @@
+name: Test Twitter Only
+
+on:
+  workflow_dispatch:      # מאפשר הרצה ידנית בכפתור / gh CLI
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      # איסוף ציוצים (בודק שה-GETXAPI_KEY עובד)
+      - name: Run Twitter Collector
+        env:
+          GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          TWITTER_USERNAME: kann_news
+        run: python twitter_collector.py
+
+      # מעקב עוקבים עם כל הטוקנים (כדי שלא נמחק yt/fb/ig) + GETXAPI לעוקבי טוויטר
+      - name: Run Followers Tracker
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}
+        run: python followers_tracker.py
