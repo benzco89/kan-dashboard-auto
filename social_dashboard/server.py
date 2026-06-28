@@ -24,6 +24,23 @@ PUSHSTAT_URL = os.environ.get("PUSHSTAT_URL", "https://pushstat.benzcohq.com/")
 
 app = FastAPI(title="Kan Social Dashboard", docs_url=None, redoc_url=None)
 
+
+@app.middleware("http")
+async def revalidate_assets(request, call_next):
+    """Force browsers to revalidate static assets + HTML pages on every load.
+
+    The dashboard has no build step / asset hashing, so a cached app.js/app.css
+    from a previous deploy would otherwise stick (missing icons, stale nav).
+    'no-cache' keeps the file cached but always revalidates via the ETag
+    (cheap 304 when unchanged, fresh 200 right after a deploy).
+    """
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/static/") or path in ("/", "/youtube", "/facebook", "/instagram", "/twitter"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 if os.path.isdir(STATIC):
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
