@@ -56,14 +56,14 @@
       '<div class="donut-legend"><span class="sq" style="background:var(--amber);"></span><span class="name">Photo</span><span class="val">' + data.donut.photo + " · " + pct(data.donut.photo) + '</span></div>' +
       '<div class="donut-legend"><span class="sq" style="background:var(--purp);"></span><span class="name">Carousel</span><span class="val">' + data.donut.carousel + " · " + pct(data.donut.carousel) + '</span></div>';
 
-    // saves vs shares bars
-    var bs = data.bars, maxB = Math.max.apply(null, bs.saved.concat(bs.shares).concat([1])) * 1.1;
-    var bars = bs.dates.map(function (d, i) {
-      var sv = Math.round(bs.saved[i] / maxB * 100), sh = Math.round(bs.shares[i] / maxB * 100);
-      var lbl = (i % 2 === 0) ? KS.fmtDate(d) : "";
-      return '<span class="col"><span class="pair"><span class="bar" style="height:' + sv + '%;background:var(--pf);"></span>' +
-        '<span class="bar" style="height:' + sh + '%;background:var(--reach);"></span></span><span class="lbl">' + lbl + '</span></span>';
-    }).join("");
+    // saves vs shares — daily lines over the last 14 days (hover for exact values)
+    var barsChart = KS.chart({
+      dates: data.bars.dates, vbW: 700, vbH: 175,
+      series: [
+        { color: "var(--pf)", data: data.bars.saved, name: "שמירות" },
+        { color: "var(--reach)", data: data.bars.shares, name: "שיתופים" }
+      ]
+    });
 
     var s = data.summary;
     var summary = [stat("" + s.total, "סה״כ פוסטים"), stat("" + s.reels, "Reels"), stat(s.virality.toFixed(2) + "%", "ויראליות"), stat(s.save_rate.toFixed(2) + "%", "שיעור שמירה"), stat(s.avg_engagement.toFixed(2) + "%", "ממוצע מעורבות")].join("");
@@ -118,9 +118,9 @@
         '<div style="display:flex;align-items:center;justify-content:center;margin:8px 0 12px;">' + donut + '</div>' + dLegend + '</div>' +
       '</div>' +
 
-      '<div class="panel mb-s"><div class="panel-head"><div><div class="panel-title">שמירות לעומת שיתופים</div><div class="panel-sub">השוואה יומית · 14 ימים אחרונים</div></div>' +
-      '<div class="legend"><span><span class="sq" style="background:var(--pf);"></span>שמירות</span><span><span class="sq" style="background:var(--reach);"></span>שיתופים</span></div></div>' +
-      '<div class="bars">' + bars + '</div></div>' +
+      '<div class="panel mb-s"><div class="panel-head"><div><div class="panel-title">שמירות לעומת שיתופים</div><div class="panel-sub">מדדים יומיים · 14 ימים אחרונים</div></div>' +
+      '<div class="legend"><span><span class="dot" style="background:var(--pf);"></span>שמירות</span><span><span class="dot" style="background:var(--reach);"></span>שיתופים</span></div></div>' +
+      barsChart + '</div>' +
 
       '<div class="grid-5 mb-m">' + summary + '</div>' +
 

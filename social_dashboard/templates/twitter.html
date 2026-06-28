@@ -56,14 +56,14 @@
       '<div class="donut-legend"><span class="sq" style="background:var(--purp);"></span><span class="name">תמונה</span><span class="val">' + data.donut.photo + " · " + pct(data.donut.photo) + '</span></div>' +
       '<div class="donut-legend"><span class="sq" style="background:var(--muted);"></span><span class="name">טקסט</span><span class="val">' + data.donut.text + " · " + pct(data.donut.text) + '</span></div>';
 
-    // likes vs retweets bars
-    var bs = data.bars, maxB = Math.max.apply(null, bs.likes.concat(bs.retweets).concat([1])) * 1.1;
-    var bars = bs.dates.map(function (d, i) {
-      var lv = Math.round(bs.likes[i] / maxB * 100), rv = Math.round(bs.retweets[i] / maxB * 100);
-      var lbl = (i % 2 === 0) ? KS.fmtDate(d) : "";
-      return '<span class="col"><span class="pair"><span class="bar" style="height:' + lv + '%;background:var(--pf);"></span>' +
-        '<span class="bar" style="height:' + rv + '%;background:var(--amber);"></span></span><span class="lbl">' + lbl + '</span></span>';
-    }).join("");
+    // likes vs retweets — daily lines over the last 14 days (hover for exact values)
+    var barsChart = KS.chart({
+      dates: data.bars.dates, vbW: 700, vbH: 175,
+      series: [
+        { color: "var(--pf)", data: data.bars.likes, name: "לייקים" },
+        { color: "var(--amber)", data: data.bars.retweets, name: "ריטוויטים" }
+      ]
+    });
 
     var s = data.summary;
     var summary = [stat("" + s.total, "סה״כ ציוצים"), stat("" + s.videos, "וידאו"), stat("" + s.photos, "תמונה"), stat(s.virality.toFixed(2) + "%", "ויראליות"), stat(s.avg_engagement.toFixed(2) + "%", "ממוצע מעורבות")].join("");
@@ -117,9 +117,9 @@
         '<div style="display:flex;align-items:center;justify-content:center;margin:8px 0 12px;">' + donut + '</div>' + dLegend + '</div>' +
       '</div>' +
 
-      '<div class="panel mb-s"><div class="panel-head"><div><div class="panel-title">לייקים לעומת ריטוויטים</div><div class="panel-sub">השוואה יומית · 14 ימים אחרונים</div></div>' +
-      '<div class="legend"><span><span class="sq" style="background:var(--pf);"></span>לייקים</span><span><span class="sq" style="background:var(--amber);"></span>ריטוויטים</span></div></div>' +
-      '<div class="bars">' + bars + '</div></div>' +
+      '<div class="panel mb-s"><div class="panel-head"><div><div class="panel-title">לייקים לעומת ריטוויטים</div><div class="panel-sub">מדדים יומיים · 14 ימים אחרונים</div></div>' +
+      '<div class="legend"><span><span class="dot" style="background:var(--pf);"></span>לייקים</span><span><span class="dot" style="background:var(--amber);"></span>ריטוויטים</span></div></div>' +
+      barsChart + '</div>' +
 
       '<div class="grid-5 mb-m">' + summary + '</div>' +
 
