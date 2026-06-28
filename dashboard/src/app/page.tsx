@@ -28,16 +28,24 @@ const InstagramIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
   </svg>
 );
 
+const TwitterIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={`fill-current ${className}`} viewBox="0 0 24 24">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+  </svg>
+);
+
 const platformIcons: Record<string, React.FC<{ className?: string }>> = {
   youtube: YouTubeIcon,
   facebook: FacebookIcon,
   instagram: InstagramIcon,
+  twitter: TwitterIcon,
 };
 
 const platformColors: Record<string, string> = {
   youtube: "bg-red-500",
   facebook: "bg-blue-600",
   instagram: "bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600",
+  twitter: "bg-black",
 };
 
 interface DashboardData {
@@ -50,6 +58,7 @@ interface DashboardData {
       youtube: number;
       facebook: number;
       instagram: number;
+      twitter: number;
       total: number;
     };
     followers: {
@@ -59,12 +68,15 @@ interface DashboardData {
       facebookChange: number;
       instagram: number;
       instagramChange: number;
+      twitter: number;
+      twitterChange: number;
       total: number;
     } | null;
     platformViews: {
       youtube: number;
       facebook: number;
       instagram: number;
+      twitter: number;
     };
   };
   prevStats: {
@@ -78,7 +90,7 @@ interface DashboardData {
   topContent: Array<{
     id: string;
     title: string;
-    platform: "youtube" | "facebook" | "instagram";
+    platform: "youtube" | "facebook" | "instagram" | "twitter";
     views: number;
     engagement: number;
     date: string;
@@ -90,6 +102,7 @@ interface DashboardData {
     youtube: number;
     facebook: number;
     instagram: number;
+    twitter: number;
     total: number;
   }>;
   lastDataDate: string | null;
@@ -239,6 +252,13 @@ function OverviewContent() {
     }));
   }, [data?.performanceData]);
 
+  const twitterSparkline = useMemo(() => {
+    return (data?.performanceData || []).map((d) => ({
+      date: d.date,
+      value: d.twitter,
+    }));
+  }, [data?.performanceData]);
+
   // Format the last data date - subtract 1 day since data is pulled at 08:30
   // and represents data collected up to the previous day
   const formatLastDataDate = (dateStr: string | null) => {
@@ -308,7 +328,7 @@ function OverviewContent() {
             {/* Row 1: Followers by Platform */}
             <div className="space-y-2">
               <h2 className="text-sm font-bold text-kan">עוקבים</h2>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                 <FollowerCard
                   label="YouTube"
                   value={data.stats.followers?.youtube || 0}
@@ -332,6 +352,14 @@ function OverviewContent() {
                   icon={InstagramIcon}
                   iconBgColor="bg-pink-500/10"
                   iconTextColor="text-pink-500"
+                />
+                <FollowerCard
+                  label="X"
+                  value={data.stats.followers?.twitter || 0}
+                  change={data.stats.followers?.twitterChange}
+                  icon={TwitterIcon}
+                  iconBgColor="bg-black/10 dark:bg-white/10"
+                  iconTextColor="text-foreground"
                 />
                 <FollowerCard
                   label="סה״כ עוקבים"
@@ -384,7 +412,7 @@ function OverviewContent() {
             {/* Platform Cards */}
             <div>
               <h2 className="text-sm font-bold text-kan mb-3">פירוט לפי פלטפורמה</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <PlatformCard
                   platform="youtube"
                   followers={data.stats.followers?.youtube || 0}
@@ -402,6 +430,12 @@ function OverviewContent() {
                   followers={data.stats.followers?.instagram || 0}
                   views={data.stats.platformViews.instagram}
                   sparklineData={instagramSparkline}
+                />
+                <PlatformCard
+                  platform="twitter"
+                  followers={data.stats.followers?.twitter || 0}
+                  views={data.stats.platformViews.twitter}
+                  sparklineData={twitterSparkline}
                 />
               </div>
             </div>
