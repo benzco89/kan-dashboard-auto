@@ -9,7 +9,6 @@ export const SHEETS = {
   YOUTUBE: 'נתוני יוטיוב',
   FACEBOOK: 'נתוני פייסבוק',
   INSTAGRAM: 'נתוני אינסטגרם',
-  TWITTER: 'נתוני טוויטר',
   FOLLOWERS: 'מעקב עוקבים',
   INSIGHTS: 'תובנות יומיות',
 } as const;
@@ -73,22 +72,6 @@ export interface InstagramPost {
   engagement_rate: number;
 }
 
-export interface TwitterPost {
-  tweet_id: string;
-  date: string;
-  text: string;
-  type: 'Video' | 'Photo' | 'Text';
-  views: number;
-  views_delta: number;
-  likes: number;
-  retweets: number;
-  replies: number;
-  quotes: number;
-  bookmarks: number;
-  engagement_rate: number;
-  permalink: string;
-}
-
 export interface FollowersData {
   date: string;
   yt_subscribers: number;
@@ -97,8 +80,6 @@ export interface FollowersData {
   fb_followers_change: number;
   ig_followers: number;
   ig_followers_change: number;
-  tw_followers: number;
-  tw_followers_change: number;
 }
 
 export interface DailyInsight {
@@ -252,53 +233,6 @@ function parseInstagramData(rows: string[][]): InstagramPost[] {
   }));
 }
 
-// Parse Twitter data
-function parseTwitterData(rows: string[][]): TwitterPost[] {
-  if (rows.length < 2) return [];
-
-  const headers = rows[0];
-  const colIdx = {
-    tweet_id: findColumnIndex(headers, 'tweet_id'),
-    date: findColumnIndex(headers, 'date'),
-    text: findColumnIndex(headers, 'text'),
-    type: findColumnIndex(headers, 'type'),
-    views: findColumnIndex(headers, 'views'),
-    views_delta: findColumnIndex(headers, 'views_delta'),
-    likes: findColumnIndex(headers, 'likes'),
-    retweets: findColumnIndex(headers, 'retweets'),
-    replies: findColumnIndex(headers, 'replies'),
-    quotes: findColumnIndex(headers, 'quotes'),
-    bookmarks: findColumnIndex(headers, 'bookmarks'),
-    engagement_rate: findColumnIndex(headers, 'engagement_rate'),
-    permalink: findColumnIndex(headers, 'permalink'),
-  };
-
-  const num = (row: string[], idx: number) => (idx >= 0 ? parseInt(row[idx] || '0', 10) : 0);
-
-  return rows.slice(1).map(row => {
-    const rawType = colIdx.type >= 0 ? row[colIdx.type]?.trim().toLowerCase() : '';
-    let type: 'Video' | 'Photo' | 'Text' = 'Text';
-    if (rawType === 'video') type = 'Video';
-    else if (rawType === 'photo') type = 'Photo';
-
-    return {
-      tweet_id: colIdx.tweet_id >= 0 ? row[colIdx.tweet_id] || '' : '',
-      date: colIdx.date >= 0 ? row[colIdx.date] || '' : '',
-      text: colIdx.text >= 0 ? row[colIdx.text] || '' : '',
-      type,
-      views: num(row, colIdx.views),
-      views_delta: num(row, colIdx.views_delta),
-      likes: num(row, colIdx.likes),
-      retweets: num(row, colIdx.retweets),
-      replies: num(row, colIdx.replies),
-      quotes: num(row, colIdx.quotes),
-      bookmarks: num(row, colIdx.bookmarks),
-      engagement_rate: colIdx.engagement_rate >= 0 ? parseFloat(row[colIdx.engagement_rate] || '0') : 0,
-      permalink: colIdx.permalink >= 0 ? row[colIdx.permalink] || '' : '',
-    };
-  });
-}
-
 // Parse Followers data
 function parseFollowersData(rows: string[][]): FollowersData[] {
   if (rows.length < 2) return [];
@@ -312,8 +246,6 @@ function parseFollowersData(rows: string[][]): FollowersData[] {
     fb_followers_change: parseInt(row[headers.indexOf('fb_followers_change')] || '0', 10),
     ig_followers: parseInt(row[headers.indexOf('ig_followers')] || '0', 10),
     ig_followers_change: parseInt(row[headers.indexOf('ig_followers_change')] || '0', 10),
-    tw_followers: parseInt(row[headers.indexOf('tw_followers')] || '0', 10),
-    tw_followers_change: parseInt(row[headers.indexOf('tw_followers_change')] || '0', 10),
   }));
 }
 
@@ -345,17 +277,6 @@ export async function getInstagramData(): Promise<InstagramPost[]> {
   return parseInstagramData(rows);
 }
 
-export async function getTwitterData(): Promise<TwitterPost[]> {
-  try {
-    const rows = await fetchSheetData(SHEETS.TWITTER);
-    return parseTwitterData(rows);
-  } catch (e) {
-    // Sheet may not exist yet until the first Twitter collection runs
-    console.warn('Twitter sheet not available yet:', e);
-    return [];
-  }
-}
-
 export async function getFollowersData(): Promise<FollowersData[]> {
   const rows = await fetchSheetData(SHEETS.FOLLOWERS);
   return parseFollowersData(rows);
@@ -368,11 +289,10 @@ export async function getInsightsData(): Promise<DailyInsight[]> {
 
 // Get all data at once
 export async function getAllDashboardData() {
-  const [youtube, facebook, instagram, twitter, followers, insights] = await Promise.all([
+  const [youtube, facebook, instagram, followers, insights] = await Promise.all([
     getYouTubeData(),
     getFacebookData(),
     getInstagramData(),
-    getTwitterData(),
     getFollowersData(),
     getInsightsData(),
   ]);
@@ -381,7 +301,6 @@ export async function getAllDashboardData() {
     youtube,
     facebook,
     instagram,
-    twitter,
     followers,
     insights,
   };

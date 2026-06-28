@@ -19,7 +19,6 @@ interface PerformanceData {
   youtube: number;
   facebook: number;
   instagram: number;
-  twitter: number;
   total?: number;
 }
 
@@ -33,7 +32,6 @@ const PLATFORMS = [
   { key: "youtube", name: "YouTube", color: "#FF0000" },
   { key: "facebook", name: "Facebook", color: "#1877F2" },
   { key: "instagram", name: "Instagram", color: "#E4405F" },
-  { key: "twitter", name: "X", color: "#1D9BF0" },
 ] as const;
 
 export function PerformanceChart({
@@ -42,7 +40,7 @@ export function PerformanceChart({
   description = "צפיות יומיות לפי פלטפורמה",
 }: PerformanceChartProps) {
   const [visiblePlatforms, setVisiblePlatforms] = useState<Set<string>>(
-    new Set(["youtube", "facebook", "instagram", "twitter"])
+    new Set(["youtube", "facebook", "instagram"])
   );
   const [showTotal, setShowTotal] = useState(false);
 
@@ -65,7 +63,7 @@ export function PerformanceChart({
       day: "2-digit",
       month: "2-digit",
     }),
-    total: d.youtube + d.facebook + d.instagram + d.twitter,
+    total: d.youtube + d.facebook + d.instagram,
   }));
 
   // Calculate totals for summary
@@ -74,11 +72,10 @@ export function PerformanceChart({
       youtube: acc.youtube + d.youtube,
       facebook: acc.facebook + d.facebook,
       instagram: acc.instagram + d.instagram,
-      twitter: acc.twitter + d.twitter,
     }),
-    { youtube: 0, facebook: 0, instagram: 0, twitter: 0 }
+    { youtube: 0, facebook: 0, instagram: 0 }
   );
-  const grandTotal = totals.youtube + totals.facebook + totals.instagram + totals.twitter;
+  const grandTotal = totals.youtube + totals.facebook + totals.instagram;
 
   return (
     <Card>
@@ -127,7 +124,7 @@ export function PerformanceChart({
       </CardHeader>
       <CardContent>
         {/* Summary Stats */}
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-4">
+        <div className="grid grid-cols-4 gap-2 mb-4">
           {PLATFORMS.map((platform) => (
             <div
               key={platform.key}
