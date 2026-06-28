@@ -54,6 +54,10 @@ HEADERS = [
     'ig_followers_change',
     'ig_daily_reach',
     'ig_daily_impressions',
+    # Twitter / X
+    'tw_followers',
+    'tw_followers_change',
+    'tw_tweet_count',
     # TikTok (לעתיד)
     'tt_followers',
     'tt_followers_change',
@@ -323,6 +327,48 @@ def get_instagram_daily_insights():
         print(f"❌ Instagram Daily Insights Error: {e}")
         return None
 
+# --- Twitter / X Functions ---
+
+def get_twitter_stats():
+    """משיכת מספר עוקבים וציוצים מטוויטר דרך GetXAPI. מוגן: בלי מפתח -> None."""
+    api_key = os.environ.get('GETXAPI_KEY')
+    if not api_key:
+        print("⚠️ Missing GETXAPI_KEY - skipping Twitter")
+        return None
+
+    username = os.environ.get('TWITTER_USERNAME', 'kann_news')
+    try:
+        res = requests.get(
+            "https://api.getxapi.com/twitter/user/info",
+            headers={"Authorization": f"Bearer {api_key}"},
+            params={"userName": username},
+            timeout=30,
+        ).json()
+
+        data = res.get('data', res) if isinstance(res, dict) else {}
+
+        # שמות שדה אפשריים (תלוי בגרסת GetXAPI)
+        followers = (
+            data.get('followers')
+            or data.get('followers_count')
+            or data.get('followersCount')
+            or 0
+        )
+        tweet_count = (
+            data.get('statusesCount')
+            or data.get('tweet_count')
+            or data.get('statuses_count')
+            or 0
+        )
+
+        return {
+            'followers': int(followers or 0),
+            'tweet_count': int(tweet_count or 0),
+        }
+    except Exception as e:
+        print(f"❌ Twitter (GetXAPI) Error: {e}")
+        return None
+
 # --- Google Sheets Functions ---
 
 def get_sheet_client():
@@ -336,7 +382,7 @@ def get_sheet_client():
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds)
 
-def save_followers_data(youtube_stats, facebook_stats, instagram_stats):
+def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_stats=None):
     """שמירת נתוני העוקבים לגיליון בפורמט Wide"""
     gc = get_sheet_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
@@ -377,7 +423,8 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats):
     yt_views_change = 0
     fb_followers_change = 0
     ig_followers_change = 0
-    
+    tw_followers_change = 0
+
     if prev_row and len(prev_row) >= 10:
         try:
             if youtube_stats and prev_row[2]:
@@ -392,6 +439,9 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats):
             if instagram_stats and len(prev_row) > 15 and prev_row[15]:
                 prev_ig_followers = int(prev_row[15] or 0)
                 ig_followers_change = instagram_stats['followers'] - prev_ig_followers
+            if twitter_stats and len(prev_row) > 19 and prev_row[19]:
+                prev_tw_followers = int(prev_row[19] or 0)
+                tw_followers_change = twitter_stats['followers'] - prev_tw_followers
         except (ValueError, IndexError):
             pass
     
@@ -423,6 +473,10 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats):
         ig_followers_change if instagram_stats else '',
         ig_daily.get('daily_reach', ''),
         ig_daily.get('daily_impressions', ''),
+        # Twitter / X
+        twitter_stats['followers'] if twitter_stats else '',
+        tw_followers_change if twitter_stats else '',
+        twitter_stats['tweet_count'] if twitter_stats else '',
         # TikTok (לעתיד)
         '', '', '',
     ]
@@ -455,7 +509,9 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats):
         print(f"📸 Instagram: {instagram_stats['followers']:,} followers ({ig_followers_change:+,})")
         if ig_daily:
             print(f"   Daily: {ig_daily.get('daily_reach', 0):,} reach, {ig_daily.get('daily_impressions', 0):,} impressions")
-    
+    if twitter_stats:
+        print(f"🐦 Twitter: {twitter_stats['followers']:,} followers ({tw_followers_change:+,})")
+
     return True
 
 # --- Main ---
@@ -469,14 +525,15 @@ def main():
     youtube_stats = get_youtube_stats()
     facebook_stats = get_facebook_stats()
     instagram_stats = get_instagram_stats()
-    
+    twitter_stats = get_twitter_stats()
+
     # בדיקה שיש לפחות פלטפורמה אחת עם נתונים
-    if not youtube_stats and not facebook_stats and not instagram_stats:
+    if not youtube_stats and not facebook_stats and not instagram_stats and not twitter_stats:
         print("❌ No data collected from any platform!")
         return
-    
+
     # שמירה לשיטס
-    save_followers_data(youtube_stats, facebook_stats, instagram_stats)
+    save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_stats)
     
     print(f"\n{'='*50}")
     print("✅ Followers tracking complete!")

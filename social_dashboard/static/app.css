@@ -11,8 +11,8 @@
   --bg:#0a0b0e; --head-bg:#0d0f13; --panel:#14161b; --console:#0f1116; --chip:#1c1f25;
   --line:#262931; --line2:#3a3e46; --text:#f4f4f5; --body:#c9ccd2; --muted:#8b8f98; --faint:#6f737c;
   --link:#ff8a6e; --ok:#5dc78a; --bad:#ef6b5a;
-  --yt:#ff4d4d; --fb:#4d94ff; --ig:#f25c7a; --ig-line:#c061e0;
-  --yt-bg:rgba(255,77,77,.14); --fb-bg:rgba(77,148,255,.14); --ig-bg:rgba(242,92,122,.14);
+  --yt:#ff4d4d; --fb:#4d94ff; --ig:#f25c7a; --ig-line:#c061e0; --tw:#1d9bf0;
+  --yt-bg:rgba(255,77,77,.14); --fb-bg:rgba(77,148,255,.14); --ig-bg:rgba(242,92,122,.14); --tw-bg:rgba(29,155,240,.14);
   --purp:#a78bfa; --blue:#4d94ff; --teal:#3fc9b0; --green:#4fd17a; --amber:#f0a93c;
   --purp-bg:rgba(167,139,250,.14); --blue-bg:rgba(77,148,255,.14); --orange-bg:rgba(255,51,0,.14); --teal-bg:rgba(63,201,176,.14);
   --tag-border:transparent; --tag-bg:rgba(255,255,255,.04);
@@ -22,8 +22,8 @@
   --bg:#f4f4f4; --head-bg:#ffffff; --panel:#ffffff; --console:#fafafa; --chip:#ececef;
   --line:#e3e3e6; --line2:#cdced1; --text:#0c0d10; --body:#3a3d44; --muted:#6b6e76; --faint:#909299;
   --link:#cc2900; --ok:#1f7a45; --bad:#c0392b;
-  --yt:#e60000; --fb:#1877f2; --ig:#e4405f; --ig-line:#a32fbf;
-  --yt-bg:#ffecec; --fb-bg:#e8f1ff; --ig-bg:#ffeef2;
+  --yt:#e60000; --fb:#1877f2; --ig:#e4405f; --ig-line:#a32fbf; --tw:#1d9bf0;
+  --yt-bg:#ffecec; --fb-bg:#e8f1ff; --ig-bg:#ffeef2; --tw-bg:#e8f4fd;
   --purp:#7c4dff; --blue:#2d7ff0; --teal:#159e8a; --green:#36a45f; --amber:#e08a00;
   --purp-bg:#f1ecfe; --blue-bg:#e8f1ff; --orange-bg:#fff0ec; --teal-bg:#e3f7f2;
   --tag-border:#e3e3e6; --tag-bg:#f4f4f4;
@@ -34,6 +34,7 @@
 body[data-page="youtube"]{ --pf:var(--yt); --pf-bg:var(--yt-bg); }
 body[data-page="facebook"]{ --pf:var(--fb); --pf-bg:var(--fb-bg); --reach:var(--green); }
 body[data-page="instagram"]{ --pf:var(--ig); --pf-bg:var(--ig-bg); --reach:var(--purp); }
+body[data-page="twitter"]{ --pf:var(--tw); --pf-bg:var(--tw-bg); }
 
 *{ box-sizing:border-box; }
 html,body{ margin:0; }

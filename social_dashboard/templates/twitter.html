@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>כאן חדשות · סושיאל — X</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header id="header"></header>
+<main id="main" class="main"></main>
+<script src="/static/app.js"></script>
+<script>
+(function () {
+  var TYPE_COLOR = { Video: "var(--pf)", Photo: "var(--purp)", Text: "var(--muted)" };
+  var TYPE_HE = { Video: "וידאו", Photo: "תמונה", Text: "טקסט" };
+
+  function kpi(k) {
+    var inner;
+    if (k.weekly !== undefined) {
+      var up = k.weekly >= 0;
+      inner = '<div class="kpi-delta ' + (up ? "up" : "down") + '">' + (up ? "▲" : "▼") + " " + KS.signed(k.weekly) + (k.growth ? ' · ' + Math.abs(k.growth).toFixed(1) + '%' : '') + '<span class="sub">השבוע</span></div>';
+    } else {
+      var d = KS.delta(k.value, k.prev);
+      inner = '<div class="kpi-delta ' + d.cls + '">' + d.arrow + " " + d.txt + '<span class="sub">מהתקופה הקודמת</span></div>';
+    }
+    return '<div class="kpi pf sm"><div class="kpi-top"><div class="kpi-label">' + k.label + '</div>' +
+      '<span class="kpi-ic" style="background:var(--pf-bg);color:var(--pf);">' + KS.strokeIcon(k.icon) + '</span></div>' +
+      '<div class="kpi-val">' + KS.fmtHtml(k.value) + '</div>' + inner + '</div>';
+  }
+  function stat(v, l) { return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+
+  function render(data, app) {
+    var rl = KS.RANGE_LABEL[data.range];
+    var k = data.kpis;
+    var kpis = [
+      kpi({ label: "עוקבים", value: data.followers.value, weekly: data.followers.weekly_change, growth: data.followers.growth_pct, icon: "users" }),
+      kpi({ label: "צפיות", value: k.views.value, prev: k.views.prev, icon: "eye" }),
+      kpi({ label: "לייקים", value: k.likes.value, prev: k.likes.prev, icon: "heart" }),
+      kpi({ label: "ריטוויטים", value: k.retweets.value, prev: k.retweets.prev, icon: "share" })
+    ].join("");
+
+    var chart = KS.chart({
+      dates: data.chart.dates, vbW: 700, vbH: 230,
+      series: [{ color: "var(--pf)", data: data.chart.views, name: "צפיות", area: true }]
+    });
+    var legend = '<div class="legend"><span><span class="dot" style="background:var(--pf);"></span>צפיות</span></div>';
+
+    var total = data.donut.video + data.donut.photo + data.donut.text;
+    function pct(v) { return total ? Math.round(v / total * 100) + "%" : "0%"; }
+    var donut = KS.donutSvg(
+      [{ color: "var(--pf)", value: data.donut.video }, { color: "var(--purp)", value: data.donut.photo }, { color: "var(--muted)", value: data.donut.text }],
+      total, "ציוצים");
+    var dLegend =
+      '<div class="donut-legend"><span class="sq" style="background:var(--pf);"></span><span class="name">וידאו</span><span class="val">' + data.donut.video + " · " + pct(data.donut.video) + '</span></div>' +
+      '<div class="donut-legend"><span class="sq" style="background:var(--purp);"></span><span class="name">תמונה</span><span class="val">' + data.donut.photo + " · " + pct(data.donut.photo) + '</span></div>' +
+      '<div class="donut-legend"><span class="sq" style="background:var(--muted);"></span><span class="name">טקסט</span><span class="val">' + data.donut.text + " · " + pct(data.donut.text) + '</span></div>';
+
+    // likes vs retweets bars
+    var bs = data.bars, maxB = Math.max.apply(null, bs.likes.concat(bs.retweets).concat([1])) * 1.1;
+    var bars = bs.dates.map(function (d, i) {
+      var lv = Math.round(bs.likes[i] / maxB * 100), rv = Math.round(bs.retweets[i] / maxB * 100);
+      var lbl = (i % 2 === 0) ? KS.fmtDate(d) : "";
+      return '<span class="col"><span class="pair"><span class="bar" style="height:' + lv + '%;background:var(--pf);"></span>' +
+        '<span class="bar" style="height:' + rv + '%;background:var(--amber);"></span></span><span class="lbl">' + lbl + '</span></span>';
+    }).join("");
+
+    var s = data.summary;
+    var summary = [stat("" + s.total, "סה״כ ציוצים"), stat("" + s.videos, "וידאו"), stat("" + s.photos, "תמונה"), stat(s.virality.toFixed(2) + "%", "ויראליות"), stat(s.avg_engagement.toFixed(2) + "%", "ממוצע מעורבות")].join("");
+
+    var posts = data.posts;
+    var meanV = posts.length ? posts.reduce(function (a, v) { return a + v.views; }, 0) / posts.length : 0;
+    var cols = "40px 1fr 80px 88px 80px 92px 80px 78px";
+    var thd = function (key, label) { return '<span class="center th-sort" data-sk="' + key + '" style="cursor:pointer;user-select:none;">' + label + '<span class="sk-ar"></span></span>'; };
+    var thead = '<div class="thead" id="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span class="center">#</span><span>תוכן</span>' +
+      thd("type", "סוג") + thd("views", "צפיות") + thd("likes", "לייקים") + thd("retweets", "ריטוויטים") + thd("replies", "תגובות") + thd("engagement", "% מעורבות") + '</div>';
+    var LIMIT = 40;
+    var rowOf = function (p, idx) {
+      var rank = idx + 1;
+      var rankStyle = rank <= 3 ? "color:var(--pf);font-weight:700;" : "color:var(--faint);";
+      var hlV = p.views > 2 * meanV;
+      var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : "";
+      return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
+        '<span class="cell" style="' + rankStyle + '">' + rank + '</span>' +
+        '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + '</span><span class="t-date">' + KS.fmtDate(p.date) + '</span></span>' +
+        '<span class="center"><span class="tag" style="color:' + (TYPE_COLOR[p.type] || "var(--muted)") + ';">' + (TYPE_HE[p.type] || p.type) + '</span></span>' +
+        '<span class="cell strong">' + KS.fmt(p.views) + '</span>' +
+        '<span class="cell">' + KS.fmt(p.likes) + '</span>' +
+        '<span class="cell">' + KS.fmt(p.retweets) + '</span>' +
+        '<span class="cell">' + KS.fmt(p.replies) + '</span>' +
+        '<span class="cell strong">' + p.engagement.toFixed(1) + '%</span></a>';
+    };
+    var ENG_KEY = "engagement";
+    var sortState = { key: "views", dir: "desc" };
+    function cmpFn(a, b) {
+      var key = sortState.key, dir = sortState.dir === "asc" ? 1 : -1;
+      if (key === "type") return dir * String(a.type || "").localeCompare(String(b.type || ""));
+      return dir * ((Number(a[key]) || 0) - (Number(b[key]) || 0));
+    }
+    function buildRows(list) {
+      if (!list.length) return '<div style="padding:24px;text-align:center;color:var(--muted);">אין ציוצים בטווח שנבחר</div>';
+      var html = list.slice(0, LIMIT).map(function (p, i) { return rowOf(p, i); }).join("");
+      if (list.length > LIMIT) html += '<div id="tbl-more" style="display:none">' + list.slice(LIMIT).map(function (p, i) { return rowOf(p, i + LIMIT); }).join("") + '</div><button id="tbl-showall" class="showall-btn">הצג את כל ' + list.length + ' הציוצים ↓</button>';
+      return html;
+    }
+    var rows = buildRows(posts.slice().sort(cmpFn));
+
+    document.getElementById("main").innerHTML =
+      '<div class="platform-head"><span class="pf-icon" style="background:#000;">' + KS.fillIcon("x", "#fff", 22) + '</span>' +
+      '<div><h1>X (Twitter) Analytics</h1><p>ניתוח ביצועי חשבון X של כאן חדשות · ' + rl + '</p></div></div>' +
+
+      '<div class="grid-4 mb-s">' + kpis + '</div>' +
+
+      '<div class="split" style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px;margin-bottom:14px;">' +
+        '<div class="panel chart"><div class="panel-head"><div><div class="panel-title">צפיות לאורך זמן</div><div class="panel-sub">מדדים יומיים</div></div>' + legend + '</div>' + chart + '</div>' +
+        '<div class="panel"><div class="panel-title">סוג תוכן</div><div class="panel-sub">וידאו / תמונה / טקסט</div>' +
+        '<div style="display:flex;align-items:center;justify-content:center;margin:8px 0 12px;">' + donut + '</div>' + dLegend + '</div>' +
+      '</div>' +
+
+      '<div class="panel mb-s"><div class="panel-head"><div><div class="panel-title">לייקים לעומת ריטוויטים</div><div class="panel-sub">השוואה יומית · 14 ימים אחרונים</div></div>' +
+      '<div class="legend"><span><span class="sq" style="background:var(--pf);"></span>לייקים</span><span><span class="sq" style="background:var(--amber);"></span>ריטוויטים</span></div></div>' +
+      '<div class="bars">' + bars + '</div></div>' +
+
+      '<div class="grid-5 mb-m">' + summary + '</div>' +
+
+      '<div class="table"><div class="table-head"><div><div class="panel-title">ציוצים מדורגים</div>' +
+      '<div class="panel-sub">' + data.summary.total + ' ציוצים · ' + rl + '</div></div>' +
+      '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">' +
+      '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
+      '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span></div></div></div>' +
+      thead + '<div id="tbl-body">' + rows + '</div></div>';
+    KS.wireCharts();
+    function wireShowAll() {
+      var sa = document.getElementById("tbl-showall");
+      if (sa) sa.addEventListener("click", function () { document.getElementById("tbl-more").style.display = ""; sa.style.display = "none"; });
+    }
+    wireShowAll();
+    var tblBody = document.getElementById("tbl-body");
+    function renderBody() { tblBody.innerHTML = buildRows(posts.slice().sort(cmpFn)); wireShowAll(); }
+    function refreshHeader() {
+      document.querySelectorAll("#thead [data-sk]").forEach(function (h) {
+        var ar = h.querySelector(".sk-ar");
+        if (ar) ar.textContent = h.getAttribute("data-sk") === sortState.key ? (sortState.dir === "desc" ? " ▼" : " ▲") : "";
+      });
+      var t = document.querySelector('#rank-toggle [data-rk="top"]'), b = document.querySelector('#rank-toggle [data-rk="bottom"]');
+      if (t && b) { t.classList.remove("active"); b.classList.remove("active"); if (sortState.key === "views") (sortState.dir === "desc" ? t : b).classList.add("active"); }
+    }
+    document.querySelectorAll("#thead [data-sk]").forEach(function (h) {
+      h.addEventListener("click", function () {
+        var key = h.getAttribute("data-sk");
+        if (sortState.key === key) sortState.dir = sortState.dir === "desc" ? "asc" : "desc";
+        else { sortState.key = key; sortState.dir = "desc"; }
+        renderBody(); refreshHeader();
+      });
+    });
+    document.querySelectorAll("#rank-toggle [data-rk]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        sortState.key = "views"; sortState.dir = b.getAttribute("data-rk") === "top" ? "desc" : "asc";
+        renderBody(); refreshHeader();
+      });
+    });
+    refreshHeader();
+  }
+
+  KanSocial.init("twitter", render);
+})();
+</script>
+</body>
+</html>

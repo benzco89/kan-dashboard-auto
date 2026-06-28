@@ -33,6 +33,7 @@ _BUILDERS = {
     "youtube": aggregate.build_youtube,
     "facebook": aggregate.build_facebook,
     "instagram": aggregate.build_instagram,
+    "twitter": aggregate.build_twitter,
 }
 
 
@@ -61,6 +62,11 @@ def facebook_page():
 @app.get("/instagram")
 def instagram_page():
     return _page("instagram.html")
+
+
+@app.get("/twitter")
+def twitter_page():
+    return _page("twitter.html")
 
 
 @app.get("/api/config")

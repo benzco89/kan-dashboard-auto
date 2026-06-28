@@ -12,7 +12,7 @@
 <script src="/static/app.js"></script>
 <script>
 (function () {
-  var PIC = { youtube: { c: "var(--yt)", icon: "yt" }, facebook: { c: "var(--fb)", icon: "fb" }, instagram: { c: "var(--ig)", icon: "ig" } };
+  var PIC = { youtube: { c: "var(--yt)", icon: "yt" }, facebook: { c: "var(--fb)", icon: "fb" }, instagram: { c: "var(--ig)", icon: "ig" }, twitter: { c: "var(--tw)", icon: "x" } };
 
   function follCard(f) {
     var up = f.weekly_change >= 0;
@@ -51,6 +51,7 @@
       follCard({ label: "YouTube", value: data.followers.youtube.value, weekly_change: data.followers.youtube.weekly_change, growth_pct: data.followers.youtube.growth_pct, icon: "yt", color: "var(--yt)", bg: "var(--yt-bg)" }),
       follCard({ label: "Facebook", value: data.followers.facebook.value, weekly_change: data.followers.facebook.weekly_change, growth_pct: data.followers.facebook.growth_pct, icon: "fb", color: "var(--fb)", bg: "var(--fb-bg)" }),
       follCard({ label: "Instagram", value: data.followers.instagram.value, weekly_change: data.followers.instagram.weekly_change, growth_pct: data.followers.instagram.growth_pct, icon: "ig", color: "var(--ig)", bg: "var(--ig-bg)" }),
+      follCard({ label: "X", value: data.followers.twitter.value, weekly_change: data.followers.twitter.weekly_change, growth_pct: data.followers.twitter.growth_pct, icon: "x", color: "var(--tw)", bg: "var(--tw-bg)" }),
       follCard({ label: "סה״כ עוקבים", value: data.followers.total.value, weekly_change: data.followers.total.weekly_change, growth_pct: data.followers.total.growth_pct, icon: "users", color: "var(--orange)", bg: "var(--orange-bg)" })
     ].join("");
 
@@ -66,18 +67,21 @@
       series: [
         { color: "var(--yt)", data: data.chart.youtube, name: "YouTube" },
         { color: "var(--fb)", data: data.chart.facebook, name: "Facebook" },
-        { color: "var(--ig-line)", data: data.chart.instagram, name: "Instagram" }
+        { color: "var(--ig-line)", data: data.chart.instagram, name: "Instagram" },
+        { color: "var(--tw)", data: data.chart.twitter, name: "X" }
       ]
     });
     var legend = '<div class="legend">' +
       '<span><span class="dot" style="background:var(--yt);"></span>YouTube</span>' +
       '<span><span class="dot" style="background:var(--fb);"></span>Facebook</span>' +
-      '<span><span class="dot" style="background:var(--ig-line);"></span>Instagram</span></div>';
+      '<span><span class="dot" style="background:var(--ig-line);"></span>Instagram</span>' +
+      '<span><span class="dot" style="background:var(--tw);"></span>X</span></div>';
 
     var platforms = [
       pcard({ name: "YouTube", color: "var(--yt)", bg: "var(--yt-bg)", icon: "yt", href: "/youtube", followers: data.platforms.youtube.followers, views: data.platforms.youtube.views, spark: data.platforms.youtube.spark }),
       pcard({ name: "Facebook", color: "var(--fb)", bg: "var(--fb-bg)", icon: "fb", href: "/facebook", followers: data.platforms.facebook.followers, views: data.platforms.facebook.views, spark: data.platforms.facebook.spark }),
-      pcard({ name: "Instagram", color: "var(--ig)", bg: "var(--ig-bg)", icon: "ig", href: "/instagram", followers: data.platforms.instagram.followers, views: data.platforms.instagram.views, spark: data.platforms.instagram.spark })
+      pcard({ name: "Instagram", color: "var(--ig)", bg: "var(--ig-bg)", icon: "ig", href: "/instagram", followers: data.platforms.instagram.followers, views: data.platforms.instagram.views, spark: data.platforms.instagram.spark }),
+      pcard({ name: "X", color: "var(--tw)", bg: "var(--tw-bg)", icon: "x", href: "/twitter", followers: data.platforms.twitter.followers, views: data.platforms.twitter.views, spark: data.platforms.twitter.spark })
     ].join("");
 
     var emptyTc = '<div style="padding:24px;text-align:center;color:var(--muted);">אין תכנים בטווח שנבחר</div>';
@@ -102,7 +106,7 @@
       '<div style="text-align:left;"><div class="asof-label">נתונים עד</div><div class="asof-date">' + KS.fmtFullDate(data.last_date) + '</div></div></div>' +
 
       '<div class="section-label"><span>עוקבים</span><span></span></div>' +
-      '<div class="grid-4 mb">' + foll + '</div>' +
+      '<div class="grid-5 mb">' + foll + '</div>' +
 
       '<div class="section-label"><span>ביצועים בתקופה</span><span></span></div>' +
       '<div class="grid-4 mb">' + kpis + '</div>' +
@@ -111,7 +115,7 @@
       '<div class="panel-sub">צפיות יומיות · ' + rl + '</div></div>' + legend + '</div>' + chart + '</div>' +
 
       '<div class="section-label"><span>פירוט לפי פלטפורמה</span><span></span></div>' +
-      '<div class="grid-3 mb">' + platforms + '</div>' +
+      '<div class="grid-4 mb">' + platforms + '</div>' +
 
       '<div class="split" style="display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;align-items:start;">' +
         '<div class="card" style="padding:6px 8px 8px;"><div class="toplist-head">' +
