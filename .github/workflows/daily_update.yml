@@ -29,6 +29,7 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}  # לעוקבי טוויטר (מוגן: בלי מפתח -> ריק)
         run: python followers_tracker.py
 
       # שלב 2: איסוף יוטיוב (בלי טלגרם)
@@ -52,6 +53,16 @@ jobs:
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: python instagram_collector.py
+
+      # שלב 4.5: איסוף טוויטר/X (GetXAPI) - continue-on-error כדי שכשל פה
+      # (מכסה/קוטה/API) לא יפיל את שאר האיסוף ואת דוח הטלגרם
+      - name: Collect Twitter Data
+        continue-on-error: true
+        env:
+          GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          TWITTER_USERNAME: kann_news
+        run: python twitter_collector.py
 
       # שלב 5: שליחת דוח טלגרם (אחרי שכל הנתונים נאספו)
       - name: Send Telegram Report
