@@ -31,7 +31,7 @@ except ImportError:
     pass
 
 TOKEN = os.environ.get("FACEBOOK_TOKEN")
-PAGE_ID = os.environ.get("FACEBOOK_PAGE_ID", "220634478361516")
+PAGE_ID = os.environ.get("FACEBOOK_PAGE_ID") or "220634478361516"  # or-fallback: the GitHub secret is EMPTY, and workflows set empty env vars
 API_VERSION = os.environ.get("PROBE_API_VERSION", "v25.0")
 BASE = f"https://graph.facebook.com/{API_VERSION}"
 

@@ -20,7 +20,7 @@ except ImportError:
 
 # --- Config ---
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN')
-PAGE_ID = os.environ.get('FACEBOOK_PAGE_ID', "220634478361516")
+PAGE_ID = os.environ.get('FACEBOOK_PAGE_ID') or "220634478361516"  # or-fallback: the GitHub secret is EMPTY, and workflows set empty env vars
 API_VERSION = "v25.0"  # bumped from v24: the legacy reach metric (post_impressions_unique)
                        # was removed for ALL versions on 2026-06-15; v25 exposes the
                        # unified media-view metrics (post_total_media_view_unique / post_media_view).
