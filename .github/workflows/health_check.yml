@@ -19,9 +19,11 @@ jobs:
         with:
           python-version: '3.10'
 
+      # בכוונה לא requirements.txt המלא: כלב-השמירה צריך לשרוד גם כשההתקנה
+      # של הצינור עצמו נשברת. אותן גרסאות נעוצות, תת-קבוצה מינימלית.
       - name: Install dependencies
         run: |
-          pip install gspread google-auth requests pytz
+          pip install gspread==6.2.1 requests==2.34.2 pytz==2026.2
 
       - name: Run Health Check
         env:

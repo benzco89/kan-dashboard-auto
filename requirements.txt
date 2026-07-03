@@ -1,10 +1,13 @@
-google-genai
-pandas
-google-api-python-client
-gspread
-oauth2client
-isodate
-pytz
-numpy
-requests
-python-dotenv
+# Pinned to the exact versions the GitHub Actions runner (Python 3.10)
+# resolved on 2026-07-03, so a surprise release can't silently break the
+# daily pipeline. To upgrade: bump deliberately and watch the next run.
+google-genai==2.10.0
+pandas==2.3.3
+google-api-python-client==2.198.0
+gspread==6.2.1
+oauth2client==4.1.3
+isodate==0.7.2
+pytz==2026.2
+numpy==2.2.6
+requests==2.34.2
+python-dotenv==1.2.2

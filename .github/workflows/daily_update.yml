@@ -9,6 +9,7 @@ jobs:
   collect:
     name: Collect Data
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -23,8 +24,13 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      # כל שלבי האיסוף עם continue-on-error כדי שכשל באחד לא ימנע את השאר;
+      # שלב הסיכום בסוף שולח התראת טלגרם ומכשיל את ה-run אם משהו נפל.
+
       # שלב 1: מעקב עוקבים - רץ ראשון כי הכי מהיר
       - name: Track Followers
+        id: followers
+        continue-on-error: true
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
@@ -34,6 +40,8 @@ jobs:
 
       # שלב 2: איסוף יוטיוב (בלי טלגרם)
       - name: Collect YouTube Data
+        id: youtube
+        continue-on-error: true
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
@@ -41,22 +49,27 @@ jobs:
 
       # שלב 3: איסוף פייסבוק
       - name: Collect Facebook Data
+        id: facebook
+        continue-on-error: true
         env:
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: python facebook_collector.py
 
-      # שלב 4: איסוף אינסטגרם (חדש!)
+      # שלב 4: איסוף אינסטגרם
       - name: Collect Instagram Data
+        id: instagram
+        continue-on-error: true
         env:
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: python instagram_collector.py
 
-      # שלב 4.5: איסוף טוויטר/X (GetXAPI) - continue-on-error כדי שכשל פה
-      # (מכסה/קוטה/API) לא יפיל את שאר האיסוף ואת דוח הטלגרם
+      # שלב 4.5: איסוף טוויטר/X (GetXAPI) - best-effort: כשל פה (מכסה/קוטה)
+      # מדווח בהתראה אבל לא מכשיל את ה-run
       - name: Collect Twitter Data
+        id: twitter
         continue-on-error: true
         env:
           GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}
@@ -64,11 +77,44 @@ jobs:
           TWITTER_USERNAME: kann_news
         run: python twitter_collector.py
 
-      # שלב 5: שליחת דוח טלגרם (אחרי שכל הנתונים נאספו)
+      # שלב 5: שליחת דוח טלגרם (רץ גם אם חלק מהאיסופים נכשלו - מדווח על מה שיש)
       - name: Send Telegram Report
+        id: report
+        continue-on-error: true
         env:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python telegram_reporter.py
+
+      # שלב 6: סיכום - התראה על כל שלב שנכשל; רק שלבי חובה מכשילים את ה-run
+      # (טוויטר/GetXAPI הוא best-effort: מדווח בהתראה אבל לא מכשיל)
+      - name: Notify on failures
+        if: always()
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          critical=""
+          optional=""
+          [ "${{ steps.followers.outcome }}" = "failure" ] && critical="$critical followers"
+          [ "${{ steps.youtube.outcome }}"   = "failure" ] && critical="$critical youtube"
+          [ "${{ steps.facebook.outcome }}"  = "failure" ] && critical="$critical facebook"
+          [ "${{ steps.instagram.outcome }}" = "failure" ] && critical="$critical instagram"
+          [ "${{ steps.report.outcome }}"    = "failure" ] && critical="$critical telegram-report"
+          [ "${{ steps.twitter.outcome }}"   = "failure" ] && optional="$optional twitter(best-effort)"
+
+          if [ -z "$critical$optional" ]; then
+            echo "All steps succeeded."
+            exit 0
+          fi
+
+          echo "Failed steps:$critical$optional"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode text="⚠️ Daily Social Update - שלבים שנכשלו:${critical}${optional}
+          ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" || true
+
+          [ -z "$critical" ] && exit 0
+          exit 1

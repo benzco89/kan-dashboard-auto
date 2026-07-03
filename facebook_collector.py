@@ -1,5 +1,5 @@
 import os
-import requests
+import sys
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
@@ -8,6 +8,8 @@ import time
 import json
 import pytz
 import re
+
+from utils import http_get_json, backfill_zero_metrics
 
 # Load .env file if exists
 try:
@@ -18,7 +20,7 @@ except ImportError:
 
 # --- Config ---
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN')
-PAGE_ID = "220634478361516"
+PAGE_ID = os.environ.get('FACEBOOK_PAGE_ID', "220634478361516")
 API_VERSION = "v25.0"  # bumped from v24: the legacy reach metric (post_impressions_unique)
                        # was removed for ALL versions on 2026-06-15; v25 exposes the
                        # unified media-view metrics (post_total_media_view_unique / post_media_view).
@@ -36,7 +38,7 @@ def get_video_direct_metrics(video_id):
     url = f"https://graph.facebook.com/{API_VERSION}/{video_id}"
     params = {'access_token': ACCESS_TOKEN, 'fields': 'views'}
     try:
-        res = requests.get(url, params=params).json()
+        res = http_get_json(url, params=params, timeout=15, max_retries=2)
         return res.get('views', 0)
     except:
         return 0
@@ -63,7 +65,7 @@ def _insight(obj_id, metric, endpoint="insights"):
     if endpoint == "insights":
         params['period'] = 'lifetime'
     try:
-        res = requests.get(f"https://graph.facebook.com/{API_VERSION}/{obj_id}/{endpoint}", params=params).json()
+        res = http_get_json(f"https://graph.facebook.com/{API_VERSION}/{obj_id}/{endpoint}", params=params, timeout=15, max_retries=2)
         if 'error' in res:
             return 0
         data = res.get('data', [])
@@ -137,7 +139,7 @@ def get_public_metrics(post_id):
         'fields': 'shares,comments.summary(true).limit(0),reactions.summary(true).limit(0)'
     }
     try:
-        res = requests.get(url, params=params).json()
+        res = http_get_json(url, params=params, timeout=15, max_retries=2)
         likes = 0
         if 'reactions' in res and 'summary' in res['reactions']:
             likes = res['reactions']['summary']['total_count']
@@ -179,7 +181,8 @@ def detect_media_type(post):
 def fetch_facebook_data():
     print(f"🚀 Facebook Collector - {datetime.now()}")
 
-    since_unix = int((datetime.now() - timedelta(days=DAYS_BACK)).timestamp())
+    il_now = datetime.now(pytz.timezone('Asia/Jerusalem'))
+    since_unix = int((il_now - timedelta(days=DAYS_BACK)).timestamp())
     all_posts = []
 
     url = f"https://graph.facebook.com/{API_VERSION}/{PAGE_ID}/feed"
@@ -191,8 +194,12 @@ def fetch_facebook_data():
     }
 
     while True:
-        res = requests.get(url, params=params).json()
-        
+        try:
+            res = http_get_json(url, params=params)
+        except Exception as e:
+            print(f"❌ Feed request failed after retries: {e} - keeping {len(all_posts)} posts fetched so far")
+            break
+
         if 'error' in res:
             print(f"❌ API Error: {res['error']['message']}")
             break
@@ -303,6 +310,14 @@ def save_to_sheets(new_df):
         new_df['post_id'] = new_df['post_id'].astype(str)
         existing_df['post_id'] = existing_df['post_id'].astype(str)
 
+        # הגנה מפני כשלי API רגעיים: 0 חדש לא דורס ערך חיובי קיים
+        new_df, suspicious_cols = backfill_zero_metrics(
+            new_df, existing_df, key='post_id',
+            cols=['reach', 'clicks', 'views', 'views_30s', 'total_watch_min',
+                  'avg_watch_sec', 'completion_rate', 'likes', 'comments',
+                  'shares', 'total_engagement', 'engagement_rate']
+        )
+
         # חישוב דלתא לצפיות
         if 'views' in existing_df.columns:
             existing_df['views'] = pd.to_numeric(existing_df['views'], errors='coerce').fillna(0)
@@ -335,6 +350,7 @@ def save_to_sheets(new_df):
         new_df['views_delta'] = 0
         new_df['reach_delta'] = 0
         final_df = new_df
+        suspicious_cols = []
 
     # ניקוי ומיון
     final_df = final_df.sort_values(by='date', ascending=False)
@@ -344,19 +360,27 @@ def save_to_sheets(new_df):
     worksheet.clear()
     worksheet.update([final_df.columns.tolist()] + final_df.values.tolist())
     print(f"✅ Saved {len(final_df)} rows to {SHEET_NAME}")
+    return suspicious_cols
 
 
 def main():
     if not ACCESS_TOKEN:
         print("❌ Missing FACEBOOK_TOKEN environment variable")
-        return
+        sys.exit(1)
 
     df = fetch_facebook_data()
-    if not df.empty:
-        save_to_sheets(df)
-        print(f"✅ Done! {len(df)} posts processed.")
-    else:
+    if df.empty:
+        # יציאה בקוד שגיאה כדי ששלב ההתראות ב-workflow ידווח על הכשל
         print("❌ No data collected.")
+        sys.exit(1)
+
+    suspicious_cols = save_to_sheets(df)
+    print(f"✅ Done! {len(df)} posts processed.")
+    if suspicious_cols:
+        # הגיליון מוגן (ערכים קודמים נשמרו), אבל מטריקה חזרה 0 כמעט לכל
+        # הפוסטים - כנראה שבירת API. מכשילים את השלב כדי שההתראה תישלח.
+        print(f"❌ Suspicious all-zero metrics: {suspicious_cols} - possible API metric breakage")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

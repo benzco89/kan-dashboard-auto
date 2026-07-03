@@ -5,7 +5,7 @@ Twitter/X Collector - איסוף ציוצים ומדדי מעורבות מטוו
 """
 
 import os
-import requests
+import sys
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
@@ -14,6 +14,8 @@ import time
 import json
 import re
 import pytz
+
+from utils import http_get_json, backfill_zero_metrics
 
 # Load .env file if exists (for local development)
 try:
@@ -63,15 +65,21 @@ def get_tweets(username, cutoff, max_pages=MAX_PAGES):
             params["cursor"] = cursor
 
         try:
-            resp = requests.get(f"{API_BASE}/twitter/user/tweets", headers=_headers(), params=params, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
+            data = http_get_json(f"{API_BASE}/twitter/user/tweets", headers=_headers(), params=params)
         except Exception as e:
             print(f"❌ GetXAPI error on page {pages_used}: {e}")
             stop_reason = "error"
             break
 
-        page_tweets = data.get("tweets", [])
+        page_tweets = data.get("tweets")
+        if not isinstance(page_tweets, list):
+            # עמוד בלי רשימת ציוצים: בלי has_more זה סוף פיד תקין; אחרת שגיאה
+            if not data.get("has_more"):
+                stop_reason = "end_of_feed"
+            else:
+                print(f"❌ GetXAPI unexpected response on page {pages_used}: {str(data)[:200]}")
+                stop_reason = "error"
+            break
         all_tweets.extend(page_tweets)
 
         # האם הגענו אל מעבר לחלון? (קיים בעמוד ציוץ מוקדם מה-cutoff)
@@ -214,6 +222,13 @@ def save_to_sheets(new_df):
         new_df["tweet_id"] = new_df["tweet_id"].astype(str)
         existing_df["tweet_id"] = existing_df["tweet_id"].astype(str)
 
+        # הגנה מפני כשלי API רגעיים: 0 חדש לא דורס ערך חיובי קיים
+        new_df, suspicious_cols = backfill_zero_metrics(
+            new_df, existing_df, key="tweet_id",
+            cols=["views", "likes", "retweets", "replies", "quotes",
+                  "bookmarks", "total_engagement", "engagement_rate"]
+        )
+
         # חישוב דלתא לצפיות
         if "views" in existing_df.columns:
             existing_df["views"] = pd.to_numeric(existing_df["views"], errors="coerce").fillna(0)
@@ -235,6 +250,7 @@ def save_to_sheets(new_df):
     else:
         new_df["views_delta"] = 0
         final_df = new_df
+        suspicious_cols = []
 
     # ניקוי ומיון
     final_df = final_df.sort_values(by="date", ascending=False)
@@ -244,6 +260,7 @@ def save_to_sheets(new_df):
     worksheet.clear()
     worksheet.update([final_df.columns.tolist()] + final_df.values.tolist())
     print(f"✅ Saved {len(final_df)} rows to {SHEET_NAME}")
+    return suspicious_cols
 
 
 def main():

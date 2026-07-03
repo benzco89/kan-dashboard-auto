@@ -4,7 +4,7 @@ Instagram Collector - איסוף נתוני פוסטים ורילסים מאינ
 """
 
 import os
-import requests
+import sys
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
@@ -13,6 +13,8 @@ import time
 import json
 import re  # for timestamp parsing
 import pytz  # for Israel timezone
+
+from utils import http_get_json, backfill_zero_metrics
 
 # Load .env file if exists (for local development)
 try:
@@ -46,8 +48,8 @@ def get_instagram_account_id():
     }
     
     try:
-        res = requests.get(url, params=params).json()
-        
+        res = http_get_json(url, params=params)
+
         if 'error' in res:
             print(f"❌ Error: {res['error']['message']}")
             return None
@@ -67,7 +69,7 @@ def get_instagram_account_id():
                 'access_token': ACCESS_TOKEN,
                 'fields': 'instagram_business_account'
             }
-            page_res = requests.get(page_url, params=page_params).json()
+            page_res = http_get_json(page_url, params=page_params)
             
             ig_account = page_res.get('instagram_business_account')
             if ig_account:
@@ -132,8 +134,8 @@ def get_media_insights(media_id, media_type):
     }
     
     try:
-        res = requests.get(url, params=params).json()
-        
+        res = http_get_json(url, params=params, timeout=15, max_retries=2)
+
         if 'error' in res:
             # הדפסת השגיאה כדי להבין מה לא עובד
             print(f"⚠️ Insights error for {media_id}: {res['error'].get('message', 'Unknown error')}")
@@ -167,7 +169,7 @@ def fetch_instagram_media(ig_account_id):
     """משיכת פוסטים ורילסים מאינסטגרם"""
     print(f"🚀 Instagram Collector - Fetching last {DAYS_BACK} days")
     
-    since_date = datetime.now() - timedelta(days=DAYS_BACK)
+    since_date = datetime.now(pytz.timezone('Asia/Jerusalem')) - timedelta(days=DAYS_BACK)
     since_unix = int(since_date.timestamp())
     
     all_media = []
@@ -181,8 +183,12 @@ def fetch_instagram_media(ig_account_id):
     }
     
     while True:
-        res = requests.get(url, params=params).json()
-        
+        try:
+            res = http_get_json(url, params=params)
+        except Exception as e:
+            print(f"❌ Media request failed after retries: {e} - keeping {len(all_media)} items fetched so far")
+            break
+
         if 'error' in res:
             print(f"❌ API Error: {res['error']['message']}")
             break
@@ -304,6 +310,13 @@ def save_to_sheets(new_df):
         new_df['media_id'] = new_df['media_id'].astype(str)
         existing_df['media_id'] = existing_df['media_id'].astype(str)
 
+        # הגנה מפני כשלי API רגעיים: 0 חדש לא דורס ערך חיובי קיים
+        new_df, suspicious_cols = backfill_zero_metrics(
+            new_df, existing_df, key='media_id',
+            cols=['likes', 'comments', 'views', 'reach', 'saved', 'shares',
+                  'total_interactions', 'avg_watch_sec', 'engagement_rate']
+        )
+
         # חישוב דלתא לצפיות
         if 'views' in existing_df.columns:
             existing_df['views'] = pd.to_numeric(existing_df['views'], errors='coerce').fillna(0)
@@ -338,6 +351,7 @@ def save_to_sheets(new_df):
         new_df['views_delta'] = 0
         new_df['reach_delta'] = 0
         final_df = new_df
+        suspicious_cols = []
 
     # ניקוי ומיון
     final_df = final_df.sort_values(by='date', ascending=False)
@@ -347,6 +361,7 @@ def save_to_sheets(new_df):
     worksheet.clear()
     worksheet.update([final_df.columns.tolist()] + final_df.values.tolist())
     print(f"✅ Saved {len(final_df)} rows to {SHEET_NAME}")
+    return suspicious_cols
 
 
 def main():

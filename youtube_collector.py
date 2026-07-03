@@ -4,6 +4,7 @@ YouTube Collector - איסוף נתוני סרטונים מיוטיוב
 """
 
 import os
+import sys
 import json
 import pandas as pd
 from googleapiclient.discovery import build
@@ -13,6 +14,8 @@ import isodate
 from datetime import datetime, timedelta
 import pytz
 import numpy as np
+
+from utils import backfill_zero_metrics
 
 # Load .env file if exists (for local development)
 try:
@@ -155,7 +158,13 @@ def update_google_sheet(new_data_df):
     
     # שליפת הנתונים הקיימים
     existing_df = get_existing_data()
-    
+
+    # הגנה מפני כשלי API רגעיים: 0 חדש לא דורס ערך חיובי קיים
+    new_data_df, suspicious_cols = backfill_zero_metrics(
+        new_data_df, existing_df, key='video_id',
+        cols=['views', 'likes', 'comments', 'like_rate', 'comment_rate']
+    )
+
     # חישוב דלתא - כמה צפיות נוספו מאז ההרצה הקודמת
     if not existing_df.empty and 'views' in existing_df.columns:
         existing_df['views'] = pd.to_numeric(existing_df['views'], errors='coerce').fillna(0)
@@ -200,14 +209,19 @@ def update_google_sheet(new_data_df):
     worksheet.clear()
     worksheet.update([final_df.columns.values.tolist()] + final_df.values.tolist(), value_input_option='RAW')
     print("Sheet updated successfully!")
-    
-    return final_df
+
+    return final_df, suspicious_cols
 
 
 if __name__ == "__main__":
     new_videos = fetch_videos()
-    if not new_videos.empty:
-        updated_df = update_google_sheet(new_videos)
-        print(f"✅ YouTube collection complete! {len(new_videos)} videos processed.")
-    else:
+    if new_videos.empty:
+        # יציאה בקוד שגיאה כדי ששלב ההתראות ב-workflow ידווח על הכשל
         print("No videos found.")
+        sys.exit(1)
+
+    updated_df, suspicious_cols = update_google_sheet(new_videos)
+    print(f"✅ YouTube collection complete! {len(new_videos)} videos processed.")
+    if suspicious_cols:
+        print(f"❌ Suspicious all-zero metrics: {suspicious_cols} - possible API breakage")
+        sys.exit(1)
