@@ -1,0 +1,27 @@
+name: "Probe: metrics expansion (read-only)"
+
+# Read-only probe for the metrics-expansion packages (FB reactions breakdown,
+# IG stories, v25 reel metrics). Does NOT write to Google Sheets. Manual only.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Run metrics-expansion probe
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+        run: python metrics_expansion_probe.py

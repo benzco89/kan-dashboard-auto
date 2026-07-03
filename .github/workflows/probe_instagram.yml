@@ -1,0 +1,32 @@
+name: Test Instagram Probe (read-only)
+
+# Read-only insight probe for ONE media item. Does NOT write to Google Sheets.
+# Manual button only. Override the target post via the media_id input.
+on:
+  workflow_dispatch:
+    inputs:
+      media_id:
+        description: 'Instagram media_id to probe (default: top reel in current window)'
+        required: false
+        default: '17881474323459278'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Run IG insight probe
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          IG_MEDIA_ID: ${{ github.event.inputs.media_id }}
+        run: python ig_insights_probe.py
