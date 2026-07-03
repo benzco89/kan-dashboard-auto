@@ -131,26 +131,44 @@ def get_video_insights(video_id):
     return result
 
 
+REACTION_TYPES = ['LOVE', 'HAHA', 'WOW', 'SAD', 'ANGRY']
+_EMPTY_PUBLIC = {'shares': 0, 'comments': 0, 'likes': 0,
+                 'love': 0, 'haha': 0, 'wow': 0, 'sad': 0, 'angry': 0}
+
+
 def get_public_metrics(post_id):
-    """משיכת מדדים ציבוריים - לייקים, תגובות, שיתופים"""
+    """
+    מדדים ציבוריים - לייקים (סך כל הריאקציות, כמו תמיד), תגובות, שיתופים,
+    ופירוק ריאקציות (love/haha/wow/sad/angry) - אומת ב-probe שהפירוק מסתכם
+    בדיוק לסך. פוסט עם 113 angry הוא סיפור מערכתי שונה מפוסט עם אותו מספר
+    לייקים שכולם love.
+    """
     url = f"https://graph.facebook.com/{API_VERSION}/{post_id}"
+    reaction_fields = ','.join(
+        f"reactions.type({t}).limit(0).summary(total_count).as(r_{t.lower()})"
+        for t in REACTION_TYPES
+    )
     params = {
         'access_token': ACCESS_TOKEN,
-        'fields': 'shares,comments.summary(true).limit(0),reactions.summary(true).limit(0)'
+        'fields': 'shares,comments.summary(true).limit(0),reactions.summary(true).limit(0),' + reaction_fields
     }
     try:
         res = http_get_json(url, params=params, timeout=15, max_retries=2)
         likes = 0
         if 'reactions' in res and 'summary' in res['reactions']:
             likes = res['reactions']['summary']['total_count']
-        
-        return {
+
+        out = {
             'shares': res.get('shares', {}).get('count', 0),
             'comments': res.get('comments', {}).get('summary', {}).get('total_count', 0),
-            'likes': likes
+            'likes': likes,
         }
+        for t in REACTION_TYPES:
+            key = t.lower()
+            out[key] = (res.get(f'r_{key}') or {}).get('summary', {}).get('total_count', 0)
+        return out
     except:
-        return {'shares': 0, 'comments': 0, 'likes': 0}
+        return dict(_EMPTY_PUBLIC)
 
 
 def detect_media_type(post):
@@ -257,6 +275,11 @@ def fetch_facebook_data():
                 'avg_watch_sec': video['avg_watch_sec'],
                 'completion_rate': completion_rate,
                 'likes': public['likes'],
+                'love': public['love'],
+                'haha': public['haha'],
+                'wow': public['wow'],
+                'sad': public['sad'],
+                'angry': public['angry'],
                 'comments': public['comments'],
                 'shares': public['shares'],
                 'total_engagement': total_eng,
@@ -315,7 +338,8 @@ def save_to_sheets(new_df):
             new_df, existing_df, key='post_id',
             cols=['reach', 'clicks', 'views', 'views_30s', 'total_watch_min',
                   'avg_watch_sec', 'completion_rate', 'likes', 'comments',
-                  'shares', 'total_engagement', 'engagement_rate']
+                  'shares', 'total_engagement', 'engagement_rate',
+                  'love', 'haha', 'wow', 'sad', 'angry']
         )
 
         # חישוב דלתא לצפיות

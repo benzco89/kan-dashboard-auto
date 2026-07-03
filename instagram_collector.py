@@ -25,7 +25,8 @@ except ImportError:
 
 # --- Config ---
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN')
-API_VERSION = "v24.0"
+API_VERSION = "v25.0"  # v25 required for the reel metrics added 2026 (reels_skip_rate,
+                       # crossposted_views/facebook_views, reposts) - verified via probe
 
 # ימים אחורה: 16 להרצה ראשונה, 3 לאוטומציה יומית
 # לשנות ל-3 אחרי ההרצה הראשונה
@@ -161,7 +162,44 @@ def get_media_insights(media_id, media_type):
                 
     except Exception as e:
         print(f"⚠️ Error fetching insights for {media_id}: {e}")
-    
+
+    return result
+
+
+def get_reel_v25_metrics(media_id):
+    """
+    מדדי v25 לרילס בלבד (אומתו ב-probe מול החשבון החי):
+      skip_rate   = reels_skip_rate    (% שמדלגים ב-3 השניות הראשונות - מדד ההוק)
+      fb_views    = facebook_views     (צפיות שהריל קיבל בפייסבוק דרך crosspost)
+      total_views = crossposted_views  (צפיות IG + FB יחד)
+      reposts     = reposts            (שיתופים-מחדש, נפרד מ-shares)
+    קריאה נפרדת ממדדי הבסיס כדי שכשל כאן לא יאפס את המדדים הוותיקים.
+    """
+    result = {'skip_rate': 0, 'fb_views': 0, 'total_views': 0, 'reposts': 0}
+    url = f"https://graph.facebook.com/{API_VERSION}/{media_id}/insights"
+    params = {
+        'access_token': ACCESS_TOKEN,
+        'metric': 'reels_skip_rate,crossposted_views,facebook_views,reposts',
+    }
+    try:
+        res = http_get_json(url, params=params, timeout=15, max_retries=2)
+        if 'error' in res:
+            print(f"⚠️ v25 reel insights error for {media_id}: {res['error'].get('message', '')[:120]}")
+            return result
+        for item in res.get('data', []):
+            name = item.get('name')
+            values = item.get('values', [])
+            v = values[0].get('value', 0) if values else 0
+            if name == 'reels_skip_rate':
+                result['skip_rate'] = round(float(v), 1) if v else 0
+            elif name == 'facebook_views':
+                result['fb_views'] = v or 0
+            elif name == 'crossposted_views':
+                result['total_views'] = v or 0
+            elif name == 'reposts':
+                result['reposts'] = v or 0
+    except Exception as e:
+        print(f"⚠️ Error fetching v25 reel insights for {media_id}: {e}")
     return result
 
 
@@ -212,7 +250,7 @@ def fetch_instagram_media(ig_account_id):
             
             # משיכת insights
             insights = get_media_insights(media_id, media_type)
-            
+
             # קביעת סוג תוכן
             if media_type == 'VIDEO':
                 content_type = 'Reel'  # ברוב המקרים וידאו באינסטגרם זה רילס
@@ -220,6 +258,11 @@ def fetch_instagram_media(ig_account_id):
                 content_type = 'Carousel'
             else:
                 content_type = 'Photo'
+
+            # מדדי v25 לרילס (skip rate + crosspost לפייסבוק + reposts)
+            reel_v25 = {'skip_rate': 0, 'fb_views': 0, 'total_views': 0, 'reposts': 0}
+            if content_type == 'Reel':
+                reel_v25 = get_reel_v25_metrics(media_id)
             
             all_media.append({
                 'media_id': media_id,
@@ -235,6 +278,10 @@ def fetch_instagram_media(ig_account_id):
                 'shares': insights.get('shares', 0),
                 'total_interactions': insights.get('total_interactions', 0),
                 'avg_watch_sec': insights.get('avg_watch_sec', 0),
+                'skip_rate': reel_v25['skip_rate'],
+                'fb_views': reel_v25['fb_views'],
+                'total_views': reel_v25['total_views'],
+                'reposts': reel_v25['reposts'],
                 'engagement_rate': 0,  # יחושב אחר כך
                 'permalink': media.get('permalink', ''),
                 'pulled_at': datetime.now(pytz.timezone('Asia/Jerusalem')).strftime('%Y-%m-%d %H:%M')
@@ -314,7 +361,8 @@ def save_to_sheets(new_df):
         new_df, suspicious_cols = backfill_zero_metrics(
             new_df, existing_df, key='media_id',
             cols=['likes', 'comments', 'views', 'reach', 'saved', 'shares',
-                  'total_interactions', 'avg_watch_sec', 'engagement_rate']
+                  'total_interactions', 'avg_watch_sec', 'engagement_rate',
+                  'skip_rate', 'fb_views', 'total_views', 'reposts']
         )
 
         # חישוב דלתא לצפיות

@@ -82,8 +82,9 @@ def get_instagram_data():
         if not df.empty:
             df['views'] = pd.to_numeric(df['views'], errors='coerce').fillna(0)
             df['reach'] = pd.to_numeric(df['reach'], errors='coerce').fillna(0)
-            if 'views_delta' in df.columns:
-                df['views_delta'] = pd.to_numeric(df['views_delta'], errors='coerce').fillna(0)
+            for col in ('views_delta', 'skip_rate', 'fb_views'):
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
     except Exception as e:
         print(f"Error fetching Instagram data: {e}")
@@ -231,9 +232,17 @@ def summarize_instagram(df, yesterday_date):
             saved = int(row.get('saved', 0))
             shares = int(row.get('shares', 0))
             eng_rate = round(row.get('engagement_rate', 0), 1)
+            # מדדי v25 לרילס: הוק (skip ב-3 שניות) + צפיות מפייסבוק דרך crosspost
+            extra = ""
+            skip = row.get('skip_rate', 0) or 0
+            fb_v = int(row.get('fb_views', 0) or 0)
+            if skip:
+                extra += f" | Skip 3ש': {skip}%"
+            if fb_v:
+                extra += f" | צפיות בפייסבוק (crosspost): {fb_v:,}"
             # פורמט מורחב לניתוח AI
             permalink = row.get('permalink', '')
-            top_posts += f"• {caption} | {row.get('type', '')} | {int(row['views']):,} views | {int(row['reach']):,} reach | לייקים: {likes:,} | תגובות: {comments} | שמירות: {saved} | שיתופים: {shares} | מעורבות: {eng_rate}% | LINK: {permalink}\n"
+            top_posts += f"• {caption} | {row.get('type', '')} | {int(row['views']):,} views | {int(row['reach']):,} reach | לייקים: {likes:,} | תגובות: {comments} | שמירות: {saved} | שיתופים: {shares} | מעורבות: {eng_rate}%{extra} | LINK: {permalink}\n"
     
     return f"""פוסטים חדשים: {new_count}
 סה"כ צפיות: {total_views:,} | Reach: {total_reach:,}
