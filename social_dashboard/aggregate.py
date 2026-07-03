@@ -463,6 +463,12 @@ def build_instagram(data, days):
     save_rate = (total_saved / total_views * 100) if total_views else 0
     reach_ok = (not cur) or any(_num(p.get("reach")) > 0 for p in cur)
 
+    # v25 reel metrics (fill in as the collector refreshes its 7-day window)
+    skip_rates = [_num(p.get("skip_rate")) for p in cur if _num(p.get("skip_rate")) > 0]
+    avg_skip = (sum(skip_rates) / len(skip_rates)) if skip_rates else 0
+    total_fb_views = sum(_num(p.get("fb_views")) for p in cur)
+    fb_share = (total_fb_views / (total_views + total_fb_views) * 100) if (total_views + total_fb_views) else 0
+
     posts = []
     for p in cur:
         views = _num(p.get("views"))
@@ -478,6 +484,7 @@ def build_instagram(data, days):
             "reach": _int(p.get("reach")),
             "saved": saved,
             "shares": shares,
+            "skip_rate": round(_num(p.get("skip_rate")), 1),
             "engagement": round((likes + comments + saved + shares) / views * 100, 1) if views else 0,
             "url": p.get("permalink", ""),
         })
@@ -504,6 +511,8 @@ def build_instagram(data, days):
             "virality": round(virality, 2),
             "save_rate": round(save_rate, 2),
             "avg_engagement": round(avg_eng, 2),
+            "avg_skip_rate": round(avg_skip, 1),
+            "fb_views_share": round(fb_share, 1),
         },
         "posts": posts,
     }

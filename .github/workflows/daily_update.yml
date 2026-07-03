@@ -66,6 +66,16 @@ jobs:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: python instagram_collector.py
 
+      # שלב 4.2: איסוף סטוריז אינסטגרם (חלון 24 שעות - מה שלא נאסף הבוקר אבוד).
+      # best-effort בתקופת ההרצה הראשונה: כשל מדווח בהתראה אבל לא מכשיל את ה-run
+      - name: Collect Instagram Stories
+        id: stories
+        continue-on-error: true
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: python stories_collector.py
+
       # שלב 4.5: איסוף טוויטר/X (GetXAPI) - best-effort: כשל פה (מכסה/קוטה)
       # מדווח בהתראה אבל לא מכשיל את ה-run
       - name: Collect Twitter Data
@@ -104,6 +114,7 @@ jobs:
           [ "${{ steps.instagram.outcome }}" = "failure" ] && critical="$critical instagram"
           [ "${{ steps.report.outcome }}"    = "failure" ] && critical="$critical telegram-report"
           [ "${{ steps.twitter.outcome }}"   = "failure" ] && optional="$optional twitter(best-effort)"
+          [ "${{ steps.stories.outcome }}"   = "failure" ] && optional="$optional stories(best-effort)"
 
           if [ -z "$critical$optional" ]; then
             echo "All steps succeeded."
