@@ -84,11 +84,8 @@ def _fetch_all():
         .execute()
     )
     value_ranges = resp.get("valueRanges", [])
-    by_name = {}
-    for rng in value_ranges:
-        # API echoes back the range as "'tab name'!A1:Z..."; map by order instead.
-        by_name.setdefault(len(by_name), rng.get("values", []))
 
+    # The API echoes ranges back in request order, so map by index.
     result = {}
     for idx, key in enumerate(SHEETS.keys()):
         result[key] = value_ranges[idx].get("values", []) if idx < len(value_ranges) else []

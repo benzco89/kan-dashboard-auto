@@ -189,16 +189,9 @@ h1{ margin:0; font-weight:900; letter-spacing:-.7px; }
 .typebar-track{ display:block; height:9px; background:var(--chip); border-radius:999px; overflow:hidden; }
 .typebar-fill{ display:block; height:100%; border-radius:999px; }
 
-/* ---------- IG saves vs shares bars ---------- */
-.bars{ display:flex; align-items:flex-end; gap:10px; height:130px; }
-.bars .col{ flex:1; display:flex; flex-direction:column; align-items:center; height:100%; gap:4px; }
-.bars .pair{ flex:1; min-height:0; display:flex; align-items:flex-end; gap:3px; width:100%; justify-content:center; }
-.bars .bar{ width:42%; border-radius:3px 3px 0 0; min-height:2px; }
-/* fixed-height label slot (reserved even when empty) keeps every bar pair on one baseline */
-.bars .lbl{ flex:none; height:11px; line-height:11px; font-family:ui-monospace,monospace; font-size:9px; color:var(--faint); direction:ltr; }
-
 /* ---------- data table ---------- */
 .table{ background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.table-scroll{ overflow-x:auto; }
 .table-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px 16px; border-bottom:1px solid var(--line); }
 .table-legend{ display:flex; align-items:center; gap:14px; font-size:11.5px; color:var(--muted); }
 .table-legend span{ display:inline-flex; align-items:center; gap:5px; }
@@ -217,4 +210,7 @@ h1{ margin:0; font-weight:900; letter-spacing:-.7px; }
 @media (max-width:900px){
   .grid-4,.grid-5,.grid-3{ grid-template-columns:repeat(2,1fr); }
   .split{ grid-template-columns:1fr !important; }
+  /* data tables keep their column layout and scroll sideways instead of
+     being clipped by .table's overflow:hidden */
+  .table-scroll .thead, .table-scroll .trow{ min-width:640px; }
 }
