@@ -9,6 +9,8 @@ import json
 import pytz
 import re
 
+from utils import http_get_json, backfill_zero_metrics
+
 # Load .env file if exists
 try:
     from dotenv import load_dotenv
@@ -18,7 +20,7 @@ except ImportError:
 
 # --- Config ---
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN')
-PAGE_ID = "220634478361516"
+PAGE_ID = os.environ.get('FACEBOOK_PAGE_ID', "220634478361516")
 API_VERSION = "v25.0"  # bumped from v24: the legacy reach metric (post_impressions_unique)
                        # was removed for ALL versions on 2026-06-15; v25 exposes the
                        # unified media-view metrics (post_total_media_view_unique / post_media_view).
@@ -36,7 +38,7 @@ def get_video_direct_metrics(video_id):
     url = f"https://graph.facebook.com/{API_VERSION}/{video_id}"
     params = {'access_token': ACCESS_TOKEN, 'fields': 'views'}
     try:
-        res = requests.get(url, params=params).json()
+        res = http_get_json(url, params=params)
         return res.get('views', 0)
     except:
         return 0
@@ -63,7 +65,7 @@ def _insight(obj_id, metric, endpoint="insights"):
     if endpoint == "insights":
         params['period'] = 'lifetime'
     try:
-        res = requests.get(f"https://graph.facebook.com/{API_VERSION}/{obj_id}/{endpoint}", params=params).json()
+        res = http_get_json(f"https://graph.facebook.com/{API_VERSION}/{obj_id}/{endpoint}", params=params)
         if 'error' in res:
             return 0
         data = res.get('data', [])
@@ -137,7 +139,7 @@ def get_public_metrics(post_id):
         'fields': 'shares,comments.summary(true).limit(0),reactions.summary(true).limit(0)'
     }
     try:
-        res = requests.get(url, params=params).json()
+        res = http_get_json(url, params=params)
         likes = 0
         if 'reactions' in res and 'summary' in res['reactions']:
             likes = res['reactions']['summary']['total_count']
@@ -179,7 +181,8 @@ def detect_media_type(post):
 def fetch_facebook_data():
     print(f"🚀 Facebook Collector - {datetime.now()}")
 
-    since_unix = int((datetime.now() - timedelta(days=DAYS_BACK)).timestamp())
+    il_now = datetime.now(pytz.timezone('Asia/Jerusalem'))
+    since_unix = int((il_now - timedelta(days=DAYS_BACK)).timestamp())
     all_posts = []
 
     url = f"https://graph.facebook.com/{API_VERSION}/{PAGE_ID}/feed"
@@ -191,8 +194,12 @@ def fetch_facebook_data():
     }
 
     while True:
-        res = requests.get(url, params=params).json()
-        
+        try:
+            res = http_get_json(url, params=params)
+        except Exception as e:
+            print(f"❌ Feed request failed after retries: {e} - keeping {len(all_posts)} posts fetched so far")
+            break
+
         if 'error' in res:
             print(f"❌ API Error: {res['error']['message']}")
             break
@@ -302,6 +309,14 @@ def save_to_sheets(new_df):
     if not existing_df.empty:
         new_df['post_id'] = new_df['post_id'].astype(str)
         existing_df['post_id'] = existing_df['post_id'].astype(str)
+
+        # הגנה מפני כשלי API רגעיים: 0 חדש לא דורס ערך חיובי קיים
+        new_df = backfill_zero_metrics(
+            new_df, existing_df, key='post_id',
+            cols=['reach', 'clicks', 'views', 'views_30s', 'total_watch_min',
+                  'avg_watch_sec', 'completion_rate', 'likes', 'comments',
+                  'shares', 'total_engagement', 'engagement_rate']
+        )
 
         # חישוב דלתא לצפיות
         if 'views' in existing_df.columns:

@@ -12,6 +12,8 @@ from googleapiclient.discovery import build
 from datetime import datetime
 import pytz
 
+from utils import http_get_json
+
 # Load .env file if exists (for local development)
 try:
     from dotenv import load_dotenv
@@ -121,7 +123,7 @@ def get_facebook_stats():
             'fields': 'name,fan_count,followers_count'
         }
         
-        res = requests.get(url, params=params).json()
+        res = http_get_json(url, params=params)
         
         if 'error' in res:
             print(f"❌ Facebook API Error: {res['error']['message']}")
@@ -138,7 +140,7 @@ def get_facebook_stats():
                 'period': 'day'
             }
             try:
-                insights_res = requests.get(insights_url, params=insights_params).json()
+                insights_res = http_get_json(insights_url, params=insights_params)
                 if 'data' in insights_res and len(insights_res['data']) > 0:
                     values = insights_res['data'][0].get('values', [])
                     if values:
@@ -177,7 +179,7 @@ def get_facebook_daily_insights():
             'date_preset': 'yesterday'
         }
 
-        res = requests.get(url, params=params).json()
+        res = http_get_json(url, params=params)
 
         result = {
             'fan_adds': 0,
@@ -225,7 +227,7 @@ def get_instagram_account_id():
     }
     
     try:
-        res = requests.get(url, params=params).json()
+        res = http_get_json(url, params=params)
         
         if 'error' in res:
             print(f"❌ Instagram Error: {res['error']['message']}")
@@ -261,7 +263,7 @@ def get_instagram_stats():
             'fields': 'followers_count,media_count'
         }
         
-        res = requests.get(url, params=params).json()
+        res = http_get_json(url, params=params)
         
         if 'error' in res:
             print(f"❌ Instagram API Error: {res['error']['message']}")
@@ -297,7 +299,7 @@ def get_instagram_daily_insights():
             'metric_type': 'total_value'
         }
         
-        res = requests.get(url, params=params).json()
+        res = http_get_json(url, params=params)
         
         result = {
             'daily_reach': 0,

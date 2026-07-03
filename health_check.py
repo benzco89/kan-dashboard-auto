@@ -2,6 +2,14 @@
 Health Check Script for Kan News Social Media Analytics.
 Runs daily after data collection to verify everything is working correctly.
 Sends Telegram alerts if any issues are detected.
+
+Checks per platform sheet:
+  1. Freshness  - the collector actually ran today (max pulled_at/last_updated).
+  2. Coverage   - yesterday has at least one row (Kan publishes daily).
+  3. Sanity     - yesterday's rows are not all-zero on key metrics
+                  (an all-zero column = silent API breakage, e.g. a metric
+                  Meta removed - this is exactly how the v25 reach outage
+                  looked and the old row-count check missed it).
 """
 import gspread
 import requests
@@ -12,8 +20,36 @@ import pytz
 
 # Configuration
 SPREADSHEET_ID = '1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c'
-SHEETS_TO_CHECK = ['נתוני יוטיוב', 'נתוני פייסבוק', 'נתוני אינסטגרם']
 MIN_ROWS_THRESHOLD = 5  # Alert if sheet has fewer rows than this
+
+# Per-platform check config: which columns hold the row date, the pull
+# timestamp, and the metrics that must not be all-zero for yesterday's rows.
+PLATFORM_CHECKS = [
+    {
+        'sheet': 'נתוני יוטיוב',
+        'date_col': 'published_at',
+        'pulled_col': 'last_updated',
+        'nonzero_cols': ['views'],
+    },
+    {
+        'sheet': 'נתוני פייסבוק',
+        'date_col': 'date',
+        'pulled_col': 'pulled_at',
+        'nonzero_cols': ['views', 'reach', 'likes'],
+    },
+    {
+        'sheet': 'נתוני אינסטגרם',
+        'date_col': 'date',
+        'pulled_col': 'pulled_at',
+        'nonzero_cols': ['views', 'reach', 'likes'],
+    },
+    {
+        'sheet': 'נתוני טוויטר',
+        'date_col': 'date',
+        'pulled_col': 'pulled_at',
+        'nonzero_cols': ['views'],
+    },
+]
 
 
 def send_telegram_alert(message):
@@ -31,11 +67,62 @@ def send_telegram_alert(message):
             'chat_id': chat_id,
             'text': message,
             'parse_mode': 'HTML'
-        })
+        }, timeout=30)
         return response.ok
     except Exception as e:
         print(f"Failed to send Telegram alert: {e}")
         return False
+
+
+def _num(v):
+    try:
+        return float(str(v).replace(',', ''))
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def check_platform_sheet(spreadsheet, cfg, today, yesterday):
+    """Run freshness/coverage/sanity checks on one platform sheet."""
+    errors = []
+    name = cfg['sheet']
+
+    try:
+        sheet = spreadsheet.worksheet(name)
+        records = sheet.get_all_records()
+    except Exception as e:
+        return [f"{name}: {e}"]
+
+    if len(records) < MIN_ROWS_THRESHOLD:
+        errors.append(f"{name}: רק {len(records)} שורות (מצופה לפחות {MIN_ROWS_THRESHOLD})")
+        return errors
+
+    # 1. Freshness: the collector wrote today
+    pulled_col = cfg['pulled_col']
+    pull_dates = [str(r.get(pulled_col, ''))[:10] for r in records if r.get(pulled_col)]
+    last_pull = max(pull_dates) if pull_dates else ''
+    if last_pull < today.strftime('%Y-%m-%d'):
+        errors.append(f"{name}: האיסוף לא רץ היום (משיכה אחרונה: {last_pull or 'לא ידוע'})")
+        # No fresh data - the value checks below would only repeat the same problem
+        return errors
+
+    # 2. Coverage: yesterday has rows
+    y_str = yesterday.strftime('%Y-%m-%d')
+    y_rows = [r for r in records if str(r.get(cfg['date_col'], ''))[:10] == y_str]
+    if not y_rows:
+        errors.append(f"{name}: אין אף פוסט מאתמול ({y_str}) - ייתכן שהאיסוף החזיר ריק")
+        return errors
+
+    # 3. Sanity: yesterday's rows are not all-zero on key metrics
+    for col in cfg['nonzero_cols']:
+        if col not in y_rows[0]:
+            continue
+        if all(_num(r.get(col)) == 0 for r in y_rows):
+            errors.append(
+                f"{name}: כל שורות אתמול עם {col}=0 ({len(y_rows)} שורות) - "
+                f"חשד לשבירת מטריקה ב-API (כמו הסרת reach ב-v25)"
+            )
+
+    return errors
 
 
 def check_data_freshness():
@@ -81,20 +168,9 @@ def check_data_freshness():
     except Exception as e:
         errors.append(f"מעקב עוקבים: {e}")
 
-    # Check 2: Platform sheets have data
-    for sheet_name in SHEETS_TO_CHECK:
-        try:
-            sheet = spreadsheet.worksheet(sheet_name)
-            data = sheet.get_all_values()
-            row_count = len(data)
-
-            if row_count < 2:
-                errors.append(f"{sheet_name}: Sheet is empty!")
-            elif row_count < MIN_ROWS_THRESHOLD:
-                errors.append(f"{sheet_name}: Only {row_count} rows (expected at least {MIN_ROWS_THRESHOLD})")
-
-        except Exception as e:
-            errors.append(f"{sheet_name}: {e}")
+    # Check 2: Per-platform freshness + coverage + value sanity
+    for cfg in PLATFORM_CHECKS:
+        errors.extend(check_platform_sheet(spreadsheet, cfg, today, yesterday))
 
     return errors
 
@@ -131,8 +207,8 @@ def main():
         print()
         print("Verified:")
         print("  - מעקב עוקבים: Recent data present")
-        for sheet_name in SHEETS_TO_CHECK:
-            print(f"  - {sheet_name}: Data present")
+        for cfg in PLATFORM_CHECKS:
+            print(f"  - {cfg['sheet']}: fresh pull today, yesterday covered, metrics non-zero")
 
         exit(0)
 

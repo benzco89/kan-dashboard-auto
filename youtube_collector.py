@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 import pytz
 import numpy as np
 
+from utils import backfill_zero_metrics
+
 # Load .env file if exists (for local development)
 try:
     from dotenv import load_dotenv
@@ -155,7 +157,14 @@ def update_google_sheet(new_data_df):
     
     # שליפת הנתונים הקיימים
     existing_df = get_existing_data()
-    
+
+    # הגנה מפני כשלי API רגעיים: 0 חדש לא דורס ערך חיובי קיים
+    if not existing_df.empty:
+        new_data_df = backfill_zero_metrics(
+            new_data_df, existing_df, key='video_id',
+            cols=['views', 'likes', 'comments', 'like_rate', 'comment_rate']
+        )
+
     # חישוב דלתא - כמה צפיות נוספו מאז ההרצה הקודמת
     if not existing_df.empty and 'views' in existing_df.columns:
         existing_df['views'] = pd.to_numeric(existing_df['views'], errors='coerce').fillna(0)

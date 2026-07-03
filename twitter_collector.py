@@ -15,6 +15,8 @@ import json
 import re
 import pytz
 
+from utils import http_get_json, backfill_zero_metrics
+
 # Load .env file if exists (for local development)
 try:
     from dotenv import load_dotenv
@@ -63,11 +65,14 @@ def get_tweets(username, cutoff, max_pages=MAX_PAGES):
             params["cursor"] = cursor
 
         try:
-            resp = requests.get(f"{API_BASE}/twitter/user/tweets", headers=_headers(), params=params, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
+            data = http_get_json(f"{API_BASE}/twitter/user/tweets", headers=_headers(), params=params)
         except Exception as e:
             print(f"❌ GetXAPI error on page {pages_used}: {e}")
+            stop_reason = "error"
+            break
+
+        if "tweets" not in data:
+            print(f"❌ GetXAPI unexpected response on page {pages_used}: {str(data)[:200]}")
             stop_reason = "error"
             break
 
@@ -213,6 +218,13 @@ def save_to_sheets(new_df):
     if not existing_df.empty and "tweet_id" in existing_df.columns:
         new_df["tweet_id"] = new_df["tweet_id"].astype(str)
         existing_df["tweet_id"] = existing_df["tweet_id"].astype(str)
+
+        # הגנה מפני כשלי API רגעיים: 0 חדש לא דורס ערך חיובי קיים
+        new_df = backfill_zero_metrics(
+            new_df, existing_df, key="tweet_id",
+            cols=["views", "likes", "retweets", "replies", "quotes",
+                  "bookmarks", "total_engagement", "engagement_rate"]
+        )
 
         # חישוב דלתא לצפיות
         if "views" in existing_df.columns:
