@@ -1,5 +1,5 @@
 import os
-import requests
+import sys
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
@@ -38,7 +38,7 @@ def get_video_direct_metrics(video_id):
     url = f"https://graph.facebook.com/{API_VERSION}/{video_id}"
     params = {'access_token': ACCESS_TOKEN, 'fields': 'views'}
     try:
-        res = http_get_json(url, params=params)
+        res = http_get_json(url, params=params, timeout=15, max_retries=2)
         return res.get('views', 0)
     except:
         return 0
@@ -65,7 +65,7 @@ def _insight(obj_id, metric, endpoint="insights"):
     if endpoint == "insights":
         params['period'] = 'lifetime'
     try:
-        res = http_get_json(f"https://graph.facebook.com/{API_VERSION}/{obj_id}/{endpoint}", params=params)
+        res = http_get_json(f"https://graph.facebook.com/{API_VERSION}/{obj_id}/{endpoint}", params=params, timeout=15, max_retries=2)
         if 'error' in res:
             return 0
         data = res.get('data', [])
@@ -139,7 +139,7 @@ def get_public_metrics(post_id):
         'fields': 'shares,comments.summary(true).limit(0),reactions.summary(true).limit(0)'
     }
     try:
-        res = http_get_json(url, params=params)
+        res = http_get_json(url, params=params, timeout=15, max_retries=2)
         likes = 0
         if 'reactions' in res and 'summary' in res['reactions']:
             likes = res['reactions']['summary']['total_count']
@@ -311,7 +311,7 @@ def save_to_sheets(new_df):
         existing_df['post_id'] = existing_df['post_id'].astype(str)
 
         # הגנה מפני כשלי API רגעיים: 0 חדש לא דורס ערך חיובי קיים
-        new_df = backfill_zero_metrics(
+        new_df, suspicious_cols = backfill_zero_metrics(
             new_df, existing_df, key='post_id',
             cols=['reach', 'clicks', 'views', 'views_30s', 'total_watch_min',
                   'avg_watch_sec', 'completion_rate', 'likes', 'comments',
@@ -350,6 +350,7 @@ def save_to_sheets(new_df):
         new_df['views_delta'] = 0
         new_df['reach_delta'] = 0
         final_df = new_df
+        suspicious_cols = []
 
     # ניקוי ומיון
     final_df = final_df.sort_values(by='date', ascending=False)
@@ -359,19 +360,27 @@ def save_to_sheets(new_df):
     worksheet.clear()
     worksheet.update([final_df.columns.tolist()] + final_df.values.tolist())
     print(f"✅ Saved {len(final_df)} rows to {SHEET_NAME}")
+    return suspicious_cols
 
 
 def main():
     if not ACCESS_TOKEN:
         print("❌ Missing FACEBOOK_TOKEN environment variable")
-        return
+        sys.exit(1)
 
     df = fetch_facebook_data()
-    if not df.empty:
-        save_to_sheets(df)
-        print(f"✅ Done! {len(df)} posts processed.")
-    else:
+    if df.empty:
+        # יציאה בקוד שגיאה כדי ששלב ההתראות ב-workflow ידווח על הכשל
         print("❌ No data collected.")
+        sys.exit(1)
+
+    suspicious_cols = save_to_sheets(df)
+    print(f"✅ Done! {len(df)} posts processed.")
+    if suspicious_cols:
+        # הגיליון מוגן (ערכים קודמים נשמרו), אבל מטריקה חזרה 0 כמעט לכל
+        # הפוסטים - כנראה שבירת API. מכשילים את השלב כדי שההתראה תישלח.
+        print(f"❌ Suspicious all-zero metrics: {suspicious_cols} - possible API metric breakage")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

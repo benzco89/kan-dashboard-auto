@@ -88,35 +88,33 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python telegram_reporter.py
 
-      # שלב 6: סיכום - התראה על כל שלב שנכשל + הכשלת ה-run (למעט טוויטר בלבד)
+      # שלב 6: סיכום - התראה על כל שלב שנכשל; רק שלבי חובה מכשילים את ה-run
+      # (טוויטר/GetXAPI הוא best-effort: מדווח בהתראה אבל לא מכשיל)
       - name: Notify on failures
         if: always()
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          failed=""
-          [ "${{ steps.followers.outcome }}" = "failure" ] && failed="$failed followers"
-          [ "${{ steps.youtube.outcome }}"   = "failure" ] && failed="$failed youtube"
-          [ "${{ steps.facebook.outcome }}"  = "failure" ] && failed="$failed facebook"
-          [ "${{ steps.instagram.outcome }}" = "failure" ] && failed="$failed instagram"
-          [ "${{ steps.twitter.outcome }}"   = "failure" ] && failed="$failed twitter"
-          [ "${{ steps.report.outcome }}"    = "failure" ] && failed="$failed telegram-report"
+          critical=""
+          optional=""
+          [ "${{ steps.followers.outcome }}" = "failure" ] && critical="$critical followers"
+          [ "${{ steps.youtube.outcome }}"   = "failure" ] && critical="$critical youtube"
+          [ "${{ steps.facebook.outcome }}"  = "failure" ] && critical="$critical facebook"
+          [ "${{ steps.instagram.outcome }}" = "failure" ] && critical="$critical instagram"
+          [ "${{ steps.report.outcome }}"    = "failure" ] && critical="$critical telegram-report"
+          [ "${{ steps.twitter.outcome }}"   = "failure" ] && optional="$optional twitter(best-effort)"
 
-          if [ -z "$failed" ]; then
+          if [ -z "$critical$optional" ]; then
             echo "All steps succeeded."
             exit 0
           fi
 
-          echo "Failed steps:$failed"
+          echo "Failed steps:$critical$optional"
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
-            --data-urlencode text="⚠️ Daily Social Update - שלבים שנכשלו:${failed}
+            --data-urlencode text="⚠️ Daily Social Update - שלבים שנכשלו:${critical}${optional}
           ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" || true
 
-          # טוויטר לבדו הוא best-effort ולא מכשיל את ה-run
-          if [ "$failed" = " twitter" ]; then
-            echo "Only twitter failed (best-effort) - not failing the run."
-            exit 0
-          fi
+          [ -z "$critical" ] && exit 0
           exit 1

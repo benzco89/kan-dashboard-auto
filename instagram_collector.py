@@ -4,7 +4,7 @@ Instagram Collector - איסוף נתוני פוסטים ורילסים מאינ
 """
 
 import os
-import requests
+import sys
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
@@ -134,7 +134,7 @@ def get_media_insights(media_id, media_type):
     }
     
     try:
-        res = http_get_json(url, params=params)
+        res = http_get_json(url, params=params, timeout=15, max_retries=2)
 
         if 'error' in res:
             # הדפסת השגיאה כדי להבין מה לא עובד
@@ -311,7 +311,7 @@ def save_to_sheets(new_df):
         existing_df['media_id'] = existing_df['media_id'].astype(str)
 
         # הגנה מפני כשלי API רגעיים: 0 חדש לא דורס ערך חיובי קיים
-        new_df = backfill_zero_metrics(
+        new_df, suspicious_cols = backfill_zero_metrics(
             new_df, existing_df, key='media_id',
             cols=['likes', 'comments', 'views', 'reach', 'saved', 'shares',
                   'total_interactions', 'avg_watch_sec', 'engagement_rate']
@@ -351,6 +351,7 @@ def save_to_sheets(new_df):
         new_df['views_delta'] = 0
         new_df['reach_delta'] = 0
         final_df = new_df
+        suspicious_cols = []
 
     # ניקוי ומיון
     final_df = final_df.sort_values(by='date', ascending=False)
@@ -360,6 +361,7 @@ def save_to_sheets(new_df):
     worksheet.clear()
     worksheet.update([final_df.columns.tolist()] + final_df.values.tolist())
     print(f"✅ Saved {len(final_df)} rows to {SHEET_NAME}")
+    return suspicious_cols
 
 
 def main():
