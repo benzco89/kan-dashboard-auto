@@ -78,37 +78,6 @@
   }
 
   // ---------- charts (return SVG strings; colors may be CSS vars) ----------
-  function lineSvg(opts) {
-    var dates = opts.dates, series = opts.series, vbW = opts.vbW || 720, vbH = opts.vbH || 240;
-    var padT = opts.padT || 12, padB = opts.padB || 28, area = opts.area;
-    var n = dates.length;
-    var all = []; series.forEach(function (s) { all = all.concat(s.data); });
-    var max = Math.max.apply(null, all.concat([1])) * 1.12;
-    var iH = vbH - padT - padB;
-    var X = function (i) { return n <= 1 ? 0 : i * vbW / (n - 1); };
-    var Y = function (v) { return padT + (1 - v / max) * iH; };
-    var grid = [0, .25, .5, .75, 1].map(function (f) {
-      var y = padT + (1 - f) * iH;
-      return '<line class="grid-line" x1="0" x2="' + vbW + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) + '" stroke-width="1"></line>'
-        + '<text class="grid-text" x="' + (vbW - 2) + '" y="' + (y - 3).toFixed(1) + '" text-anchor="end">' + fmt(max * f) + '</text>';
-    }).join("");
-    var areas = "", lines = "";
-    series.forEach(function (s) {
-      var pts = s.data.map(function (v, i) { return X(i).toFixed(1) + "," + Y(v).toFixed(1); }).join(" ");
-      if (area) {
-        var baseY = (padT + iH).toFixed(1);
-        areas += '<path d="M ' + X(0).toFixed(1) + "," + baseY + " L " + s.data.map(function (v, i) { return X(i).toFixed(1) + "," + Y(v).toFixed(1); }).join(" L ") + " L " + X(n - 1).toFixed(1) + "," + baseY + ' Z" fill="' + s.color + '" fill-opacity="0.13"></path>';
-      }
-      lines += '<polyline points="' + pts + '" fill="none" stroke="' + s.color + '" stroke-width="' + (s.w || 2.4) + '" stroke-linejoin="round" stroke-linecap="round"></polyline>';
-    });
-    var lc = Math.min(6, n), xl = "";
-    for (var k = 0; k < lc; k++) {
-      var i = Math.round(k * (n - 1) / (lc - 1 || 1));
-      xl += '<text class="grid-text" x="' + X(i).toFixed(1) + '" y="' + (vbH - 4) + '" text-anchor="middle">' + fmtDate(dates[i]) + "</text>";
-    }
-    return '<svg viewBox="0 0 ' + vbW + " " + vbH + '" width="100%">' + grid + areas + lines + xl + "</svg>";
-  }
-
   function donutSvg(segments, centerNum, centerLabel) {
     var r = 56, C = 2 * Math.PI * r;
     var total = segments.reduce(function (a, s) { return a + s.value; }, 0) || 1;
@@ -319,7 +288,7 @@
   window.KanSocial = app;
   window.KS = {
     fmt: fmt, fmtHtml: fmtHtml, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc, mdInline: mdInline,
-    fillIcon: fillIcon, strokeIcon: strokeIcon, lineSvg: lineSvg, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
+    fillIcon: fillIcon, strokeIcon: strokeIcon, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
     RANGE_LABEL: RANGE_LABEL, FILL: FILL
   };
 })();

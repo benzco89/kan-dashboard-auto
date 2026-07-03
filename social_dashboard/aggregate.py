@@ -322,17 +322,25 @@ def build_youtube(data, days):
     like_rates = [_num(v.get("like_rate")) for v in cur if _num(v.get("views")) > 0]
     avg_like = (sum(like_rates) / len(like_rates)) if like_rates else 0
 
+    # engagement rate - one definition across all platforms: interactions / views
+    total_views = sum(_num(v.get("views")) for v in cur)
+    total_inter = sum(_num(v.get("likes")) + _num(v.get("comments")) for v in cur)
+    avg_eng = (total_inter / total_views * 100) if total_views else 0
+
     videos = []
     for v in cur:
         views = _int(v.get("views"))
+        likes = _int(v.get("likes"))
+        comments = _int(v.get("comments"))
         videos.append({
             "title": v.get("title", ""),
             "date": (_parse_date(v.get("published_at")) or "").__str__() if v.get("published_at") else "",
             "type": "Short" if _yt_type(v.get("video_type")) == "Shorts" else "Video",
             "views": views,
-            "likes": _int(v.get("likes")),
-            "comments": _int(v.get("comments")),
+            "likes": likes,
+            "comments": comments,
             "like_rate": round(_num(v.get("like_rate")), 2),
+            "engagement": round((likes + comments) / views * 100, 1) if views else 0,
             "url": v.get("video_url", ""),
         })
     videos.sort(key=lambda x: x["views"], reverse=True)
@@ -351,6 +359,7 @@ def build_youtube(data, days):
         "summary": {
             "total": len(cur), "shorts": len(shorts), "regular": len(regular),
             "avg_like_rate": round(avg_like, 2),
+            "avg_engagement": round(avg_eng, 2),
         },
         "videos": videos,
     }
@@ -371,26 +380,34 @@ def build_facebook(data, days):
         types[t]["reach"] += _num(p.get("reach"))
         types[t]["count"] += 1
 
-    total_eng = sum(_num(p.get("total_engagement")) for p in cur)
+    # engagement rate - one definition across all platforms: interactions / views
+    # (interactions = likes + comments + shares; clicks excluded so FB is
+    # comparable to the other platforms)
+    total_views = sum(_num(p.get("views")) for p in cur)
     total_reach = sum(_num(p.get("reach")) for p in cur)
     total_shares = sum(_num(p.get("shares")) for p in cur)
-    avg_eng = (total_eng / total_reach * 100) if total_reach else 0
-    virality = (total_shares / total_reach * 100) if total_reach else 0
+    total_inter = sum(_num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("shares")) for p in cur)
+    avg_eng = (total_inter / total_views * 100) if total_views else 0
+    virality = (total_shares / total_views * 100) if total_views else 0
+    # reach comes only from Meta insights and has broken before (v25); when the
+    # whole column is zero the page should say so instead of drawing zeros
+    reach_ok = (not cur) or any(_num(p.get("reach")) > 0 for p in cur)
 
     posts = []
     for p in cur:
-        reach = _num(p.get("reach"))
+        views = _num(p.get("views"))
         likes = _int(p.get("likes"))
+        comments = _int(p.get("comments"))
         shares = _int(p.get("shares"))
         posts.append({
             "title": p.get("title", ""),
             "date": (_parse_date(p.get("date")) or "").__str__() if p.get("date") else "",
             "type": _fb_type(p.get("type")),
-            "views": _int(p.get("views")),
-            "reach": _int(reach),
+            "views": _int(views),
+            "reach": _int(p.get("reach")),
             "likes": likes,
             "shares": shares,
-            "engagement": round((likes + shares) / reach * 100, 1) if reach else 0,
+            "engagement": round((likes + comments + shares) / views * 100, 1) if views else 0,
             "url": p.get("permalink", ""),
         })
     posts.sort(key=lambda x: x["views"], reverse=True)
@@ -405,6 +422,7 @@ def build_facebook(data, days):
             "shares": _delta_pair(fb, "date", "shares", days),
         },
         "chart": {"dates": dates, "views": series["views"], "reach": series["reach"]},
+        "reach_ok": reach_ok,
         "types": [{"name": t, "reach": round(types[t]["reach"]), "count": types[t]["count"]} for t in type_order],
         "summary": {
             "total": len(cur),
@@ -434,28 +452,33 @@ def build_instagram(data, days):
     bar_start = end - timedelta(days=13)
     bar_dates, bar_series = _daily(ig, "date", ["saved", "shares"], bar_start, end)
 
-    total_inter = sum(_num(p.get("total_interactions")) for p in cur)
-    total_reach = sum(_num(p.get("reach")) for p in cur)
+    # engagement rate - one definition across all platforms: interactions / views
+    # (interactions = likes + comments + saves + shares, same set the overview sums)
+    total_views = sum(_num(p.get("views")) for p in cur)
     total_shares = sum(_num(p.get("shares")) for p in cur)
     total_saved = sum(_num(p.get("saved")) for p in cur)
-    avg_eng = (total_inter / total_reach * 100) if total_reach else 0
-    virality = (total_shares / total_reach * 100) if total_reach else 0
-    save_rate = (total_saved / total_reach * 100) if total_reach else 0
+    total_inter = sum(_num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("saved")) + _num(p.get("shares")) for p in cur)
+    avg_eng = (total_inter / total_views * 100) if total_views else 0
+    virality = (total_shares / total_views * 100) if total_views else 0
+    save_rate = (total_saved / total_views * 100) if total_views else 0
+    reach_ok = (not cur) or any(_num(p.get("reach")) > 0 for p in cur)
 
     posts = []
     for p in cur:
-        reach = _num(p.get("reach"))
+        views = _num(p.get("views"))
+        likes = _int(p.get("likes"))
+        comments = _int(p.get("comments"))
         saved = _int(p.get("saved"))
         shares = _int(p.get("shares"))
         posts.append({
             "title": p.get("caption", ""),
             "date": (_parse_date(p.get("date")) or "").__str__() if p.get("date") else "",
             "type": _ig_type(p.get("type")),
-            "views": _int(p.get("views")),
-            "reach": _int(reach),
+            "views": _int(views),
+            "reach": _int(p.get("reach")),
             "saved": saved,
             "shares": shares,
-            "engagement": round((saved + shares) / reach * 100, 1) if reach else 0,
+            "engagement": round((likes + comments + saved + shares) / views * 100, 1) if views else 0,
             "url": p.get("permalink", ""),
         })
     posts.sort(key=lambda x: x["views"], reverse=True)
@@ -470,6 +493,7 @@ def build_instagram(data, days):
             "shares": _delta_pair(ig, "date", "shares", days),
         },
         "chart": {"dates": dates, "views": series["views"], "reach": series["reach"]},
+        "reach_ok": reach_ok,
         "donut": {"reel": len(reel), "photo": len(photo), "carousel": len(carousel)},
         "bars": {"dates": bar_dates, "saved": bar_series["saved"], "shares": bar_series["shares"]},
         "summary": {

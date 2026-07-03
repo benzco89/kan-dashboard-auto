@@ -39,20 +39,28 @@
       kpi({ label: "שיתופים", value: k.shares.value, prev: k.shares.prev, icon: "share" })
     ].join("");
 
-    var chart = KS.chart({
-      dates: data.chart.dates, vbW: 700, vbH: 230,
-      series: [{ color: "var(--reach)", data: data.chart.reach, name: "חשיפה" }, { color: "var(--pf)", data: data.chart.views, name: "צפיות" }]
-    });
+    // when Meta stops returning reach (happened with the v25 metric removal),
+    // say so instead of drawing zeros
+    var reachOk = data.reach_ok !== false;
+    var chartSeries = reachOk
+      ? [{ color: "var(--reach)", data: data.chart.reach, name: "חשיפה" }, { color: "var(--pf)", data: data.chart.views, name: "צפיות" }]
+      : [{ color: "var(--pf)", data: data.chart.views, name: "צפיות" }];
+    var chart = KS.chart({ dates: data.chart.dates, vbW: 700, vbH: 230, series: chartSeries });
     var legend = '<div class="legend"><span><span class="dot" style="background:var(--pf);"></span>צפיות</span>' +
-      '<span><span class="dot" style="background:var(--reach);"></span>חשיפה</span></div>';
+      (reachOk ? '<span><span class="dot" style="background:var(--reach);"></span>חשיפה</span>' : '') + '</div>';
 
-    var shownTypes = data.types.filter(function (t) { return t.count > 0; });
-    var maxReach = Math.max.apply(null, shownTypes.map(function (t) { return t.reach; }).concat([1]));
-    var typebars = shownTypes.map(function (t) {
-      return '<div class="typebar"><div class="typebar-top"><span class="typebar-name">' + t.name +
-        '<span class="cnt">' + t.count + ' פוסטים</span></span><span class="typebar-val">' + KS.fmt(t.reach) + '</span></div>' +
-        '<span class="typebar-track"><span class="typebar-fill" style="width:' + Math.round(t.reach / maxReach * 100) + '%;background:' + (TYPE_COLOR[t.name] || "var(--muted)") + ';"></span></span></div>';
-    }).join("");
+    var typebars;
+    if (reachOk) {
+      var shownTypes = data.types.filter(function (t) { return t.count > 0; });
+      var maxReach = Math.max.apply(null, shownTypes.map(function (t) { return t.reach; }).concat([1]));
+      typebars = shownTypes.map(function (t) {
+        return '<div class="typebar"><div class="typebar-top"><span class="typebar-name">' + t.name +
+          '<span class="cnt">' + t.count + ' פוסטים</span></span><span class="typebar-val">' + KS.fmt(t.reach) + '</span></div>' +
+          '<span class="typebar-track"><span class="typebar-fill" style="width:' + Math.round(t.reach / maxReach * 100) + '%;background:' + (TYPE_COLOR[t.name] || "var(--muted)") + ';"></span></span></div>';
+      }).join("");
+    } else {
+      typebars = '<div style="padding:18px 0;color:var(--muted);font-size:13px;line-height:1.6;">נתוני חשיפה אינם מתקבלים כרגע מה-API של Meta.<br>שאר המדדים (צפיות, מעורבות) תקינים.</div>';
+    }
 
     var s = data.summary;
     var summary = [stat("" + s.total, "סה״כ פוסטים"), stat("" + s.reels, "Reels"), stat("" + s.images, "Images"), stat(s.virality.toFixed(2) + "%", "ויראליות"), stat(s.avg_engagement.toFixed(2) + "%", "ממוצע מעורבות")].join("");
@@ -114,7 +122,7 @@
       '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span>' +
       '<span><span class="sq" style="background:var(--hi-alt);"></span>חשיפה גבוהה</span></div></div></div>' +
-      thead + '<div id="tbl-body">' + rows + '</div></div>';
+      '<div class="table-scroll">' + thead + '<div id="tbl-body">' + rows + '</div></div></div>';
     KS.wireCharts();
     function wireShowAll() {
       var sa = document.getElementById("tbl-showall");

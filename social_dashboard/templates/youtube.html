@@ -49,10 +49,10 @@
       '<div class="donut-legend"><span class="sq" style="background:var(--muted);"></span><span class="name">סרטונים רגילים</span><span class="val">' + KS.fmt(data.donut.regular_views) + " · " + pct(data.donut.regular_views) + '</span></div>';
 
     var s = data.summary;
-    var summary = [stat("" + s.total, "סה״כ סרטונים"), stat("" + s.shorts, "Shorts"), stat("" + s.regular, "סרטונים רגילים"), stat(s.avg_like_rate.toFixed(2) + "%", "ממוצע לייקים")].join("");
+    var summary = [stat("" + s.total, "סה״כ סרטונים"), stat("" + s.shorts, "Shorts"), stat("" + s.regular, "סרטונים רגילים"), stat(s.avg_engagement.toFixed(2) + "%", "ממוצע מעורבות")].join("");
 
     var vids = data.videos;
-    vids.forEach(function (v) { v.eng = v.views > 0 ? (v.likes + v.comments) / v.views * 100 : 0; });
+    vids.forEach(function (v) { v.eng = v.engagement; });
     var meanV = vids.length ? vids.reduce(function (a, v) { return a + v.views; }, 0) / vids.length : 0;
     var meanE = vids.length ? vids.reduce(function (a, v) { return a + v.likes + v.comments; }, 0) / vids.length : 0;
     var cols = "40px 1fr 80px 92px 84px 84px 78px 86px";
@@ -113,7 +113,7 @@
       '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span>' +
       '<span><span class="sq" style="background:var(--hi-alt);"></span>מעורבות גבוהה</span></div></div></div>' +
-      thead + '<div id="tbl-body">' + rows + '</div></div>';
+      '<div class="table-scroll">' + thead + '<div id="tbl-body">' + rows + '</div></div></div>';
     KS.wireCharts();
     function wireShowAll() {
       var sa = document.getElementById("tbl-showall");

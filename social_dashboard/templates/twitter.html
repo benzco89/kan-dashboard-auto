@@ -91,7 +91,8 @@
         '<span class="cell strong">' + p.engagement.toFixed(1) + '%</span></a>';
     };
     var ENG_KEY = "engagement";
-    var sortState = { key: "views", dir: "desc" };
+    // ברירת מחדל אחידה עם שאר העמודים: דירוג לפי מעורבות
+    var sortState = { key: ENG_KEY, dir: "desc" };
     function cmpFn(a, b) {
       var key = sortState.key, dir = sortState.dir === "asc" ? 1 : -1;
       if (key === "type") return dir * String(a.type || "").localeCompare(String(b.type || ""));
@@ -128,7 +129,7 @@
       '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">' +
       '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span></div></div></div>' +
-      thead + '<div id="tbl-body">' + rows + '</div></div>';
+      '<div class="table-scroll">' + thead + '<div id="tbl-body">' + rows + '</div></div></div>';
     KS.wireCharts();
     function wireShowAll() {
       var sa = document.getElementById("tbl-showall");
