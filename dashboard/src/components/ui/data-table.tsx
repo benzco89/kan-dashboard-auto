@@ -27,6 +27,20 @@ interface DataTableProps<T> {
   searchPlaceholder?: string;
   exportable?: boolean;
   exportFileName?: string;
+  /** Show a leading "#" rank column reflecting the current sort order */
+  showRank?: boolean;
+  /** Column key the table is sorted by on first render */
+  defaultSortKey?: string;
+  /** Direction the table is sorted by on first render (defaults to "desc") */
+  defaultSortDirection?: SortDirection;
+  /** Show a best/worst toggle that ranks by `rankKey` */
+  rankToggle?: boolean;
+  /** Column key the best/worst toggle sorts by */
+  rankKey?: string;
+  /** Label for the "best first" toggle option */
+  rankDescLabel?: string;
+  /** Label for the "worst first" toggle option */
+  rankAscLabel?: string;
 }
 
 const highlightColors = {
@@ -46,9 +60,18 @@ export function DataTable<T extends Record<string, any>>({
   searchPlaceholder = "חיפוש...",
   exportable = false,
   exportFileName = "data",
+  showRank = false,
+  defaultSortKey,
+  defaultSortDirection,
+  rankToggle = false,
+  rankKey,
+  rankDescLabel = "מצליחים ביותר",
+  rankAscLabel = "פחות מצליחים",
 }: DataTableProps<T>) {
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [sortKey, setSortKey] = useState<string | null>(defaultSortKey ?? null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    defaultSortKey ? defaultSortDirection ?? "desc" : null
+  );
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -149,6 +172,15 @@ export function DataTable<T extends Record<string, any>>({
     URL.revokeObjectURL(url);
   };
 
+  // Best/worst ranking toggle: sort by the success metric in a given direction
+  const setRanking = (dir: "desc" | "asc") => {
+    if (!rankKey) return;
+    setSortKey(rankKey);
+    setSortDirection(dir);
+    setCurrentPage(1);
+  };
+  const rankActive = rankKey && sortKey === rankKey ? sortDirection : null;
+
   const handleSort = (key: string) => {
     if (sortKey === key) {
       if (sortDirection === "desc") {
@@ -181,30 +213,58 @@ export function DataTable<T extends Record<string, any>>({
 
   return (
     <div className="space-y-4">
-      {/* Toolbar: Search + Export */}
-      {(searchable || exportable) && (
+      {/* Toolbar: Search + Ranking toggle + Export */}
+      {(searchable || exportable || (rankToggle && rankKey)) && (
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          {/* Search Input */}
-          {searchable && (
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                placeholder={searchPlaceholder}
-                className="w-full sm:w-72 h-9 pr-10 pl-8 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-              {searchQuery && (
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Search Input */}
+            {searchable && (
+              <div className="relative">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="w-full sm:w-72 h-9 pr-10 pl-8 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => handleSearch("")}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Best / worst ranking toggle */}
+            {rankToggle && rankKey && (
+              <div className="inline-flex h-9 rounded-md border overflow-hidden text-sm shrink-0">
                 <button
-                  onClick={() => handleSearch("")}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setRanking("desc")}
+                  className={`px-3 transition-colors ${
+                    rankActive === "desc"
+                      ? "bg-primary text-white"
+                      : "bg-background hover:bg-muted text-muted-foreground"
+                  }`}
                 >
-                  <X className="w-4 h-4" />
+                  {rankDescLabel}
                 </button>
-              )}
-            </div>
-          )}
+                <button
+                  onClick={() => setRanking("asc")}
+                  className={`px-3 border-r transition-colors ${
+                    rankActive === "asc"
+                      ? "bg-primary text-white"
+                      : "bg-background hover:bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {rankAscLabel}
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Export Button */}
           {exportable && (
@@ -225,6 +285,11 @@ export function DataTable<T extends Record<string, any>>({
         <table className="w-full text-sm text-foreground">
           <thead>
             <tr className="border-b">
+              {showRank && (
+                <th className="py-3 px-2 w-10 font-medium text-muted-foreground text-center select-none">
+                  #
+                </th>
+              )}
               {columns.map((column) => (
                 <th
                   key={String(column.key)}
@@ -252,6 +317,7 @@ export function DataTable<T extends Record<string, any>>({
             {paginatedData.map((item, index) => {
               const highlight = getRowHighlight?.(item);
               const url = getRowUrl?.(item);
+              const rank = startIndex + index + 1;
 
               return (
                 <tr
@@ -260,6 +326,17 @@ export function DataTable<T extends Record<string, any>>({
                     highlight ? highlightColors[highlight] : "hover:bg-muted/50"
                   }`}
                 >
+                  {showRank && (
+                    <td className="py-3 px-2 text-center">
+                      <span
+                        className={`tabular-nums text-sm font-semibold ${
+                          rank <= 3 ? "text-primary" : "text-muted-foreground"
+                        }`}
+                      >
+                        {rank}
+                      </span>
+                    </td>
+                  )}
                   {columns.map((column, colIndex) => (
                     <td
                       key={String(column.key)}

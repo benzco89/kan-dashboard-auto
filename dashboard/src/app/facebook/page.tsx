@@ -11,6 +11,7 @@ import { formatCompactNumber, formatRelativeTime } from "@/lib/utils";
 import {
   AreaChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -41,6 +42,12 @@ interface FacebookData {
   stats: FacebookStats;
   prevStats: FacebookStats | null;
   performanceData: Array<{
+    date: string;
+    views: number;
+    reach: number;
+    engagement: number;
+  }>;
+  prevPerformanceData: Array<{
     date: string;
     views: number;
     reach: number;
@@ -98,13 +105,17 @@ function FacebookContent() {
     fetchData();
   }, [dateRange]);
 
-  const formattedPerformanceData = (data?.performanceData || []).map((d) => ({
-    ...d,
-    date: new Date(d.date).toLocaleDateString("he-IL", {
-      day: "2-digit",
-      month: "2-digit",
-    }),
-  }));
+  const formattedPerformanceData = (data?.performanceData || []).map((d, index) => {
+    const prevData = data?.prevPerformanceData?.[index];
+    return {
+      ...d,
+      date: new Date(d.date).toLocaleDateString("he-IL", {
+        day: "2-digit",
+        month: "2-digit",
+      }),
+      prevViews: prevData?.views ?? null,
+    };
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -235,15 +246,29 @@ function FacebookContent() {
                         <Tooltip
                           content={({ active, payload, label }) => {
                             if (!active || !payload) return null;
+                            const viewsEntry = payload.find(p => p.dataKey === 'views');
+                            const reachEntry = payload.find(p => p.dataKey === 'reach');
+                            const prevViewsEntry = payload.find(p => p.dataKey === 'prevViews');
                             return (
                               <div className="rounded-lg border bg-white dark:bg-gray-800 p-3 shadow-lg">
                                 <p className="font-bold text-sm mb-2">{label}</p>
-                                {payload.map((entry: any, index: number) => (
-                                  <p key={index} className="text-sm">
-                                    <span style={{ color: entry.color }}>{entry.name}:</span>{" "}
-                                    <span className="font-bold">{formatCompactNumber(entry.value)}</span>
+                                {viewsEntry && (
+                                  <p className="text-sm">
+                                    <span style={{ color: viewsEntry.color }}>צפיות:</span>{" "}
+                                    <span className="font-bold">{formatCompactNumber(viewsEntry.value as number)}</span>
                                   </p>
-                                ))}
+                                )}
+                                {reachEntry && (
+                                  <p className="text-sm">
+                                    <span style={{ color: reachEntry.color }}>חשיפה:</span>{" "}
+                                    <span className="font-bold">{formatCompactNumber(reachEntry.value as number)}</span>
+                                  </p>
+                                )}
+                                {prevViewsEntry?.value != null && (
+                                  <p className="text-sm text-gray-400">
+                                    תקופה קודמת (צפיות): {formatCompactNumber(prevViewsEntry.value as number)}
+                                  </p>
+                                )}
                               </div>
                             );
                           }}
@@ -251,8 +276,21 @@ function FacebookContent() {
                         <Legend
                           verticalAlign="top"
                           height={36}
-                          formatter={(value: string) => (
-                            <span className="text-sm">{value}</span>
+                          content={() => (
+                            <div className="flex justify-center gap-4 text-sm mb-2">
+                              <span className="flex items-center gap-1">
+                                <span className="w-3 h-0.5 bg-[#1877F2]"></span>
+                                צפיות
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-3 h-0.5 bg-[#42B72A]"></span>
+                                חשיפה
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-3 h-0.5 bg-gray-400" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #9CA3AF 0, #9CA3AF 3px, transparent 3px, transparent 6px)' }}></span>
+                                תקופה קודמת
+                              </span>
+                            </div>
                           )}
                         />
                         <Area
@@ -270,6 +308,16 @@ function FacebookContent() {
                           stroke="#42B72A"
                           strokeWidth={2}
                           fill="url(#colorFbReach)"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="prevViews"
+                          name="תקופה קודמת"
+                          stroke="#9CA3AF"
+                          strokeWidth={1.5}
+                          strokeDasharray="5 5"
+                          dot={false}
+                          connectNulls
                         />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -389,6 +437,11 @@ function FacebookContent() {
                   searchPlaceholder="חיפוש לפי כותרת..."
                   exportable={true}
                   exportFileName="facebook_posts"
+                  showRank={true}
+                  rankToggle={true}
+                  rankKey="engagementRate"
+                  defaultSortKey="engagementRate"
+                  defaultSortDirection="desc"
                   columns={[
                     {
                       key: "title",

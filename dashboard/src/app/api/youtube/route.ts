@@ -38,6 +38,7 @@ export async function GET(request: Request) {
 
     // Get performance over time
     const performanceData = getYouTubePerformanceData(filteredYouTube);
+    const prevPerformanceData = getYouTubePerformanceData(prevYouTube);
 
     // Get video type breakdown (Shorts vs Regular)
     const videoTypeBreakdown = getVideoTypeBreakdown(filteredYouTube);
@@ -69,6 +70,7 @@ export async function GET(request: Request) {
         stats,
         prevStats,
         performanceData,
+        prevPerformanceData,
         videoTypeBreakdown,
         likeRateData,
         videos,

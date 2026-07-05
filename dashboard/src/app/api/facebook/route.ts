@@ -38,6 +38,7 @@ export async function GET(request: Request) {
 
     // Get performance over time (views + reach)
     const performanceData = getFacebookPerformanceData(filteredFacebook);
+    const prevPerformanceData = getFacebookPerformanceData(prevFacebook);
 
     // Get post type breakdown
     const postTypeBreakdown = getPostTypeBreakdown(filteredFacebook);
@@ -64,6 +65,7 @@ export async function GET(request: Request) {
         stats,
         prevStats,
         performanceData,
+        prevPerformanceData,
         postTypeBreakdown,
         posts,
         lastUpdated: new Date().toISOString(),

@@ -38,6 +38,7 @@ export async function GET(request: Request) {
 
     // Get performance over time (views + reach)
     const performanceData = getInstagramPerformanceData(filteredInstagram);
+    const prevPerformanceData = getInstagramPerformanceData(prevInstagram);
 
     // Get post type breakdown
     const postTypeBreakdown = getPostTypeBreakdown(filteredInstagram);
@@ -69,6 +70,7 @@ export async function GET(request: Request) {
         stats,
         prevStats,
         performanceData,
+        prevPerformanceData,
         postTypeBreakdown,
         engagementComparison,
         posts,
