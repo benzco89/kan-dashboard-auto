@@ -37,3 +37,16 @@ tmpclaude-*
 
 # Node.js
 node_modules/
+
+# Local analysis artifacts & ad-hoc reports (kept locally, not committed).
+# These are personal working files, not part of the pipeline. To track one
+# anyway: `git add -f <file>`.
+/analyze_weak_content.py
+/ig_post_deepdive.py
+/ig_post_card_sample.html
+/cb_toppages_*.csv
+/war_report*.html
+/war_report*.md
+/reports/
+/*.docx
+mintty.*.png
