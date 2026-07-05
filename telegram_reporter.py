@@ -419,31 +419,34 @@ def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagr
 
 
 def extract_cross_platform_insights(report_text):
-    """חילוץ קטע התובנות החוצות מהדוח"""
-    # מחפש את הקטע של התובנות החוצות
-    markers = ["🔥 3 תובנות חוצות פלטפורמות", "🔥 תובנות חוצות פלטפורמות"]
-    
-    for marker in markers:
-        if marker in report_text:
-            start_idx = report_text.index(marker)
-            # לוקח מהסימן עד הסוף (התובנות בדרך כלל בסוף הדוח)
-            insights_section = report_text[start_idx:]
-            
-            # מסיר את הכותרת ואת קו ההפרדה
-            lines = insights_section.split('\n')
-            clean_lines = []
-            skip_next_separator = True
-            
-            for line in lines[1:]:  # דולג על הכותרת
-                if skip_next_separator and '━' in line:
-                    skip_next_separator = False
-                    continue
-                if line.strip():
-                    clean_lines.append(line.strip())
-            
-            return '\n'.join(clean_lines[:10])  # מקסימום 10 שורות
-    
-    return ""
+    """חילוץ קטע התובנות החוצות מהדוח.
+
+    הכותרת מיוצרת ע"י Gemini ולכן הניסוח המדויק זז מיום ליום (אימוג'י,
+    המספר "3", רווחים, מקף). התאמה מדויקת של מחרוזת קבועה נשברה בשקט והפסיקה
+    לשמור תובנות לגיליון. לכן מזהים את שורת הכותרת לפי הליבה "תובנות חוצות"
+    בלבד — סובלני לניסוח — ומשם ממשיכים כרגיל.
+    """
+    lines = report_text.split('\n')
+
+    # איתור שורת הכותרת של קטע התובנות החוצות (סובלני לניסוח)
+    header_idx = next(
+        (i for i, line in enumerate(lines) if 'תובנות חוצות' in line),
+        None,
+    )
+    if header_idx is None:
+        return ""
+
+    # מסיר את הכותרת ואת קו ההפרדה שאחריה
+    clean_lines = []
+    skip_next_separator = True
+    for line in lines[header_idx + 1:]:  # דולג על הכותרת
+        if skip_next_separator and '━' in line:
+            skip_next_separator = False
+            continue
+        if line.strip():
+            clean_lines.append(line.strip())
+
+    return '\n'.join(clean_lines[:10])  # מקסימום 10 שורות
 
 
 def save_daily_insights_to_sheets(report_text, report_date):

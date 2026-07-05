@@ -176,17 +176,12 @@ def get_reel_v25_metrics(media_id):
     קריאה נפרדת ממדדי הבסיס כדי שכשל כאן לא יאפס את המדדים הוותיקים.
     """
     result = {'skip_rate': 0, 'fb_views': 0, 'total_views': 0, 'reposts': 0}
+    # שם המדד ב-Graph -> המפתח שלנו
+    metrics = ('reels_skip_rate', 'crossposted_views', 'facebook_views', 'reposts')
     url = f"https://graph.facebook.com/{API_VERSION}/{media_id}/insights"
-    params = {
-        'access_token': ACCESS_TOKEN,
-        'metric': 'reels_skip_rate,crossposted_views,facebook_views,reposts',
-    }
-    try:
-        res = http_get_json(url, params=params, timeout=15, max_retries=2)
-        if 'error' in res:
-            print(f"⚠️ v25 reel insights error for {media_id}: {res['error'].get('message', '')[:120]}")
-            return result
-        for item in res.get('data', []):
+
+    def _apply(data):
+        for item in data:
             name = item.get('name')
             values = item.get('values', [])
             v = values[0].get('value', 0) if values else 0
@@ -198,8 +193,37 @@ def get_reel_v25_metrics(media_id):
                 result['total_views'] = v or 0
             elif name == 'reposts':
                 result['reposts'] = v or 0
+
+    # מסלול מהיר: קריאה אחת לכל המדדים.
+    try:
+        res = http_get_json(url, params={
+            'access_token': ACCESS_TOKEN,
+            'metric': ','.join(metrics),
+        }, timeout=15, max_retries=2)
+        if 'error' not in res:
+            _apply(res.get('data', []))
+            return result
+        # Graph מפיל את כל הבקשה אם מדד אחד לא נתמך לריל הזה (למשל
+        # facebook_views/crossposted_views לריל שלא עבר crosspost לפייסבוק).
+        # במקום לאבד את כל הארבעה — נמשוך כל מדד בנפרד ונשמור מה שכן חזר.
+        print(f"ℹ️ v25 combined call failed for {media_id} "
+              f"({res['error'].get('message', '')[:80]}); per-metric fallback")
     except Exception as e:
+        # כשל טרנזיאנטי (רשת/5xx אחרי retries) — משאירים אפסים, לא מאפסים בסיס.
         print(f"⚠️ Error fetching v25 reel insights for {media_id}: {e}")
+        return result
+
+    # מסלול נסיגה: מדד-מדד. כשל באחד לא מפיל את השאר. רק ~מעט רילים מגיעים לכאן.
+    for metric in metrics:
+        try:
+            res = http_get_json(url, params={
+                'access_token': ACCESS_TOKEN,
+                'metric': metric,
+            }, timeout=15, max_retries=2)
+            if 'error' not in res:
+                _apply(res.get('data', []))
+        except Exception:
+            continue
     return result
 
 
