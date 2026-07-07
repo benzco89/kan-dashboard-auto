@@ -80,7 +80,7 @@
       var rankStyle = rank <= 3 ? "color:var(--pf);font-weight:700;" : "color:var(--faint);";
       var hlV = p.views > 2 * meanV;
       var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : "";
-      return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
+      return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" data-idx="' + idx + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
         '<span class="cell" style="' + rankStyle + '">' + rank + '</span>' +
         '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + '</span><span class="t-date">' + KS.fmtDate(p.date) + '</span></span>' +
         '<span class="center"><span class="tag" style="color:' + (TYPE_COLOR[p.type] || "var(--muted)") + ';">' + (TYPE_HE[p.type] || p.type) + '</span></span>' +
@@ -93,12 +93,41 @@
     var ENG_KEY = "engagement";
     // ברירת מחדל אחידה עם שאר העמודים: דירוג לפי מעורבות
     var sortState = { key: ENG_KEY, dir: "desc" };
+    var displayList = [];
+
+    function medOf(key) {
+      var xs = posts.map(function (x) { return Number(x[key]) || 0; }).filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
+      if (!xs.length) return 0;
+      var m = Math.floor(xs.length / 2);
+      return xs.length % 2 ? xs[m] : (xs[m - 1] + xs[m]) / 2;
+    }
+    function openPostModal(p) {
+      var mv = medOf("views");
+      var hero = '<div class="km-hero">' +
+        '<div><div class="v">' + KS.fmtHtml(p.views) + '</div><div class="l">צפיות</div></div>' +
+        '<div><div class="v">' + KS.fmtHtml(p.likes) + '</div><div class="l">לייקים</div></div>' +
+        '<div><div class="v">' + p.engagement.toFixed(1) + '%</div><div class="l">מעורבות</div></div></div>';
+      var inter = KS.kmSection("אינטראקציות") + '<div class="km-grid">' +
+        KS.kmCell("ריטוויטים", KS.fmtHtml(p.retweets)) +
+        KS.kmCell("ציטוטים", KS.fmtHtml(p.quotes)) +
+        KS.kmCell("תגובות", KS.fmtHtml(p.replies)) +
+        KS.kmCell("סימניות", KS.fmtHtml(p.bookmarks)) +
+        (p.total_engagement ? KS.kmCell("סה״כ מעורבות", KS.fmtHtml(p.total_engagement)) : "") + '</div>';
+      var cmp = mv ? (KS.kmSection("ביחס לטיפוסי בחשבון") + '<div class="km-cmp">' + KS.kmCmp("צפיות מול חציון", p.views / mv) + '</div>') : "";
+      var openBtn = p.url ? '<a class="km-open" href="' + KS.esc(p.url) + '" target="_blank" rel="noopener">פתח ב-X ↗</a>' : "";
+      KS.openModal({
+        iconHtml: KS.fillIcon("x", "#fff", 17), iconBg: "#000",
+        type: "X · " + (TYPE_HE[p.type] || p.type), title: p.title || "(ללא טקסט)", date: KS.fmtFullDate(p.date),
+        bodyHtml: hero + inter + cmp + openBtn
+      });
+    }
     function cmpFn(a, b) {
       var key = sortState.key, dir = sortState.dir === "asc" ? 1 : -1;
       if (key === "type") return dir * String(a.type || "").localeCompare(String(b.type || ""));
       return dir * ((Number(a[key]) || 0) - (Number(b[key]) || 0));
     }
     function buildRows(list) {
+      displayList = list;
       if (!list.length) return '<div style="padding:24px;text-align:center;color:var(--muted);">אין ציוצים בטווח שנבחר</div>';
       var html = list.slice(0, LIMIT).map(function (p, i) { return rowOf(p, i); }).join("");
       if (list.length > LIMIT) html += '<div id="tbl-more" style="display:none">' + list.slice(LIMIT).map(function (p, i) { return rowOf(p, i + LIMIT); }).join("") + '</div><button id="tbl-showall" class="showall-btn">הצג את כל ' + list.length + ' הציוצים ↓</button>';
@@ -125,7 +154,7 @@
       '<div class="grid-5 mb-m">' + summary + '</div>' +
 
       '<div class="table"><div class="table-head"><div><div class="panel-title">ציוצים מדורגים</div>' +
-      '<div class="panel-sub">' + data.summary.total + ' ציוצים · ' + rl + '</div></div>' +
+      '<div class="panel-sub">' + data.summary.total + ' ציוצים · ' + rl + ' · לחצו על ציוץ לפירוט מלא</div></div>' +
       '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">' +
       '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span></div></div></div>' +
@@ -137,6 +166,13 @@
     }
     wireShowAll();
     var tblBody = document.getElementById("tbl-body");
+    tblBody.addEventListener("click", function (e) {
+      var row = e.target.closest(".trow"); if (!row) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+      e.preventDefault();
+      var idx = parseInt(row.getAttribute("data-idx"), 10);
+      if (!isNaN(idx) && displayList[idx]) openPostModal(displayList[idx]);
+    });
     function renderBody() { tblBody.innerHTML = buildRows(posts.slice().sort(cmpFn)); wireShowAll(); }
     function refreshHeader() {
       document.querySelectorAll("#thead [data-sk]").forEach(function (h) {

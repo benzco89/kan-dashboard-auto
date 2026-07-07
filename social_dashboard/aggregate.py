@@ -357,6 +357,11 @@ def build_youtube(data, days):
             "like_rate": round(_num(v.get("like_rate")), 2),
             "engagement": round((likes + comments) / views * 100, 1) if views else 0,
             "url": v.get("video_url", ""),
+            # extra depth for the drill-down card
+            "comment_rate": round(_num(v.get("comment_rate")), 2),
+            "duration": v.get("duration_formatted", "") or "",
+            "views_delta": _int(v.get("views_delta")),
+            "thumb": v.get("thumbnail_url", "") or "",
         })
     videos.sort(key=lambda x: x["views"], reverse=True)
 
@@ -424,6 +429,20 @@ def build_facebook(data, days):
             "shares": shares,
             "engagement": round((likes + comments + shares) / views * 100, 1) if views else 0,
             "url": p.get("permalink", ""),
+            # extra depth for the drill-down card. `likes` is TOTAL reactions;
+            # the breakdown columns are the non-like reactions (love/haha/...),
+            # so thumbs-up = likes - sum(breakdown). Breakdown is only collected
+            # since 2026-07-05, so the modal hides it when the sum is zero.
+            "comments": comments,
+            "love": _int(p.get("love")),
+            "haha": _int(p.get("haha")),
+            "wow": _int(p.get("wow")),
+            "sad": _int(p.get("sad")),
+            "angry": _int(p.get("angry")),
+            "clicks": _int(p.get("clicks")),
+            "avg_watch": round(_num(p.get("avg_watch_sec")), 1),
+            "total_watch_min": _int(p.get("total_watch_min")),
+            "share_rate": round(shares / views * 100, 2) if views else 0,
         })
     posts.sort(key=lambda x: x["views"], reverse=True)
 
@@ -491,6 +510,7 @@ def build_instagram(data, days):
         comments = _int(p.get("comments"))
         saved = _int(p.get("saved"))
         shares = _int(p.get("shares"))
+        fb_v = _num(p.get("fb_views"))
         posts.append({
             "title": p.get("caption", ""),
             "date": (_parse_date(p.get("date")) or "").__str__() if p.get("date") else "",
@@ -502,6 +522,17 @@ def build_instagram(data, days):
             "skip_rate": round(_num(p.get("skip_rate")), 1),
             "engagement": round((likes + comments + saved + shares) / views * 100, 1) if views else 0,
             "url": p.get("permalink", ""),
+            # extra depth for the drill-down card (collected but not shown in the table)
+            "likes": likes,
+            "comments": comments,
+            "reposts": _int(p.get("reposts")),
+            "total_interactions": _int(p.get("total_interactions")) or (likes + comments + saved + shares),
+            "avg_watch": round(_num(p.get("avg_watch_sec")), 1),
+            "fb_views": _int(fb_v),
+            "total_views": _int(p.get("total_views")),
+            "save_rate": round(saved / views * 100, 2) if views else 0,
+            "share_rate": round(shares / views * 100, 2) if views else 0,
+            "fb_share": round(fb_v / (views + fb_v) * 100, 1) if (views + fb_v) else 0,
         })
     posts.sort(key=lambda x: x["views"], reverse=True)
 
@@ -573,6 +604,10 @@ def build_twitter(data, days):
             "replies": replies,
             "engagement": round(eng, 1),
             "url": p.get("permalink", ""),
+            # extra depth for the drill-down card
+            "quotes": quotes,
+            "bookmarks": _int(p.get("bookmarks")),
+            "total_engagement": _int(p.get("total_engagement")),
         })
     posts.sort(key=lambda x: x["views"], reverse=True)
 

@@ -187,6 +187,48 @@
     });
   }
 
+  // ---------- drill-down modal (shared chrome; pages supply the body) ----------
+  var _modalEl = null;
+  function closeModal() {
+    if (_modalEl) { _modalEl.remove(); _modalEl = null; document.removeEventListener("keydown", _modalKey); }
+  }
+  function _modalKey(e) { if (e.key === "Escape") closeModal(); }
+  function openModal(opts) {
+    closeModal();
+    var head =
+      '<div class="kmodal-head">' +
+        (opts.iconHtml ? '<span class="km-plat" style="background:' + (opts.iconBg || "var(--chip)") + ';">' + opts.iconHtml + "</span>" : "") +
+        '<div class="km-head-txt">' +
+          (opts.type ? '<div class="km-type">' + esc(opts.type) + "</div>" : "") +
+          '<div class="km-title">' + esc(opts.title || "") + "</div>" +
+          (opts.date ? '<div class="km-date">' + esc(opts.date) + "</div>" : "") +
+        "</div>" +
+        '<button class="kmodal-close" title="סגור" aria-label="סגור">✕</button>' +
+      "</div>";
+    var el = document.createElement("div");
+    el.className = "kmodal-backdrop";
+    el.innerHTML = '<div class="kmodal">' + head + '<div class="kmodal-body">' + (opts.bodyHtml || "") + "</div></div>";
+    el.addEventListener("click", function (e) { if (e.target === el) closeModal(); });
+    el.querySelector(".kmodal-close").addEventListener("click", closeModal);
+    document.body.appendChild(el);
+    document.addEventListener("keydown", _modalKey);
+    _modalEl = el;
+    return el;
+  }
+  // small builders so the platform pages stay tidy
+  function kmCell(label, valueHtml, unit) {
+    return '<div class="km-cell"><div class="l">' + esc(label) + '</div><div class="v">' + valueHtml +
+      (unit ? ' <span class="unit">' + esc(unit) + "</span>" : "") + "</div></div>";
+  }
+  function kmSection(label) { return '<div class="km-seclabel">' + esc(label) + "</div>"; }
+  function kmCmp(label, ratio) {
+    // ratio >= 1 shown as "×N", colored by whether higher is good (up) — caller
+    // passes the sign via a leading "-" on label is avoided; we just color up/down by >=1
+    var up = ratio >= 1;
+    return '<span class="km-chip"><span class="l">' + esc(label) + '</span><span class="r ' + (up ? "up" : "down") +
+      '">×' + ratio.toFixed(1) + "</span></span>";
+  }
+
   // ---------- theme + state ----------
   function getTheme() { try { return localStorage.getItem("pm_theme") || "dark"; } catch (e) { return "dark"; } }
   function setTheme(t) { try { localStorage.setItem("pm_theme", t); } catch (e) {} document.documentElement.setAttribute("data-theme", t); }
@@ -290,6 +332,7 @@
   window.KS = {
     fmt: fmt, fmtHtml: fmtHtml, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc, mdInline: mdInline,
     fillIcon: fillIcon, strokeIcon: strokeIcon, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
+    openModal: openModal, closeModal: closeModal, kmCell: kmCell, kmSection: kmSection, kmCmp: kmCmp,
     RANGE_LABEL: RANGE_LABEL, FILL: FILL
   };
 })();

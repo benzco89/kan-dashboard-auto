@@ -92,7 +92,7 @@
       var rankStyle = rank <= 3 ? "color:var(--pf);font-weight:700;" : "color:var(--faint);";
       var hlV = p.views > 2 * meanV, hlR = !hlV && p.reach > 2 * meanR;
       var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : (hlR ? "border-inline-start-color:var(--hi-alt);background:var(--hi-alt-bg);" : "");
-      return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
+      return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" data-idx="' + idx + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
         '<span class="cell" style="' + rankStyle + '">' + rank + '</span>' +
         '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + '</span><span class="t-date">' + KS.fmtDate(p.date) + '</span></span>' +
         '<span class="center"><span class="tag" style="color:' + (TYPE_COLOR[p.type] || "var(--muted)") + ';">' + p.type + '</span></span>' +
@@ -105,12 +105,57 @@
     };
     var ENG_KEY = "engagement";
     var sortState = { key: ENG_KEY, dir: "desc" };
+    var displayList = [];
+
+    // median of a field across the loaded posts, for the "vs typical" context
+    function medOf(key) {
+      var xs = posts.map(function (x) { return Number(x[key]) || 0; }).filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
+      if (!xs.length) return 0;
+      var m = Math.floor(xs.length / 2);
+      return xs.length % 2 ? xs[m] : (xs[m - 1] + xs[m]) / 2;
+    }
+    function openPostModal(p) {
+      var mv = medOf("views"), msr = medOf("save_rate");
+      var hero = '<div class="km-hero">' +
+        '<div><div class="v">' + KS.fmtHtml(p.views) + '</div><div class="l">צפיות</div></div>' +
+        '<div><div class="v">' + KS.fmtHtml(p.reach) + '</div><div class="l">חשיפה</div></div>' +
+        '<div><div class="v">' + p.engagement.toFixed(1) + '%</div><div class="l">מעורבות</div></div></div>';
+      var inter = KS.kmSection("אינטראקציות") + '<div class="km-grid">' +
+        KS.kmCell("לייקים", KS.fmtHtml(p.likes)) +
+        KS.kmCell("תגובות", KS.fmtHtml(p.comments)) +
+        KS.kmCell("שמירות", KS.fmtHtml(p.saved)) +
+        KS.kmCell("שיתופים", KS.fmtHtml(p.shares)) +
+        (p.reposts ? KS.kmCell("שיתופים חוזרים", KS.fmtHtml(p.reposts)) : "") +
+        KS.kmCell("סה״כ אינטראקציות", KS.fmtHtml(p.total_interactions)) + '</div>';
+      var rates = KS.kmSection("שיעורים") + '<div class="km-grid">' +
+        KS.kmCell("שיעור שמירה", p.save_rate.toFixed(2) + "%") +
+        KS.kmCell("שיעור שיתוף", p.share_rate.toFixed(2) + "%") +
+        (p.skip_rate ? KS.kmCell("Skip% (הוק)", p.skip_rate.toFixed(1) + "%") : "") +
+        (p.avg_watch ? KS.kmCell("צפייה ממוצעת", p.avg_watch.toFixed(1), "שנ׳") : "") + '</div>';
+      var cross = (p.fb_views || p.total_views) ? (KS.kmSection("קרוספוסט לפייסבוק") + '<div class="km-grid">' +
+        KS.kmCell("צפיות בפייסבוק", KS.fmtHtml(p.fb_views)) +
+        KS.kmCell("צפיות כולל (IG+FB)", KS.fmtHtml(p.total_views || (p.views + p.fb_views))) +
+        KS.kmCell("% צפיות מפייסבוק", p.fb_share.toFixed(1) + "%") + '</div>') : "";
+      var cmp = (mv || msr) ? (KS.kmSection("ביחס לטיפוסי בפלטפורמה") + '<div class="km-cmp">' +
+        (mv ? KS.kmCmp("צפיות מול חציון", p.views / mv) : "") +
+        (msr && p.save_rate ? KS.kmCmp("שמירה מול חציון", p.save_rate / msr) : "") + '</div>') : "";
+      var openBtn = p.url ? '<a class="km-open" href="' + KS.esc(p.url) + '" target="_blank" rel="noopener">פתח באינסטגרם ↗</a>' : "";
+      KS.openModal({
+        iconHtml: KS.fillIcon("ig", "#fff", 19),
+        iconBg: "linear-gradient(135deg,#feda75,#d62976 45%,#962fbf 80%)",
+        type: "Instagram · " + p.type,
+        title: p.title || "(ללא כותרת)",
+        date: KS.fmtFullDate(p.date),
+        bodyHtml: hero + inter + rates + cross + cmp + openBtn
+      });
+    }
     function cmpFn(a, b) {
       var k = sortState.key, dir = sortState.dir === "asc" ? 1 : -1;
       if (k === "type") return dir * String(a.type || "").localeCompare(String(b.type || ""));
       return dir * ((Number(a[k]) || 0) - (Number(b[k]) || 0));
     }
     function buildRows(list) {
+      displayList = list;
       if (!list.length) return '<div style="padding:24px;text-align:center;color:var(--muted);">אין פוסטים בטווח שנבחר</div>';
       var html = list.slice(0, LIMIT).map(function (p, i) { return rowOf(p, i); }).join("");
       if (list.length > LIMIT) html += '<div id="tbl-more" style="display:none">' + list.slice(LIMIT).map(function (p, i) { return rowOf(p, i + LIMIT); }).join("") + '</div><button id="tbl-showall" class="showall-btn">הצג את כל ' + list.length + ' הפוסטים ↓</button>';
@@ -137,7 +182,7 @@
       '<div class="grid-4 mb-m">' + summary + '</div>' +
 
       '<div class="table"><div class="table-head"><div><div class="panel-title">פוסטים מדורגים לפי מעורבות</div>' +
-      '<div class="panel-sub">' + data.summary.total + ' פוסטים · ' + rl + '</div></div>' +
+      '<div class="panel-sub">' + data.summary.total + ' פוסטים · ' + rl + ' · לחצו על פוסט לפירוט מלא</div></div>' +
       '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">' +
       '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span>' +
@@ -150,6 +195,14 @@
     }
     wireShowAll();
     var tblBody = document.getElementById("tbl-body");
+    // click a row -> full drill-down card; modifier/middle click still opens the post
+    tblBody.addEventListener("click", function (e) {
+      var row = e.target.closest(".trow"); if (!row) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+      e.preventDefault();
+      var idx = parseInt(row.getAttribute("data-idx"), 10);
+      if (!isNaN(idx) && displayList[idx]) openPostModal(displayList[idx]);
+    });
     function renderBody() { tblBody.innerHTML = buildRows(posts.slice().sort(cmpFn)); wireShowAll(); }
     function refreshHeader() {
       document.querySelectorAll("#thead [data-sk]").forEach(function (h) {
