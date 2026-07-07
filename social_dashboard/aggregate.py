@@ -635,6 +635,77 @@ def build_twitter(data, days):
     }
 
 
+def build_stories(data, days):
+    """Instagram Stories page. Stories are captured once daily (they live 24h),
+    so this covers stories that were live at collection time — a partial but
+    honest window. Stories expose conversion/navigation metrics that feed posts
+    do not: profile_visits, follows, and the tap/swipe/exit breakdown."""
+    start, end, p_start, p_end = _window(days)
+    st = data.get("stories", [])
+    cur = _filter(st, "date", start, end)
+
+    dates, series = _daily(st, "date", ["views", "reach"], start, end)
+
+    def _sum(items, f):
+        return sum(_num(it.get(f)) for it in items)
+
+    n = len(cur)
+    total_views = _sum(cur, "views")
+    total_reach = _sum(cur, "reach")
+    total_pv = _sum(cur, "profile_visits")
+
+    nav = {k: round(_sum(cur, k)) for k in ("taps_forward", "taps_back", "swipes_forward", "exits")}
+    exit_rates = [_num(s.get("exit_rate")) for s in cur if _num(s.get("views")) > 0]
+    avg_exit = (sum(exit_rates) / len(exit_rates)) if exit_rates else 0
+
+    stories = []
+    for s in cur:
+        views = _num(s.get("views"))
+        stories.append({
+            "date": (_parse_date(s.get("date")) or "").__str__() if s.get("date") else "",
+            "time": s.get("time", ""),
+            "type": "Video" if "video" in str(s.get("type", "")).lower() else "Image",
+            "views": _int(views),
+            "reach": _int(s.get("reach")),
+            "profile_visits": _int(s.get("profile_visits")),
+            "follows": _int(s.get("follows")),
+            "replies": _int(s.get("replies")),
+            "shares": _int(s.get("shares")),
+            "total_interactions": _int(s.get("total_interactions")),
+            "exit_rate": round(_num(s.get("exit_rate")), 1),
+            "taps_forward": _int(s.get("taps_forward")),
+            "taps_back": _int(s.get("taps_back")),
+            "swipes_forward": _int(s.get("swipes_forward")),
+            "exits": _int(s.get("exits")),
+            "pv_rate": round(views and _num(s.get("profile_visits")) / views * 100, 2),
+            "url": s.get("permalink", ""),
+        })
+    stories.sort(key=lambda x: x["views"], reverse=True)
+
+    return {
+        "range": days,
+        "last_date": _last_data_date(data),
+        "kpis": {
+            "stories": n,
+            "views": round(total_views),
+            "reach": round(total_reach),
+            "profile_visits": round(total_pv),
+        },
+        "chart": {"dates": dates, "views": series["views"], "reach": series["reach"]},
+        "nav": nav,
+        "summary": {
+            "avg_exit_rate": round(avg_exit, 1),
+            "profile_visits": round(total_pv),
+            "follows": round(_sum(cur, "follows")),
+            "replies": round(_sum(cur, "replies")),
+            "shares": round(_sum(cur, "shares")),
+            "avg_views": round(total_views / n) if n else 0,
+            "avg_reach": round(total_reach / n) if n else 0,
+        },
+        "stories": stories,
+    }
+
+
 # ---------- alerts / anomaly detection ----------
 #
 # Turns the per-post tables into a ranked feed of "things worth noticing":
