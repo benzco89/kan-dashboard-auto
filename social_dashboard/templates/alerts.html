@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>כאן חדשות · סושיאל — התראות</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .al-summary{ display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-bottom:14px; }
+  .al-stat{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:13px 15px; }
+  .al-stat .v{ font-size:23px; font-weight:700; font-family:'SimplerPro',sans-serif; line-height:1.1; }
+  .al-stat .l{ font-size:12px; color:var(--muted); margin-top:3px; }
+  .al-filters{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+  .al-chip{ display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; cursor:pointer;
+    border:1px solid var(--line); background:var(--console); color:var(--muted); border-radius:999px; padding:6px 13px; transition:all .12s; }
+  .al-chip:hover{ color:var(--text); }
+  .al-chip.active{ color:var(--text); border-color:var(--line2); background:var(--chip); }
+  .al-chip .n{ font-family:ui-monospace,monospace; font-size:11px; color:var(--faint); }
+  .al-list{ display:flex; flex-direction:column; gap:8px; }
+  .al-card{ display:flex; align-items:center; gap:14px; text-decoration:none; color:inherit;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 15px; transition:border-color .15s; }
+  a.al-card:hover{ border-color:var(--line2); }
+  .al-side{ display:flex; flex-direction:column; align-items:flex-start; gap:6px; flex:none; width:132px; }
+  .al-plat{ display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:6px; flex:none; }
+  .al-badge{ display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:700; border-radius:999px; padding:3px 9px; }
+  .al-sev{ font-family:ui-monospace,monospace; font-size:9.5px; font-weight:700; letter-spacing:.4px; color:var(--bad); text-transform:uppercase; }
+  .al-body{ flex:1; min-width:0; }
+  .al-title{ font-size:14px; font-weight:600; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .al-note{ font-size:12.5px; color:var(--muted); margin-top:2px; }
+  .al-metric{ flex:none; text-align:center; min-width:100px; }
+  .al-mlabel{ font-family:ui-monospace,monospace; font-size:9.5px; letter-spacing:.3px; color:var(--faint); text-transform:uppercase; }
+  .al-val{ font-size:19px; font-weight:700; font-family:'SimplerPro',sans-serif; line-height:1.15; }
+  .al-base{ font-family:ui-monospace,monospace; font-size:10.5px; color:var(--faint); margin-top:1px; }
+  .al-date{ flex:none; font-family:ui-monospace,monospace; font-size:11px; color:var(--faint); min-width:42px; text-align:center; }
+  .al-open{ flex:none; font-size:12px; font-weight:600; color:var(--link); }
+  .al-empty{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:40px 20px; text-align:center; color:var(--muted); }
+  @media (max-width:760px){
+    .al-card{ flex-wrap:wrap; gap:10px; }
+    .al-side{ width:auto; flex-direction:row; align-items:center; }
+    .al-body{ flex-basis:100%; order:3; }
+    .al-metric{ min-width:0; text-align:start; margin-inline-start:auto; }
+    .al-date{ text-align:start; }
+  }
+</style>
+</head>
+<body>
+<header id="header"></header>
+<main id="main" class="main"></main>
+<script src="/static/app.js"></script>
+<script>
+(function () {
+  var PIC = {
+    youtube: { c: "var(--yt)", icon: "yt", name: "YouTube" },
+    facebook: { c: "var(--fb)", icon: "fb", name: "Facebook" },
+    instagram: { c: "var(--ig)", icon: "ig", name: "Instagram" },
+    twitter: { c: "var(--tw)", icon: "x", name: "X" }
+  };
+  // kind -> presentation. tone drives the accent color; unit drives value formatting.
+  var KIND = {
+    viral_hit:      { emoji: "🚀", label: "היט", tone: "good", unit: "num" },
+    viral_spread:   { emoji: "🔥", label: "ויראלי", tone: "good", unit: "pct" },
+    high_saves:     { emoji: "💾", label: "שמירות גבוהות", tone: "good", unit: "pct" },
+    flop:           { emoji: "📉", label: "תת-ביצוע", tone: "bad", unit: "pct" },
+    weak_hook:      { emoji: "⏭️", label: "הוק חלש", tone: "bad", unit: "pct0" },
+    follower_spike: { emoji: "📈", label: "זינוק עוקבים", tone: "good", unit: "signed" },
+    follower_drop:  { emoji: "📉", label: "צניחת עוקבים", tone: "bad", unit: "signed" }
+  };
+
+  function fmtVal(unit, v) {
+    if (unit === "num") return KS.fmt(v);
+    if (unit === "pct") return Number(v).toFixed(1) + "%";
+    if (unit === "pct0") return Math.round(v) + "%";
+    if (unit === "signed") return KS.signed(v);
+    return "" + v;
+  }
+  function baseLabel(a, k) {
+    if (a.kind === "follower_spike" || a.kind === "follower_drop") return "רגיל ±" + KS.fmt(a.baseline);
+    return "חציון " + (k.unit === "num" ? KS.fmt(a.baseline) : (k.unit === "pct0" ? Math.round(a.baseline) + "%" : Number(a.baseline).toFixed(1) + "%"));
+  }
+
+  function card(a) {
+    var k = KIND[a.kind] || { emoji: "•", label: a.kind, tone: "bad", unit: "num" };
+    var pic = PIC[a.platform] || { c: "var(--muted)", icon: null, name: a.platform };
+    var high = a.severity === "high";
+    var accent = k.tone === "good" ? "var(--ok)" : "var(--bad)";
+    var badgeBg = k.tone === "good" ? "var(--teal-bg)" : "var(--orange-bg)";
+    var el = a.url ? "a" : "div";
+    var attrs = a.url ? ' href="' + KS.esc(a.url) + '" target="_blank" rel="noopener"' : "";
+    var platIc = pic.icon ? '<span class="al-plat" style="background:' + pic.c + ';">' + KS.fillIcon(pic.icon, "#fff", 13) + '</span>' : "";
+    return "<" + el + ' class="al-card"' + attrs + ' style="border-inline-start:3px solid ' + accent + ';">' +
+      '<div class="al-side">' + platIc +
+        '<div style="display:flex;flex-direction:column;gap:3px;min-width:0;">' +
+        '<span class="al-badge" style="background:' + badgeBg + ';color:' + accent + ';">' + k.emoji + " " + k.label + "</span>" +
+        (high ? '<span class="al-sev">חריגה חזקה</span>' : "") + "</div></div>" +
+      '<div class="al-body"><div class="al-title">' + KS.esc(a.title || "(ללא כותרת)") + "</div>" +
+        '<div class="al-note">' + KS.esc(a.note) + "</div></div>" +
+      '<div class="al-metric"><div class="al-mlabel">' + KS.esc(a.metric_label) + "</div>" +
+        '<div class="al-val" style="color:' + accent + ';">' + fmtVal(k.unit, a.value) + "</div>" +
+        '<div class="al-base">' + baseLabel(a, k) + "</div></div>" +
+      '<div class="al-date">' + (a.date ? KS.fmtDate(a.date) : "") + "</div>" +
+      (a.url ? '<span class="al-open">פתח ←</span>' : "") +
+      "</" + el + ">";
+  }
+
+  // which alert kinds each filter chip matches
+  var FILTER_KINDS = {
+    all: null,
+    viral_hit: ["viral_hit"],
+    viral_spread: ["viral_spread"],
+    high_saves: ["high_saves"],
+    flop: ["flop"],
+    weak_hook: ["weak_hook"],
+    follower: ["follower_spike", "follower_drop"]
+  };
+
+  function render(data, app) {
+    var rl = KS.RANGE_LABEL[data.range];
+    var s = data.summary;
+    var alerts = data.alerts || [];
+
+    var stats = [
+      { v: s.total, l: "סה״כ התראות", c: "var(--text)" },
+      { v: s.high, l: "חריגות חזקות", c: s.high ? "var(--bad)" : "var(--muted)" },
+      { v: s.hits + s.spread + s.saves, l: "חיוביות 🚀", c: "var(--ok)" },
+      { v: s.flops + s.hooks, l: "לתשומת לב 📉", c: "var(--amber)" }
+    ].map(function (x) {
+      return '<div class="al-stat"><div class="v" style="color:' + x.c + ';">' + x.v + '</div><div class="l">' + x.l + "</div></div>";
+    }).join("");
+
+    var chipDefs = [
+      { key: "all", label: "הכל", n: s.total },
+      { key: "viral_hit", label: "🚀 היטים", n: s.hits },
+      { key: "viral_spread", label: "🔥 ויראלי", n: s.spread },
+      { key: "high_saves", label: "💾 שמירות", n: s.saves },
+      { key: "flop", label: "📉 תת-ביצוע", n: s.flops },
+      { key: "weak_hook", label: "⏭️ הוק חלש", n: s.hooks },
+      { key: "follower", label: "📈 עוקבים", n: s.followers }
+    ].filter(function (c) { return c.key === "all" || c.n > 0; });
+    var chips = chipDefs.map(function (c) {
+      return '<button class="al-chip' + (c.key === "all" ? " active" : "") + '" data-filter="' + c.key + '">' +
+        c.label + '<span class="n">' + c.n + "</span></button>";
+    }).join("");
+
+    var listHtml = alerts.length
+      ? alerts.map(card).join("")
+      : '<div class="al-empty">לא נמצאו חריגות בטווח שנבחר — הביצועים בתחום הרגיל של כל פלטפורמה. נסה טווח ארוך יותר.</div>';
+
+    document.getElementById("main").innerHTML =
+      '<div class="page-head"><div><h1>התראות וחריגות</h1>' +
+      '<p>תכנים ואירועים שחורגים מהבייסליין של כל פלטפורמה · ' + rl + '</p></div>' +
+      '<div style="text-align:left;"><div class="asof-label">נתונים עד</div><div class="asof-date">' + KS.fmtFullDate(data.last_date) + '</div></div></div>' +
+
+      '<div class="al-summary">' + stats + '</div>' +
+      '<div class="al-filters">' + chips + '</div>' +
+      '<div class="al-list" id="al-list">' + listHtml + '</div>';
+
+    var listEl = document.getElementById("al-list");
+    document.querySelectorAll(".al-chip").forEach(function (b) {
+      b.addEventListener("click", function () {
+        document.querySelectorAll(".al-chip").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active");
+        var kinds = FILTER_KINDS[b.getAttribute("data-filter")];
+        var shown = kinds ? alerts.filter(function (a) { return kinds.indexOf(a.kind) >= 0; }) : alerts;
+        listEl.innerHTML = shown.length ? shown.map(card).join("")
+          : '<div class="al-empty">אין התראות מסוג זה בטווח שנבחר.</div>';
+      });
+    });
+  }
+
+  KanSocial.init("alerts", render);
+})();
+</script>
+</body>
+</html>

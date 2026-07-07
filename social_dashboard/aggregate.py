@@ -38,6 +38,21 @@ def _int(x):
     return int(round(_num(x)))
 
 
+def _fmt(n):
+    """Compact K/M formatting for numbers embedded in alert notes."""
+    n = int(round(_num(n)))
+    if abs(n) >= 1_000_000:
+        return ("%.1f" % (n / 1_000_000)).rstrip("0").rstrip(".") + "M"
+    if abs(n) >= 1000:
+        return ("%.1f" % (n / 1000)).rstrip("0").rstrip(".") + "K"
+    return str(n)
+
+
+def _signed(n):
+    n = int(round(_num(n)))
+    return ("+" if n >= 0 else "-") + _fmt(abs(n))
+
+
 def _parse_date(s):
     if not s:
         return None
@@ -582,4 +597,281 @@ def build_twitter(data, days):
             "avg_engagement": round(avg_eng, 2),
         },
         "posts": posts,
+    }
+
+
+# ---------- alerts / anomaly detection ----------
+#
+# Turns the per-post tables into a ranked feed of "things worth noticing":
+# content that beat or missed the platform's own recent baseline, unusual
+# spread, weak hooks, and follower spikes/drops. Baselines are robust
+# (median-based) so a single viral hit doesn't move the bar, and every alert
+# carries the number + the baseline it fired against so it stays explainable.
+# Thresholds live here as constants so they're easy to tune once we see real
+# output.
+
+_MIN_BASELINE = 5           # need at least this many posts to trust a median
+CAP_PER_KIND_PLATFORM = 4   # keep only the N strongest alerts per (kind, platform)
+
+# Thresholds calibrated against the live sheet's own distributions (2026-07,
+# 30–90d windows). The platforms differ structurally in variance, so the hit
+# bar is per-platform (a flat cross-platform ratio flags ~top 4% on IG but
+# ~top 15% on YouTube). Each value targets roughly the platform's p95 = the
+# genuine standouts. Re-run analyze_thresholds.py to recalibrate if the account
+# profile shifts. See _median() note: baselines are robust to single hits.
+
+# viral hit — views as a multiple of the platform's median views: (hit, strong)
+_HIT = {
+    "youtube":   (7.0, 15.0),
+    "facebook":  (4.5, 10.0),
+    "instagram": (3.5, 7.0),
+    "twitter":   (5.0, 11.0),
+}
+# viral spread — ABSOLUTE share-rate % (share-rate medians are near-zero and
+# noisy, so an absolute p95 bar is far more stable than a x-median ratio): (spread, strong)
+_SPREAD = {
+    "facebook":  (0.18, 0.35),
+    "instagram": (0.80, 1.50),
+    "twitter":   (0.14, 0.31),
+}
+_SAVE_RATE = 0.13           # IG absolute save-rate % (p95) -> reference value
+_HOOK_SKIP = 55.0           # reel skip_rate % (p90 "worst hooks")
+_FLOP_ENG_RATIO = 0.4       # engagement < 0.4x median while reach is above median
+_FOLLOWER_RATIO = 3.0       # |daily change| >= 3x median |change|
+_FOLLOWER_FLOOR = 50        # ignore tiny follower wiggles
+_SHARE_FLOOR = 15           # need real shares before calling something viral
+_SAVE_FLOOR = 15
+
+
+def _median(xs):
+    xs = sorted(xs)
+    n = len(xs)
+    if not n:
+        return 0.0
+    m = n // 2
+    return xs[m] if n % 2 else (xs[m - 1] + xs[m]) / 2.0
+
+
+def _type_label(plat, raw):
+    if plat == "youtube":
+        return "Short" if _yt_type(raw) == "Shorts" else "Video"
+    if plat == "facebook":
+        return _fb_type(raw)
+    if plat == "instagram":
+        return _ig_type(raw)
+    if plat == "twitter":
+        return _tw_type(raw)
+    return ""
+
+
+# per-platform field map: date_key, title_key, url_key, interactions_fn, share_key, has_reach
+_ALERT_PLATFORMS = {
+    "youtube": ("published_at", "title", "video_url",
+                lambda p: _num(p.get("likes")) + _num(p.get("comments")), None, False),
+    "facebook": ("date", "title", "permalink",
+                 lambda p: _num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("shares")),
+                 "shares", True),
+    "instagram": ("date", "caption", "permalink",
+                  lambda p: (_num(p.get("likes")) + _num(p.get("comments"))
+                             + _num(p.get("saved")) + _num(p.get("shares"))),
+                  "shares", True),
+    "twitter": ("date", "text", "permalink",
+                lambda p: (_num(p.get("likes")) + _num(p.get("retweets"))
+                           + _num(p.get("replies")) + _num(p.get("quotes"))),
+                "retweets", False),
+}
+
+
+def _norm_posts(items, plat, start, end):
+    """Normalize a platform's in-window posts to a common shape with derived rates."""
+    date_key, title_key, url_key, inter_fn, share_key, has_reach = _ALERT_PLATFORMS[plat]
+    out = []
+    for it in _filter(items, date_key, start, end):
+        views = _num(it.get("views"))
+        if views <= 0:
+            continue
+        d = _parse_date(it.get(date_key))
+        shares = _num(it.get(share_key)) if share_key else 0.0
+        saved = _num(it.get("saved"))
+        raw_type = it.get("type") or it.get("video_type") or ""
+        out.append({
+            "platform": plat,
+            "title": it.get(title_key, ""),
+            "url": it.get(url_key, ""),
+            "date": d.isoformat() if d else "",
+            "type": _type_label(plat, raw_type),
+            "raw_type": raw_type,
+            "views": views,
+            "reach": _num(it.get("reach")) if has_reach else 0.0,
+            "shares": shares,
+            "saved": saved,
+            "skip": _num(it.get("skip_rate")),
+            "eng": inter_fn(it) / views * 100.0,
+            "share_rate": shares / views * 100.0,
+            "save_rate": saved / views * 100.0,
+        })
+    return out
+
+
+def _alert(kind, severity, p, metric_label, value, baseline, note, impact):
+    return {
+        "kind": kind, "severity": severity, "platform": p["platform"],
+        "title": p["title"], "url": p["url"], "date": p["date"], "type": p["type"],
+        "metric_label": metric_label, "value": round(value, 2), "baseline": round(baseline, 2),
+        "ratio": round((value / baseline) if baseline else 0, 1),
+        "note": note, "_impact": impact,
+    }
+
+
+def _post_alerts(posts, plat):
+    """Hit / spread / flop rules. Thresholds are per-platform; impact is stored
+    as "x over the firing bar" so different kinds rank comparably in the feed."""
+    out = []
+    if len(posts) < _MIN_BASELINE:
+        return out
+    med_views = _median([p["views"] for p in posts])
+    med_eng = _median([p["eng"] for p in posts if p["eng"] > 0])
+    med_reach = _median([p["reach"] for p in posts if p["reach"] > 0])
+    med_share = _median([p["share_rate"] for p in posts if p["shares"] > 0])
+    hit, strong = _HIT.get(plat, (4.0, 8.0))
+    spread = _SPREAD.get(plat)
+
+    for p in posts:
+        # viral hit — views far above the platform's own median
+        if med_views > 0 and p["views"] >= med_views * hit:
+            r = p["views"] / med_views
+            sev = "high" if r >= strong else "med"
+            out.append(_alert("viral_hit", sev, p, "צפיות", p["views"], med_views,
+                              "פי %.1f מחציון הצפיות בפלטפורמה" % r, r / hit))
+        # viral spread — shared far more per view than typical (absolute bar)
+        if spread and p["shares"] >= _SHARE_FLOOR and p["share_rate"] >= spread[0]:
+            sev = "high" if p["share_rate"] >= spread[1] else "med"
+            rm = (p["share_rate"] / med_share) if med_share > 0 else 0
+            note = ("שותף פי %.1f מחציון הפלטפורמה (%s שיתופים)" % (rm, _fmt(p["shares"]))
+                    if rm >= 2 else
+                    "שיעור שיתוף %.2f%% — בעשירון העליון (%s שיתופים)" % (p["share_rate"], _fmt(p["shares"])))
+            out.append(_alert("viral_spread", sev, p, "שיעור שיתוף", p["share_rate"],
+                              med_share if med_share > 0 else spread[0], note, p["share_rate"] / spread[0]))
+        # flop — got distribution (reach above median) but engagement collapsed
+        if (med_eng > 0 and med_reach > 0 and p["reach"] >= med_reach
+                and 0 < p["eng"] < med_eng * _FLOP_ENG_RATIO):
+            r = med_eng / p["eng"]
+            out.append(_alert("flop", "med", p, "מעורבות", p["eng"], med_eng,
+                              "חשיפה מעל החציון אך מעורבות נמוכה פי %.1f מהרגיל" % r, r / (1 / _FLOP_ENG_RATIO)))
+    return out
+
+
+def _ig_extra_alerts(posts):
+    """Instagram-only rules: high save-rate (reference value) + weak reel hook."""
+    out = []
+    if len(posts) < _MIN_BASELINE:
+        return out
+    med_save = _median([p["save_rate"] for p in posts if p["saved"] > 0])
+    for p in posts:
+        if p["saved"] >= _SAVE_FLOOR and p["save_rate"] >= _SAVE_RATE:
+            rm = (p["save_rate"] / med_save) if med_save > 0 else 0
+            note = ("נשמר פי %.1f מחציון הפלטפורמה (%s שמירות)" % (rm, _fmt(p["saved"]))
+                    if rm >= 2 else
+                    "שיעור שמירה %.2f%% — בעשירון העליון (%s שמירות)" % (p["save_rate"], _fmt(p["saved"])))
+            out.append(_alert("high_saves", "med", p, "שיעור שמירה", p["save_rate"],
+                              med_save if med_save > 0 else _SAVE_RATE, note, p["save_rate"] / _SAVE_RATE))
+    reels = [p for p in posts if "reel" in str(p["raw_type"]).lower() and p["skip"] > 0]
+    if len(reels) >= _MIN_BASELINE:
+        med_skip = _median([p["skip"] for p in reels])
+        for p in reels:
+            if p["skip"] >= _HOOK_SKIP:
+                out.append(_alert("weak_hook", "med", p, "Skip%", p["skip"], med_skip or _HOOK_SKIP,
+                                  "%.0f%% דילגו בשניות הראשונות — מהוק החלשים בפלטפורמה" % p["skip"],
+                                  p["skip"] / _HOOK_SKIP))
+    return out
+
+
+_FOLLOWER_KEYS = [
+    ("youtube", "yt_subscribers_change"),
+    ("facebook", "fb_followers_change"),
+    ("instagram", "ig_followers_change"),
+    ("twitter", "tw_followers_change"),
+]
+
+
+def _follower_alerts(foll, days):
+    """Flag days whose follower change is a big outlier vs the window's own norm."""
+    start, end, _p1, _p2 = _window(days)
+    rows = [r for r in foll if _in_range(_parse_date(r.get("date")), start, end)]
+    out = []
+    for plat, ckey in _FOLLOWER_KEYS:
+        changes = []
+        for r in rows:
+            v = r.get(ckey)
+            if v is None or str(v).strip() == "":
+                continue
+            changes.append((_parse_date(r.get("date")), _num(v)))
+        vals = [abs(c) for _d, c in changes if c != 0]
+        if len(vals) < _MIN_BASELINE:
+            continue
+        med = _median(vals)
+        if med <= 0:
+            continue
+        for d, c in changes:
+            if abs(c) >= med * _FOLLOWER_RATIO and abs(c) >= _FOLLOWER_FLOOR:
+                spike = c > 0
+                r = abs(c) / med
+                out.append({
+                    "kind": "follower_spike" if spike else "follower_drop",
+                    "severity": "high" if r >= _FOLLOWER_RATIO * 1.6 else "med",
+                    "platform": plat,
+                    "title": "זינוק בעוקבים" if spike else "צניחה בעוקבים",
+                    "url": "", "date": d.isoformat() if d else "",
+                    "type": "עוקבים", "metric_label": "שינוי יומי",
+                    "value": round(c), "baseline": round(med), "ratio": round(r, 1),
+                    "note": "%s עוקבים ביום — פי %.1f מהתנודה היומית הרגילה" % (_signed(c), r),
+                    "_impact": r / _FOLLOWER_RATIO,
+                })
+    return out
+
+
+def build_alerts(data, days):
+    start, end, _p1, _p2 = _window(days)
+    alerts = []
+    for plat in _ALERT_PLATFORMS:
+        posts = _norm_posts(data[plat], plat, start, end)
+        alerts.extend(_post_alerts(posts, plat))
+        if plat == "instagram":
+            alerts.extend(_ig_extra_alerts(posts))
+    alerts.extend(_follower_alerts(data["followers"], days))
+
+    # cap each (kind, platform) to its strongest N by impact, so no single
+    # category — nor a high-volume platform like Twitter's firehose — floods the
+    # feed. An alerts page is only useful if it surfaces the few standouts.
+    by_kp = {}
+    for a in alerts:
+        by_kp.setdefault((a["kind"], a["platform"]), []).append(a)
+    alerts = []
+    for items in by_kp.values():
+        items.sort(key=lambda a: -a.get("_impact", 0))
+        alerts.extend(items[:CAP_PER_KIND_PLATFORM])
+
+    sev_rank = {"high": 0, "med": 1}
+    alerts.sort(key=lambda a: (sev_rank.get(a["severity"], 2), -a.get("_impact", 0)))
+    for a in alerts:
+        a.pop("_impact", None)
+
+    def _count(kind):
+        return sum(1 for a in alerts if a["kind"] == kind)
+
+    summary = {
+        "total": len(alerts),
+        "high": sum(1 for a in alerts if a["severity"] == "high"),
+        "hits": _count("viral_hit"),
+        "spread": _count("viral_spread"),
+        "saves": _count("high_saves"),
+        "flops": _count("flop"),
+        "hooks": _count("weak_hook"),
+        "followers": _count("follower_spike") + _count("follower_drop"),
+    }
+    return {
+        "range": days,
+        "last_date": _last_data_date(data),
+        "alerts": alerts,
+        "summary": summary,
     }

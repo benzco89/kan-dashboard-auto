@@ -200,7 +200,8 @@
     { key: "youtube", href: "/youtube", label: "YouTube", icon: fillIcon("yt", "#ff0000", 15) },
     { key: "facebook", href: "/facebook", label: "Facebook", icon: fillIcon("fb", "#1877f2", 15) },
     { key: "instagram", href: "/instagram", label: "Instagram", icon: fillIcon("ig", "#e4405f", 15) },
-    { key: "twitter", href: "/twitter", label: "X", icon: fillIcon("x", "var(--text)", 13) }
+    { key: "twitter", href: "/twitter", label: "X", icon: fillIcon("x", "var(--text)", 13) },
+    { key: "alerts", href: "/alerts", label: "התראות", icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>' }
   ];
 
   var app = {
