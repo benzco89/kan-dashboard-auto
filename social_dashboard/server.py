@@ -36,7 +36,7 @@ async def revalidate_assets(request, call_next):
     """
     response = await call_next(request)
     path = request.url.path
-    if path.startswith("/static/") or path in ("/", "/youtube", "/facebook", "/instagram", "/stories", "/twitter", "/alerts"):
+    if path.startswith("/static/") or path in ("/", "/youtube", "/facebook", "/instagram", "/twitter", "/alerts"):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -50,7 +50,6 @@ _BUILDERS = {
     "youtube": aggregate.build_youtube,
     "facebook": aggregate.build_facebook,
     "instagram": aggregate.build_instagram,
-    "stories": aggregate.build_stories,
     "twitter": aggregate.build_twitter,
     "alerts": aggregate.build_alerts,
 }
@@ -81,11 +80,6 @@ def facebook_page():
 @app.get("/instagram")
 def instagram_page():
     return _page("instagram.html")
-
-
-@app.get("/stories")
-def stories_page():
-    return _page("stories.html")
 
 
 @app.get("/twitter")

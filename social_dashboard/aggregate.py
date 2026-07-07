@@ -560,6 +560,7 @@ def build_instagram(data, days):
             "avg_skip_rate": round(avg_skip, 1),
             "fb_views_share": round(fb_share, 1),
         },
+        "stories": build_stories(data, days),
         "posts": posts,
     }
 

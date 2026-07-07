@@ -149,6 +149,40 @@
         bodyHtml: hero + inter + rates + cross + cmp + openBtn
       });
     }
+    function medStory(key) {
+      var arr = (data.stories && data.stories.stories) || [];
+      var xs = arr.map(function (x) { return Number(x[key]) || 0; }).filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
+      if (!xs.length) return 0;
+      var m = Math.floor(xs.length / 2);
+      return xs.length % 2 ? xs[m] : (xs[m - 1] + xs[m]) / 2;
+    }
+    function openStoryModal(st) {
+      var mv = medStory("views");
+      var hero = '<div class="km-hero">' +
+        '<div><div class="v">' + KS.fmtHtml(st.views) + '</div><div class="l">צפיות</div></div>' +
+        '<div><div class="v">' + KS.fmtHtml(st.reach) + '</div><div class="l">חשיפה</div></div>' +
+        '<div><div class="v">' + st.exit_rate.toFixed(1) + '%</div><div class="l">נטישה</div></div></div>';
+      var navSec = KS.kmSection("ניווט") + '<div class="km-grid">' +
+        KS.kmCell("חזרה אחורה", KS.fmtHtml(st.taps_back)) +
+        KS.kmCell("דילוג קדימה", KS.fmtHtml(st.taps_forward)) +
+        KS.kmCell("מעבר לחשבון הבא", KS.fmtHtml(st.swipes_forward)) +
+        KS.kmCell("יציאה", KS.fmtHtml(st.exits)) + '</div>';
+      var conv = KS.kmSection("המרה ומעורבות") + '<div class="km-grid">' +
+        KS.kmCell("ביקורי פרופיל", KS.fmtHtml(st.profile_visits)) +
+        KS.kmCell("עוקבים חדשים", KS.fmtHtml(st.follows)) +
+        KS.kmCell("תגובות", KS.fmtHtml(st.replies)) +
+        KS.kmCell("שיתופים", KS.fmtHtml(st.shares)) +
+        (st.pv_rate ? KS.kmCell("% ביקורי פרופיל", st.pv_rate.toFixed(2) + "%") : "") + '</div>';
+      var cmp = mv ? (KS.kmSection("ביחס לטיפוסי בסטוריז") + '<div class="km-cmp">' + KS.kmCmp("צפיות מול חציון", st.views / mv) + '</div>') : "";
+      var openBtn = st.url ? '<a class="km-open" href="' + KS.esc(st.url) + '" target="_blank" rel="noopener">פתח באינסטגרם ↗</a>' : "";
+      KS.openModal({
+        iconHtml: KS.fillIcon("ig", "#fff", 19),
+        iconBg: "linear-gradient(135deg,#feda75,#d62976 45%,#962fbf 80%)",
+        type: "Instagram Story · " + (st.type === "Video" ? "וידאו" : "תמונה"),
+        title: "סטורי · " + (st.time || ""), date: KS.fmtFullDate(st.date),
+        bodyHtml: hero + navSec + conv + cmp + openBtn
+      });
+    }
     function cmpFn(a, b) {
       var k = sortState.key, dir = sortState.dir === "asc" ? 1 : -1;
       if (k === "type") return dir * String(a.type || "").localeCompare(String(b.type || ""));
@@ -162,6 +196,53 @@
       return html;
     }
     var rows = buildRows(posts.slice().sort(cmpFn));
+
+    // ---- stories section (folded in from the retired /stories page) ----
+    var stdata = data.stories || {};
+    var storiesSection = "";
+    if (stdata.kpis && stdata.kpis.stories > 0) {
+      var sk = stdata.kpis, ss = stdata.summary;
+      var sStats = [
+        stat("" + sk.stories, "סטוריז"),
+        stat(KS.fmt(ss.avg_views), "צפיות ממוצעות"),
+        stat(KS.fmt(sk.profile_visits), "ביקורי פרופיל"),
+        stat(ss.avg_exit_rate.toFixed(1) + "%", "שיעור נטישה")
+      ].join("");
+      var NAV_META = [
+        { key: "taps_back", label: "חזרה אחורה", hint: "עניין", color: "var(--ok)" },
+        { key: "taps_forward", label: "דילוג קדימה", hint: "קפצו הלאה", color: "var(--amber)" },
+        { key: "swipes_forward", label: "מעבר לחשבון הבא", hint: "נטשו", color: "var(--bad)" },
+        { key: "exits", label: "יציאה", hint: "סגרו", color: "var(--muted)" }
+      ];
+      var navTotal = NAV_META.reduce(function (a, m) { return a + (stdata.nav[m.key] || 0); }, 0) || 1;
+      var navBars = NAV_META.map(function (m) {
+        var v = stdata.nav[m.key] || 0;
+        return '<div class="typebar"><div class="typebar-top"><span class="typebar-name">' + m.label +
+          '<span class="cnt">' + m.hint + '</span></span><span class="typebar-val">' + KS.fmt(v) + '</span></div>' +
+          '<span class="typebar-track"><span class="typebar-fill" style="width:' + Math.round(v / navTotal * 100) + '%;background:' + m.color + ';"></span></span></div>';
+      }).join("");
+      var STYPE_HE = { Video: "וידאו", Image: "תמונה" };
+      var scols = "40px 1fr 72px 84px 84px";
+      var storyRows = stdata.stories.slice(0, 5).map(function (st, i) {
+        return '<a class="trow story-row" href="' + KS.esc(st.url || "#") + '" target="_blank" rel="noopener" data-sidx="' + i + '" style="display:grid;grid-template-columns:' + scols + ';gap:10px;">' +
+          '<span class="cell" style="color:var(--faint);">' + (i + 1) + '</span>' +
+          '<span style="min-width:0;"><span class="t-title">סטורי · ' + KS.esc(st.time) + '</span><span class="t-date">' + KS.fmtDate(st.date) + '</span></span>' +
+          '<span class="center"><span class="tag" style="color:var(--pf);">' + (STYPE_HE[st.type] || st.type) + '</span></span>' +
+          '<span class="cell strong">' + KS.fmt(st.views) + '</span>' +
+          '<span class="cell">' + st.exit_rate.toFixed(1) + '%</span></a>';
+      }).join("");
+      var storyThead = '<div class="thead" style="display:grid;grid-template-columns:' + scols + ';gap:10px;"><span class="center">#</span><span>סטורי</span><span class="center">סוג</span><span class="center">צפיות</span><span class="center">נטישה%</span></div>';
+      storiesSection =
+        '<div class="section-label"><span>סטוריז אינסטגרם</span><span></span></div>' +
+        '<div class="split" style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px;margin-bottom:14px;align-items:start;">' +
+          '<div class="table"><div class="table-head"><div><div class="panel-title">סטוריז מובילים</div>' +
+          '<div class="panel-sub">' + sk.stories + ' סטוריז · נאספים פעם ביום · לחצו לפירוט מלא</div></div></div>' +
+          '<div class="grid-4" style="padding:12px 12px 4px;">' + sStats + '</div>' +
+          '<div class="table-scroll" id="story-body">' + storyThead + storyRows + '</div></div>' +
+          '<div class="panel"><div class="panel-title">ניווט בסטוריז</div>' +
+          '<div class="panel-sub" style="margin-bottom:14px;">מה הצופים עשו · נטישה ממוצעת <b style="color:' + (ss.avg_exit_rate > 20 ? "var(--bad)" : "var(--ok)") + ';">' + ss.avg_exit_rate.toFixed(1) + '%</b></div>' + navBars + '</div>' +
+        '</div>';
+    }
 
     document.getElementById("main").innerHTML =
       '<div class="platform-head"><span class="pf-icon" style="background:linear-gradient(135deg,#feda75,#d62976 45%,#962fbf 80%);">' + KS.fillIcon("ig", "#fff", 24) + '</span>' +
@@ -180,6 +261,8 @@
       barsChart + '</div>' +
 
       '<div class="grid-4 mb-m">' + summary + '</div>' +
+
+      storiesSection +
 
       '<div class="table"><div class="table-head"><div><div class="panel-title">פוסטים מדורגים לפי מעורבות</div>' +
       '<div class="panel-sub">' + data.summary.total + ' פוסטים · ' + rl + ' · לחצו על פוסט לפירוט מלא</div></div>' +
@@ -203,6 +286,17 @@
       var idx = parseInt(row.getAttribute("data-idx"), 10);
       if (!isNaN(idx) && displayList[idx]) openPostModal(displayList[idx]);
     });
+    var storyBody = document.getElementById("story-body");
+    if (storyBody) {
+      storyBody.addEventListener("click", function (e) {
+        var row = e.target.closest(".story-row"); if (!row) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+        e.preventDefault();
+        var i = parseInt(row.getAttribute("data-sidx"), 10);
+        var st = ((data.stories && data.stories.stories) || [])[i];
+        if (st) openStoryModal(st);
+      });
+    }
     function renderBody() { tblBody.innerHTML = buildRows(posts.slice().sort(cmpFn)); wireShowAll(); }
     function refreshHeader() {
       document.querySelectorAll("#thead [data-sk]").forEach(function (h) {
