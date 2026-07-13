@@ -916,7 +916,7 @@ def build_competitors(data, days):
         posts_by_user.setdefault(u, []).append({
             "date": str(d), "time": p.get("time", ""),
             "type": p.get("type", ""),
-            "caption": p.get("caption", ""),
+            "caption": _clean_caption(p.get("caption", ""))[:200],
             "likes": likes, "comments": comments, "eng": likes + comments,
             "url": p.get("permalink", ""),
         })
@@ -974,7 +974,7 @@ def build_competitors(data, days):
         "posts": sorted(({
             "date": str(_parse_date(p.get("date")) or ""), "time": p.get("time", ""),
             "type": p.get("type", ""),
-            "caption": str(p.get("caption", ""))[:200],
+            "caption": _clean_caption(p.get("caption", ""))[:200],
             "likes": _int(p.get("likes")), "comments": _int(p.get("comments")),
             "eng": _int(p.get("likes")) + _int(p.get("comments")),
             "url": p.get("permalink", ""),
