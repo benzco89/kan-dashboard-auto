@@ -44,6 +44,7 @@ except Exception:
 
 # --- Config ---
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN')
+YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 API_VERSION = "v25.0"
 BASE = f"https://graph.facebook.com/{API_VERSION}"
@@ -60,6 +61,8 @@ PLATFORMS = [
         'sheet': 'נתוני אינסטגרם',
         'id_col': 'media_id',
         'caption_col': 'caption',
+        'date_col': 'date', 'time_col': 'time',
+        'type_col': 'type', 'url_col': 'permalink',
         'floor': 300,
         'text_field': 'text',      # שם שדה הטקסט ב-Graph API (IG: text, FB: message)
     },
@@ -69,8 +72,23 @@ PLATFORMS = [
         'sheet': 'נתוני פייסבוק',
         'id_col': 'post_id',
         'caption_col': 'title',
+        'date_col': 'date', 'time_col': 'time',
+        'type_col': 'type', 'url_col': 'permalink',
         'floor': 500,
         'text_field': 'message',
+    },
+    {
+        # תגובות יוטיוב הן ציבוריות - API key מספיק, בלי OAuth.
+        # ערוץ שקט יחסית: p50=37, p90≈190 (כויל 2026-07-13) -> רצפה 200 ≈ סרטון ביום.
+        'key': 'youtube',
+        'label': 'יוטיוב',
+        'sheet': 'נתוני יוטיוב',
+        'id_col': 'video_id',
+        'caption_col': 'title',
+        'date_col': 'published_at', 'time_col': 'published_time',
+        'type_col': 'video_type', 'url_col': 'video_url',
+        'floor': 200,
+        'text_field': None,        # לא Graph API - יש פוצ'ר ייעודי
     },
 ]
 
@@ -145,7 +163,8 @@ def pick_candidates(rows, plat, analyzed_ids):
             continue
         try:
             posted = IL_TZ.localize(datetime.strptime(
-                f"{str(r.get('date', '')).strip()} {str(r.get('time', '')).strip() or '00:00'}",
+                f"{str(r.get(plat['date_col'], '')).strip()} "
+                f"{str(r.get(plat['time_col'], '')).strip()[:5] or '00:00'}",
                 '%Y-%m-%d %H:%M'))
         except ValueError:
             continue
@@ -185,6 +204,36 @@ def fetch_comments(item_id, text_field):
             })
         url = res.get('paging', {}).get('next')
         params = None  # ה-URL הבא כבר נושא את הפרמטרים
+    return comments
+
+
+def fetch_youtube_comments(video_id):
+    """שרשור תגובות יוטיוב (Data API v3, ציבורי - API key בלבד, בלי OAuth)."""
+    comments = []
+    url = "https://www.googleapis.com/youtube/v3/commentThreads"
+    params = {
+        'key': YOUTUBE_API_KEY, 'part': 'snippet,replies', 'videoId': video_id,
+        'maxResults': 100, 'order': 'relevance', 'textFormat': 'plainText',
+    }
+    while len(comments) < MAX_COMMENTS_PULLED:
+        res = http_get_json(url, params=params, timeout=20, max_retries=2)
+        if 'error' in res:
+            # למשל commentsDisabled - לא כשל שלנו
+            print(f"⚠️ YT comments error for {video_id}: {str(res['error'])[:120]}")
+            break
+        for t in res.get('items', []):
+            top = t.get('snippet', {}).get('topLevelComment', {}).get('snippet', {})
+            comments.append({
+                'text': top.get('textOriginal', '') or '',
+                'like_count': top.get('likeCount', 0) or 0,
+                'replies': [{'text': r.get('snippet', {}).get('textOriginal', '') or '',
+                             'like_count': r.get('snippet', {}).get('likeCount', 0) or 0}
+                            for r in t.get('replies', {}).get('comments', [])],
+            })
+        token = res.get('nextPageToken')
+        if not token:
+            break
+        params['pageToken'] = token
     return comments
 
 
@@ -251,6 +300,9 @@ def analyze_with_gemini(client, plat, post, comments):
 
 def run_platform(sh, client, plat, analyzed_ids):
     """מריץ פלטפורמה אחת; מחזיר (שורות חדשות, מספר כשלונות)."""
+    if plat['key'] == 'youtube' and not YOUTUBE_API_KEY:
+        print("⚠️ youtube: YOUTUBE_API_KEY missing - skipping platform")
+        return [], 0
     rows = sh.worksheet(plat['sheet']).get_all_records()
     candidates = pick_candidates(rows, plat, analyzed_ids)
     if not candidates:
@@ -264,7 +316,10 @@ def run_platform(sh, client, plat, analyzed_ids):
     for sheet_comments, item_id, post, _ in candidates:
         print(f"\n--- {plat['key']} · {item_id} ---")
         try:
-            comments = fetch_comments(item_id, plat['text_field'])
+            if plat['key'] == 'youtube':
+                comments = fetch_youtube_comments(item_id)
+            else:
+                comments = fetch_comments(item_id, plat['text_field'])
             if len(comments) < 20:
                 # מאות תגובות בשיטס אבל שרשור כמעט ריק = בעיית API, לא תוכן
                 print(f"⚠️ Only {len(comments)} comments pulled (sheet says {sheet_comments}) - skipping")
@@ -278,9 +333,9 @@ def run_platform(sh, client, plat, analyzed_ids):
             new_rows.append([
                 item_id,
                 plat['key'],
-                str(post.get('date', '')),
+                str(post.get(plat['date_col'], '')),
                 datetime.now(IL_TZ).strftime('%Y-%m-%d %H:%M'),
-                str(post.get('type', '')),
+                str(post.get(plat['type_col'], '')),
                 str(post.get(plat['caption_col'], ''))[:200],
                 sheet_comments,
                 len(comments),
@@ -292,7 +347,7 @@ def run_platform(sh, client, plat, analyzed_ids):
                 analysis['why_it_worked'],
                 'כן' if analysis['controversy'] else 'לא',
                 analysis['summary'],
-                str(post.get('permalink', '')),
+                str(post.get(plat['url_col'], '')),
             ])
         except Exception as e:
             print(f"❌ Failed to analyze {item_id}: {str(e)[:200]}")

@@ -29,9 +29,13 @@ SHEETS = {
     "top_combined": "Top Combined",
 }
 
-# Fetched separately from the batchGet: the tab is created lazily by
-# comment_analyzer.py, and a missing range would 400 the whole batch.
-COMMENT_ANALYSIS_SHEET = "ניתוח תגובות"
+# Fetched separately from the batchGet: these tabs are created lazily
+# (by comment_analyzer.py / hot_sniffer.py), and a missing range would
+# 400 the whole batch.
+LAZY_SHEETS = {
+    "comment_analysis": "ניתוח תגובות",
+    "hot_alerts": "hot_alerts",
+}
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
@@ -106,18 +110,19 @@ def _fetch_all():
                 "platform": r[3],
             })
 
-    # Comment-analysis tab may not exist yet - never let it break the dashboard
-    analysis = []
-    try:
-        resp = (
-            service.spreadsheets()
-            .values()
-            .get(spreadsheetId=SPREADSHEET_ID, range=COMMENT_ANALYSIS_SHEET)
-            .execute()
-        )
-        analysis = _rows_to_dicts(resp.get("values", []))
-    except Exception:
-        pass
+    lazy = {}
+    for key, sheet_name in LAZY_SHEETS.items():
+        lazy[key] = []
+        try:
+            resp = (
+                service.spreadsheets()
+                .values()
+                .get(spreadsheetId=SPREADSHEET_ID, range=sheet_name)
+                .execute()
+            )
+            lazy[key] = _rows_to_dicts(resp.get("values", []))
+        except Exception:
+            pass
 
     return {
         "youtube": _rows_to_dicts(result.get("youtube", [])),
@@ -128,7 +133,7 @@ def _fetch_all():
         "followers": _rows_to_dicts(result.get("followers", [])),
         "insights": _rows_to_dicts(result.get("insights", [])),
         "top_combined": top,
-        "comment_analysis": analysis,
+        **lazy,
     }
 
 
