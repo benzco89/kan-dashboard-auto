@@ -52,6 +52,7 @@ _BUILDERS = {
     "instagram": aggregate.build_instagram,
     "twitter": aggregate.build_twitter,
     "viral": aggregate.build_viral,
+    "competitors": aggregate.build_competitors,
     "alerts": aggregate.build_alerts,
 }
 
@@ -91,6 +92,11 @@ def twitter_page():
 @app.get("/viral")
 def viral_page():
     return _page("viral.html")
+
+
+@app.get("/competitors")
+def competitors_page():
+    return _page("competitors.html")
 
 
 @app.get("/alerts")

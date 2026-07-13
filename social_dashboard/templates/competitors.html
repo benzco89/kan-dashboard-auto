@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>כאן חדשות · סושיאל — מתחרים</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header id="header"></header>
+<main id="main" class="main"></main>
+<script src="/static/app.js"></script>
+<script>
+(function () {
+  function stat(v, l) { return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+
+  function render(data, app) {
+    var rl = KS.RANGE_LABEL[data.range];
+    var s = data.summary;
+    var comps = data.competitors || [];
+
+    var stats = [
+      stat("" + s.tracked, "חשבונות במעקב"),
+      stat(KS.esc(s.leader || "—"), "המוביל בעוקבים"),
+      stat(s.fastest ? KS.esc(s.fastest.name) + " +" + KS.fmt(s.fastest.change) : "—", "הצומח בטווח"),
+      stat("#" + s.kan_rank, "המיקום של כאן")
+    ].join("");
+
+    var cols = "40px minmax(140px,1.2fr) 90px 80px 90px 60px 70px minmax(0,1.6fr)";
+    var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;">' +
+      '<span class="center">#</span><span>חשבון</span><span class="center">עוקבים</span><span class="center">מהיום</span>' +
+      '<span class="center">בטווח</span><span class="center">פוסטים/יום</span><span class="center">מעורבות/1K</span><span>הפוסט החזק אתמול</span></div>';
+
+    var rows = comps.map(function (c, i) {
+      var kan = c.is_kan ? 'style="background:var(--pf-bg);"' : "";
+      var d1 = c.change_1d ? '<span style="color:' + (c.change_1d > 0 ? "var(--ok)" : "var(--bad)") + ';">' + KS.signed(c.change_1d) + '</span>' : "—";
+      var dr = c.change_range ? '<span style="color:' + (c.change_range > 0 ? "var(--ok)" : "var(--bad)") + ';">' + KS.signed(c.change_range) + '</span>' : "—";
+      var top = (c.top && c.top.url)
+        ? '<a href="' + KS.esc(c.top.url) + '" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;display:block;min-width:0;">' +
+          '<span class="t-title" style="font-weight:400;font-size:12px;">' + KS.esc(c.top.caption || "") + '</span>' +
+          '<span class="t-date">❤️ ' + KS.fmt(c.top.likes) + ' · 💬 ' + KS.fmt(c.top.comments) + '</span></a>'
+        : '<span style="color:var(--faint);font-size:12px;">' + (c.is_kan ? "ראו בעמוד האינסטגרם" : "אין פוסט ב-24ש") + '</span>';
+      return '<div class="trow" ' + kan + ' style="display:grid;grid-template-columns:' + cols + ';gap:10px;">' +
+        '<span class="cell" style="color:var(--faint);">' + (i + 1) + '</span>' +
+        '<span style="min-width:0;"><span class="t-title">' + (c.is_kan ? "🔴 " : "") + KS.esc(c.name || c.username) + '</span>' +
+        '<span class="t-date">@' + KS.esc(c.username) + '</span></span>' +
+        '<span class="cell strong">' + KS.fmt(c.followers) + '</span>' +
+        '<span class="cell">' + d1 + '</span>' +
+        '<span class="cell">' + dr + '</span>' +
+        '<span class="cell">' + c.posts_24h + '</span>' +
+        '<span class="cell">' + c.eng_per_1k.toFixed(1) + '</span>' +
+        top + '</div>';
+    }).join("");
+
+    document.getElementById("main").innerHTML =
+      '<div class="page-head"><div><h1>מעקב מתחרים · Instagram</h1>' +
+      '<p>נתונים ציבוריים (Business Discovery) — עוקבים, קצב פרסום ומעורבות · ' + rl + '</p></div>' +
+      '<div style="text-align:left;"><div class="asof-label">נתונים עד</div><div class="asof-date">' + KS.fmtFullDate(data.last_date) + '</div></div></div>' +
+
+      '<div class="panel mb-m"><div class="grid-4">' + stats + '</div></div>' +
+
+      '<div class="table"><div class="table-head"><div><div class="panel-title">דירוג לפי עוקבים</div>' +
+      '<div class="panel-sub">מעורבות/1K = ממוצע לייקים+תגובות ל-10 הפוסטים האחרונים, מנורמל לגודל הקהל · צפיות אינן ציבוריות</div></div></div>' +
+      '<div class="table-scroll">' + thead + rows + '</div></div>' +
+
+      '<div class="panel-sub" style="margin-top:10px;">🔴 = כאן חדשות (מהנתונים המלאים שלנו) · שינויי עוקבים מצטברים מיום תחילת המעקב</div>';
+  }
+
+  KanSocial.init("competitors", render);
+})();
+</script>
+</body>
+</html>

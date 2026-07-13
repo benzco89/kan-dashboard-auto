@@ -99,6 +99,15 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python comment_analyzer.py
 
+      # שלב 4.8: מעקב מתחרים (business discovery, נתונים ציבוריים) - best-effort
+      - name: Track Competitors
+        id: competitors
+        continue-on-error: true
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: python competitors_collector.py
+
       # שלב 5: שליחת דוח טלגרם (רץ גם אם חלק מהאיסופים נכשלו - מדווח על מה שיש)
       - name: Send Telegram Report
         id: report
@@ -128,6 +137,7 @@ jobs:
           [ "${{ steps.twitter.outcome }}"   = "failure" ] && optional="$optional twitter(best-effort)"
           [ "${{ steps.stories.outcome }}"   = "failure" ] && optional="$optional stories(best-effort)"
           [ "${{ steps.comments.outcome }}"  = "failure" ] && optional="$optional comments(best-effort)"
+          [ "${{ steps.competitors.outcome }}" = "failure" ] && optional="$optional competitors(best-effort)"
 
           if [ -z "$critical$optional" ]; then
             echo "All steps succeeded."

@@ -260,7 +260,8 @@
     { key: "facebook", href: "/facebook", label: "Facebook", icon: fillIcon("fb", "#1877f2", 15) },
     { key: "instagram", href: "/instagram", label: "Instagram", icon: fillIcon("ig", "#e4405f", 15) },
     { key: "twitter", href: "/twitter", label: "X", icon: fillIcon("x", "var(--text)", 13) },
-    { key: "viral", href: "/viral", label: "ויראלי", icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>' },
+    { key: "competitors", href: "/competitors", label: "מתחרים", icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
+    { key: "viral", href: "/viral", label: "ויראלי", icon:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>' },
     { key: "alerts", href: "/alerts", label: "התראות", icon:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>' }
   ];
 

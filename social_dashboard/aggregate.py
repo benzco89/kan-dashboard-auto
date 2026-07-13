@@ -891,6 +891,88 @@ def build_viral(data, days):
     }
 
 
+# ---------- competitors (IG business discovery snapshots) ----------
+
+def build_competitors(data, days):
+    start, end, _p1, _p2 = _window(days)
+    rows = data.get("competitors", [])
+    ig = data["instagram"]
+
+    by_user = {}
+    for r in rows:
+        d = _parse_date(r.get("date"))
+        u = str(r.get("username", "")).strip()
+        if d and u:
+            by_user.setdefault(u, []).append((d, r))
+
+    competitors = []
+    for username, entries in by_user.items():
+        entries.sort(key=lambda e: e[0])
+        in_range = [e for e in entries if start <= e[0] <= end]
+        latest = entries[-1][1]
+        first_in = in_range[0][1] if in_range else latest
+        competitors.append({
+            "username": username,
+            "name": latest.get("name", ""),
+            "followers": _int(latest.get("followers")),
+            "change_1d": _int(latest.get("followers_change")),
+            "change_range": _int(latest.get("followers")) - _int(first_in.get("followers")),
+            "posts_24h": _int(latest.get("posts_24h")),
+            "avg_likes": _int(latest.get("avg_likes_recent")),
+            "avg_comments": _int(latest.get("avg_comments_recent")),
+            "eng_per_1k": round(_num(latest.get("eng_per_1k")), 2),
+            "spark": [_int(r.get("followers")) for _d, r in in_range] or [_int(latest.get("followers"))],
+            "top": {
+                "caption": latest.get("top_caption", ""),
+                "likes": _int(latest.get("top_likes")),
+                "comments": _int(latest.get("top_comments")),
+                "url": latest.get("top_url", ""),
+            },
+            "is_kan": False,
+        })
+
+    # שורת ייחוס של כאן, מהנתונים המלאים שלנו (discovery לא צריך את עצמנו)
+    kan_f = _follower_metric(data["followers"], "ig_followers", "ig_followers_change")
+    yesterday = end
+    own_yesterday = [p for p in ig if _parse_date(p.get("date")) == yesterday]
+    own_recent = sorted((p for p in ig if _parse_date(p.get("date"))),
+                        key=lambda p: str(p.get("date")), reverse=True)[:10]
+    own_avg_likes = round(sum(_num(p.get("likes")) for p in own_recent) / len(own_recent)) if own_recent else 0
+    own_avg_comments = round(sum(_num(p.get("comments")) for p in own_recent) / len(own_recent)) if own_recent else 0
+    kan_followers = _int(kan_f.get("value"))
+    competitors.append({
+        "username": "kan_news",
+        "name": "כאן חדשות",
+        "followers": kan_followers,
+        "change_1d": _int(data["followers"][-1].get("ig_followers_change")) if data["followers"] else 0,
+        "change_range": _int(kan_f.get("weekly_change") or 0),
+        "posts_24h": len(own_yesterday),
+        "avg_likes": own_avg_likes,
+        "avg_comments": own_avg_comments,
+        "eng_per_1k": round((own_avg_likes + own_avg_comments) / kan_followers * 1000, 2) if kan_followers else 0,
+        "spark": [],
+        "top": {},
+        "is_kan": True,
+    })
+
+    competitors.sort(key=lambda c: -c["followers"])
+    kan_rank = next((i + 1 for i, c in enumerate(competitors) if c["is_kan"]), 0)
+    growers = [c for c in competitors if not c["is_kan"]]
+    fastest = max(growers, key=lambda c: c["change_range"], default=None)
+
+    return {
+        "range": days,
+        "last_date": _last_data_date(data),
+        "summary": {
+            "tracked": len(growers),
+            "kan_rank": kan_rank,
+            "leader": growers[0]["name"] if growers else "",
+            "fastest": {"name": fastest["name"], "change": fastest["change_range"]} if fastest else None,
+        },
+        "competitors": competitors,
+    }
+
+
 # ---------- alerts / anomaly detection ----------
 #
 # Turns the per-post tables into a ranked feed of "things worth noticing":
