@@ -1,0 +1,28 @@
+name: Hot Sniffer
+
+on:
+  workflow_dispatch:      # הטריגר: טיימר על ה-VPS (kan-hot-sniffer.timer), כמו הריצה היומית.
+                          # בכוונה בלי schedule: - ה-cron של GitHub מפגר בשעות.
+
+jobs:
+  sniff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Hot Sniffer
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python hot_sniffer.py

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the hot sniffer every 3h during the day (morning is covered by the 08:30 daily run)
+
+[Timer]
+# systemd v252+ honours the timezone suffix; handles IDT/IST automatically.
+OnCalendar=*-*-* 11,14,17,20,23:00:00 Asia/Jerusalem
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

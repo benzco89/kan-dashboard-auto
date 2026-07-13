@@ -1,0 +1,9 @@
+[Unit]
+Description=Trigger the Hot Sniffer GitHub workflow (intraday explosion detection)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/kan-dispatch.env
+ExecStart=/usr/local/bin/kan-hot-sniffer
