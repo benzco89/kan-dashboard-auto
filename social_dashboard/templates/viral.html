@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>כאן חדשות · סושיאל — ויראלי</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header id="header"></header>
+<main id="main" class="main"></main>
+<script src="/static/app.js"></script>
+<script>
+(function () {
+  var PLAT = {
+    instagram: { label: "Instagram", icon: "ig", color: "#e4405f", bg: "linear-gradient(135deg,#feda75,#d62976 45%,#962fbf 80%)" },
+    facebook: { label: "Facebook", icon: "fb", color: "#1877f2", bg: "var(--fb)" },
+    youtube: { label: "YouTube", icon: "yt", color: "#ff0000", bg: "var(--yt)" },
+    twitter: { label: "X", icon: "x", color: "var(--text)", bg: "#000" }
+  };
+
+  function stat(v, l) { return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
+
+  function platIcons(platforms) {
+    return platforms.map(function (p) {
+      var m = PLAT[p];
+      return m ? '<span title="' + m.label + '" style="display:inline-flex;">' + KS.fillIcon(m.icon, m.color, 15) + '</span>' : "";
+    }).join("");
+  }
+
+  function sentiMini(an) {
+    if (!an) return "";
+    return '<div class="km-senti" style="margin-top:8px;"><div class="bar">' +
+      '<span class="pos" style="width:' + an.pos + '%"></span>' +
+      '<span class="neu" style="width:' + an.neu + '%"></span>' +
+      '<span class="neg" style="width:' + an.neg + '%"></span></div>' +
+      '<div class="legend"><span class="p">תומך בסיקור ' + an.pos + '%</span><span>ניטרלי ' + an.neu + '%</span><span class="n">ביקורתי ' + an.neg + '%</span></div></div>' +
+      (an.summary ? '<p class="km-why" style="margin-top:6px;">' + KS.esc(an.summary) + '</p>' : "");
+  }
+
+  function openStoryModal(s) {
+    var body = s.posts.map(function (p) {
+      var m = PLAT[p.platform] || { label: p.platform };
+      var cells = KS.kmSection(m.label) + '<div class="km-grid">' +
+        KS.kmCell("צפיות", KS.fmtHtml(p.views)) +
+        KS.kmCell("מעורבות", p.eng.toFixed(1) + "%") +
+        KS.kmCell("תגובות", KS.fmtHtml(p.comments)) +
+        KS.kmCell("שיתופים", KS.fmtHtml(p.shares)) + '</div>';
+      var link = p.url ? '<a class="viral-open" href="' + KS.esc(p.url) + '" target="_blank" rel="noopener">פתח ב-' + m.label + ' ↗</a>' : "";
+      return cells + sentiMini(p.analysis) + link;
+    }).join("");
+    var lead = s.posts[0], pm = PLAT[lead.platform] || {};
+    KS.openModal({
+      iconHtml: KS.fillIcon(pm.icon || "ig", "#fff", 19),
+      iconBg: pm.bg || "var(--pf)",
+      type: "סיפור חוצה-פלטפורמות · " + s.platforms.length + " פלטפורמות",
+      title: s.title || "(ללא כותרת)",
+      date: KS.fmtFullDate(s.date),
+      bodyHtml: body
+    });
+  }
+
+  var displayList = [];
+  function render(data, app) {
+    var rl = KS.RANGE_LABEL[data.range];
+    var s = data.summary;
+    displayList = data.stories || [];
+
+    var stats = [
+      stat("" + s.stories, "סיפורים חוצי-פלטפורמות"),
+      stat(KS.fmt(s.total_views), "צפיות מצטברות"),
+      stat(s.max_platforms + " / 4", "הכי רחב"),
+      stat("" + s.with_analysis, "עם ניתוח שיחה")
+    ].join("");
+
+    var cols = "40px 1fr 96px 96px 60px";
+    var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;">' +
+      '<span class="center">#</span><span>סיפור</span><span class="center">פלטפורמות</span><span class="center">צפיות סה״כ</span><span class="center">פוסטים</span></div>';
+    var rows = displayList.length ? displayList.map(function (st, i) {
+      return '<a class="trow" href="#" data-idx="' + i + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;">' +
+        '<span class="cell" style="color:var(--faint);">' + (i + 1) + '</span>' +
+        '<span style="min-width:0;"><span class="t-title">' + KS.esc(st.title) + '</span>' +
+        '<span class="t-date">' + KS.fmtDate(st.date) + (st.has_analysis ? '<span class="ai-dot" title="יש ניתוח שיחה">💬 ניתוח שיחה</span>' : "") + '</span></span>' +
+        '<span class="center" style="display:inline-flex;align-items:center;justify-content:center;gap:6px;">' + platIcons(st.platforms) + '</span>' +
+        '<span class="cell strong">' + KS.fmt(st.total_views) + '</span>' +
+        '<span class="cell">' + st.n_posts + '</span></a>';
+    }).join("") : '<div style="padding:24px;text-align:center;color:var(--muted);">לא נמצאו סיפורים חוצי-פלטפורמות בטווח שנבחר</div>';
+
+    document.getElementById("main").innerHTML =
+      '<div class="page-head"><div><h1>תוכן ויראלי חוצה-פלטפורמות</h1>' +
+      '<p>אותו סיפור, ארבעה קהלים — איפה הוא רץ ומה כל קהל אמר עליו · ' + rl + '</p></div>' +
+      '<div style="text-align:left;"><div class="asof-label">נתונים עד</div><div class="asof-date">' + KS.fmtFullDate(data.last_date) + '</div></div></div>' +
+
+      '<div class="panel mb-m"><div class="grid-4">' + stats + '</div></div>' +
+
+      '<div class="table"><div class="table-head"><div><div class="panel-title">סיפורים מדורגים לפי צפיות מצטברות</div>' +
+      '<div class="panel-sub">שיוך לפי דמיון כיתובים וקרבת תאריכים · לחצו על סיפור להשוואה מלאה</div></div></div>' +
+      '<div class="table-scroll" id="tbl-body">' + thead + rows + '</div></div>';
+
+    document.getElementById("tbl-body").addEventListener("click", function (e) {
+      var row = e.target.closest(".trow"); if (!row) return;
+      e.preventDefault();
+      var idx = parseInt(row.getAttribute("data-idx"), 10);
+      if (!isNaN(idx) && displayList[idx]) openStoryModal(displayList[idx]);
+    });
+  }
+
+  KanSocial.init("viral", render);
+})();
+</script>
+</body>
+</html>
