@@ -94,7 +94,7 @@
       var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : (hlR ? "border-inline-start-color:var(--hi-alt);background:var(--hi-alt-bg);" : "");
       return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" data-idx="' + idx + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
         '<span class="cell" style="' + rankStyle + '">' + rank + '</span>' +
-        '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + (p.analysis ? '<span class="ai-dot" title="יש ניתוח שיחה">💬</span>' : '') + '</span><span class="t-date">' + KS.fmtDate(p.date) + '</span></span>' +
+        '<span style="min-width:0;"><span class="t-title">' + (p.analysis ? '<span class="ai-dot" title="יש ניתוח שיחה">💬</span>' : '') + KS.esc(p.title) + '</span><span class="t-date">' + KS.fmtDate(p.date) + '</span></span>' +
         '<span class="center"><span class="tag" style="color:' + (TYPE_COLOR[p.type] || "var(--muted)") + ';">' + p.type + '</span></span>' +
         '<span class="cell strong">' + KS.fmt(p.views) + '</span>' +
         '<span class="cell">' + KS.fmt(p.reach) + '</span>' +
