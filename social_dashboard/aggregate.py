@@ -9,6 +9,7 @@ window [today-N, yesterday]; the previous comparison window is the N days
 before that.
 """
 
+import re
 from datetime import date, datetime, timedelta
 
 try:
@@ -735,6 +736,152 @@ def build_stories(data, days):
             "shares": round(_sum(cur, "shares")),
             "avg_views": round(total_views / n) if n else 0,
             "avg_reach": round(total_reach / n) if n else 0,
+        },
+        "stories": stories,
+    }
+
+
+# ---------- cross-platform viral matching ----------
+#
+# Kan's desk crossposts the same story with near-identical copy, so token
+# containment on the caption text (plus date proximity) is enough to cluster
+# "the same story" across platforms - no AI call, deterministic, per-request.
+
+_VIRAL_STOP = set("""של את על עם לא זה זו זאת הוא היא הם הן אני אתם אנחנו יש אין
+גם רק כל כי מה מי איך למה בין אחרי לפני נגד מול אבל או עוד כבר היום אמש מחר
+כאן חדשות בעקבות במהלך בזמן כדי לפי אצל בגלל האם כמה שני שתי כמו יותר פחות
+אשר כאשר היה היו תהיה הזה הזאת האלה עצמו שלו שלה שלהם ידי לאחר עקב""".split())
+
+_MATCH_WINDOW_DAYS = 2      # אותו סיפור חוצה פלטפורמות בתוך יום-יומיים
+# 0.5 יצר אשכול-ענק של 54 פוסטים סביב טראמפ/איראן (שרשור טרנזיטיבי של נושא
+# שלם); ב-0.6 האשכול הגדול ביותר הוא 5 פוסטים והסיפורים נשארים מוצלבים נכון.
+_MATCH_CONTAINMENT = 0.6    # חפיפת מילים ביחס לכיתוב הקצר מבין השניים
+_MIN_TOKENS = 4             # כיתוב קצר מדי לא ניתן לשיוך אמין
+
+
+def _clean_caption(raw):
+    """כיתוב גולמי -> כותרת: בלי סימני bidi/עיצוב וטאבים, רווחים מכווצים."""
+    text = re.sub(r"[‎‏‪-‮⁦-⁩﻿]", "", str(raw))
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _viral_tokens(text, limit=40):
+    text = re.sub(r"[^0-9א-תa-zA-Z\s]", " ", str(text))
+    out = []
+    for w in text.split():
+        if len(w) >= 3 and w not in _VIRAL_STOP and not w.isdigit():
+            out.append(w)
+            if len(out) >= limit:
+                break
+    return frozenset(out)
+
+
+def _viral_collect(data, start, end):
+    """All posts in range, normalized to one shape, with token sets."""
+    analyses = {p: _comment_analyses(data, p)
+                for p in ("instagram", "facebook", "youtube")}
+    specs = [
+        ("instagram", data["instagram"], "media_id", "caption", "date", "permalink",
+         lambda p: _num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("saved")) + _num(p.get("shares"))),
+        ("facebook", data["facebook"], "post_id", "title", "date", "permalink",
+         lambda p: _num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("shares"))),
+        ("youtube", data["youtube"], "video_id", "title", "published_at", "video_url",
+         lambda p: _num(p.get("likes")) + _num(p.get("comments"))),
+        ("twitter", data.get("twitter", []), "tweet_id", "text", "date", "permalink",
+         lambda p: _num(p.get("likes")) + _num(p.get("retweets")) + _num(p.get("replies")) + _num(p.get("quotes"))),
+    ]
+    items = []
+    for plat, rows, id_col, cap_col, date_col, url_col, inter_fn in specs:
+        for p in rows:
+            d = _parse_date(p.get(date_col))
+            if not d or not (start <= d <= end):
+                continue
+            toks = _viral_tokens(p.get(cap_col, ""))
+            if len(toks) < _MIN_TOKENS:
+                continue
+            views = _num(p.get("views"))
+            inter = inter_fn(p)
+            pid = str(p.get(id_col, "")).strip()
+            items.append({
+                "platform": plat,
+                "title": _clean_caption(p.get(cap_col, ""))[:200],
+                "d": d,
+                "date": str(d),
+                "views": _int(views),
+                "comments": _int(p.get("comments")),
+                "shares": _int(p.get("shares") if plat != "twitter" else p.get("retweets")),
+                "eng": round(inter / views * 100, 1) if views else 0,
+                "url": p.get(url_col, ""),
+                "analysis": analyses.get(plat, {}).get(pid),
+                "toks": toks,
+            })
+    return items
+
+
+def build_viral(data, days):
+    start, end, _p1, _p2 = _window(days)
+    items = _viral_collect(data, start, end)
+
+    # union-find over similar pairs, comparing only nearby dates
+    parent = list(range(len(items)))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    by_date = {}
+    for i, it in enumerate(items):
+        by_date.setdefault(it["d"], []).append(i)
+    for d, idxs in by_date.items():
+        cand = []
+        for back in range(_MATCH_WINDOW_DAYS + 1):
+            cand.extend(by_date.get(d - timedelta(days=back), []))
+        for i in idxs:
+            ti = items[i]["toks"]
+            for j in cand:
+                if j == i:
+                    continue
+                tj = items[j]["toks"]
+                inter = len(ti & tj)
+                if inter and inter / min(len(ti), len(tj)) >= _MATCH_CONTAINMENT:
+                    ri, rj = find(i), find(j)
+                    if ri != rj:
+                        parent[ri] = rj
+
+    clusters = {}
+    for i in range(len(items)):
+        clusters.setdefault(find(i), []).append(i)
+
+    stories = []
+    for members in clusters.values():
+        plats = {items[i]["platform"] for i in members}
+        if len(plats) < 2:
+            continue
+        posts = sorted((items[i] for i in members), key=lambda x: -x["views"])
+        stories.append({
+            "title": posts[0]["title"],
+            "date": str(min(p["d"] for p in posts)),
+            "platforms": sorted(plats),
+            "total_views": sum(p["views"] for p in posts),
+            "n_posts": len(posts),
+            "has_analysis": any(p["analysis"] for p in posts),
+            "posts": [{k: p[k] for k in
+                       ("platform", "title", "date", "views", "comments",
+                        "shares", "eng", "url", "analysis")} for p in posts],
+        })
+    stories.sort(key=lambda s: -s["total_views"])
+    stories = stories[:20]
+
+    return {
+        "range": days,
+        "last_date": _last_data_date(data),
+        "summary": {
+            "stories": len(stories),
+            "total_views": round(sum(s["total_views"] for s in stories)),
+            "max_platforms": max((len(s["platforms"]) for s in stories), default=0),
+            "with_analysis": sum(1 for s in stories if s["has_analysis"]),
         },
         "stories": stories,
     }
