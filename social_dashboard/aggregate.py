@@ -342,12 +342,15 @@ def build_youtube(data, days):
     total_inter = sum(_num(v.get("likes")) + _num(v.get("comments")) for v in cur)
     avg_eng = (total_inter / total_views * 100) if total_views else 0
 
+    yt_analyses = _comment_analyses(data, "youtube")
+
     videos = []
     for v in cur:
         views = _int(v.get("views"))
         likes = _int(v.get("likes"))
         comments = _int(v.get("comments"))
         videos.append({
+            "analysis": yt_analyses.get(str(v.get("video_id", "")).strip()),
             "title": v.get("title", ""),
             "date": (_parse_date(v.get("published_at")) or "").__str__() if v.get("published_at") else "",
             "type": "Short" if _yt_type(v.get("video_type")) == "Shorts" else "Video",
@@ -1006,9 +1009,25 @@ def build_alerts(data, days):
         "hooks": _count("weak_hook"),
         "followers": _count("follower_spike") + _count("follower_drop"),
     }
+    # intraday hot-sniffer alert log (hot_alerts tab; may not exist yet)
+    hot_history = []
+    start_str = (_window(days)[0]).strftime("%Y-%m-%d")
+    for h in data.get("hot_alerts", []):
+        alerted = str(h.get("alerted_at", "")).strip()
+        if not alerted or alerted[:10] < start_str:
+            continue
+        hot_history.append({
+            "alerted_at": alerted,
+            "platform": str(h.get("platform", "")).strip(),
+            "triggers": [t.strip() for t in str(h.get("triggers", "")).split(";") if t.strip()],
+            "url": str(h.get("permalink", "")).strip(),
+        })
+    hot_history.sort(key=lambda h: h["alerted_at"], reverse=True)
+
     return {
         "range": days,
         "last_date": _last_data_date(data),
         "alerts": alerts,
         "summary": summary,
+        "hot_history": hot_history[:20],
     }

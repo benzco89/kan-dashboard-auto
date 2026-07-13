@@ -145,12 +145,29 @@
       ? alerts.map(card).join("")
       : '<div class="al-empty">לא נמצאו חריגות בטווח שנבחר — הביצועים בתחום הרגיל של כל פלטפורמה. נסה טווח ארוך יותר.</div>';
 
+    // intraday hot-sniffer log (Telegram alerts already sent)
+    var PLAT_HE = { instagram: "📸 אינסטגרם", facebook: "📘 פייסבוק", youtube: "▶️ יוטיוב" };
+    var hotHtml = "";
+    if ((data.hot_history || []).length) {
+      hotHtml = '<div class="section-label" style="margin-top:18px;"><span>🔥 מה התפוצץ לאחרונה</span><span></span></div>' +
+        '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">התראות "מתפוצץ עכשיו" שנשלחו לטלגרם · ' + rl + '</div>' +
+        data.hot_history.map(function (h) {
+          var inner = '<div class="hot-row-head"><span>' + (PLAT_HE[h.platform] || h.platform) + '</span>' +
+            '<span class="hot-time">' + KS.esc(h.alerted_at) + '</span></div>' +
+            '<div class="hot-trig">' + h.triggers.map(KS.esc).join(" · ") + '</div>';
+          return h.url
+            ? '<a class="hot-row" href="' + KS.esc(h.url) + '" target="_blank" rel="noopener">' + inner + '</a>'
+            : '<div class="hot-row">' + inner + '</div>';
+        }).join("") + '</div>';
+    }
+
     document.getElementById("main").innerHTML =
       '<div class="page-head"><div><h1>התראות וחריגות</h1>' +
       '<p>תכנים ואירועים שחורגים מהבייסליין של כל פלטפורמה · ' + rl + '</p></div>' +
       '<div style="text-align:left;"><div class="asof-label">נתונים עד</div><div class="asof-date">' + KS.fmtFullDate(data.last_date) + '</div></div></div>' +
 
       '<div class="al-summary">' + stats + '</div>' +
+      hotHtml +
       '<div class="al-filters">' + chips + '</div>' +
       '<div class="al-list" id="al-list">' + listHtml + '</div>';
 

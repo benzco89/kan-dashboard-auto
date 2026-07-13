@@ -69,7 +69,7 @@
       var tagStyle = isShort ? "color:var(--pf);border-color:var(--pf);" : "color:var(--muted);";
       return '<a class="trow" href="' + KS.esc(v.url || "#") + '" target="_blank" rel="noopener" data-idx="' + idx + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
         '<span class="cell" style="' + rankStyle + '">' + rank + '</span>' +
-        '<span style="min-width:0;"><span class="t-title">' + KS.esc(v.title) + '</span><span class="t-date">' + KS.fmtDate(v.date) + '</span></span>' +
+        '<span style="min-width:0;"><span class="t-title">' + KS.esc(v.title) + '</span><span class="t-date">' + KS.fmtDate(v.date) + KS.aiDot(v) + '</span></span>' +
         '<span class="center"><span class="tag" style="' + tagStyle + '">' + v.type + '</span></span>' +
         '<span class="cell strong">' + KS.fmt(v.views) + '</span>' +
         '<span class="cell">' + KS.fmt(v.likes) + '</span>' +
@@ -102,11 +102,12 @@
       var momentum = v.views_delta ? (KS.kmSection("מומנטום") + '<div class="km-grid">' +
         KS.kmCell("צבר לאחרונה", KS.signed(v.views_delta) + " צפיות") + '</div>') : "";
       var cmp = mv ? (KS.kmSection("ביחס לטיפוסי בערוץ") + '<div class="km-cmp">' + KS.kmCmp("צפיות מול חציון", v.views / mv) + '</div>') : "";
+      var ai = KS.kmAnalysis(v.analysis);
       var openBtn = v.url ? '<a class="km-open" href="' + KS.esc(v.url) + '" target="_blank" rel="noopener">פתח ביוטיוב ↗</a>' : "";
       KS.openModal({
         iconHtml: KS.fillIcon("yt", "#fff", 19), iconBg: "var(--yt)",
         type: "YouTube · " + v.type, title: v.title || "(ללא כותרת)", date: KS.fmtFullDate(v.date),
-        bodyHtml: thumbHtml + hero + meta + momentum + cmp + openBtn
+        bodyHtml: thumbHtml + hero + meta + momentum + cmp + ai + openBtn
       });
     }
     function cmpFn(a, b) {
