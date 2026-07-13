@@ -59,7 +59,7 @@ WINDOW_DAYS = 7          # לא חוזרים אחורה מעבר לחלון הא
 MAX_COMMENTS_PULLED = 600    # תקרת עמודי Graph API לפוסט
 MAX_COMMENTS_TO_GEMINI = 300  # הכי מלויקקות; מעבר לזה רק מנפח את הפרומפט
 
-GEMINI_MODELS = ["gemini-3-pro-preview", "gemini-2.5-pro"]
+GEMINI_MODELS = ["gemini-3.1-pro-preview", "gemini-2.5-pro"]
 
 TARGET_HEADER = ['media_id', 'post_date', 'analyzed_at', 'type', 'caption',
                  'comments_in_sheet', 'comments_pulled',
