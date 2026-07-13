@@ -1,0 +1,30 @@
+name: Probe IG Account Access (read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: 'שם משתמש אינסטגרם לבדיקה'
+        required: false
+        default: 'kan_reshetb'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Run IG discovery probe
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          IG_TARGET_USERNAME: ${{ inputs.username }}
+        run: python ig_discovery_probe.py
