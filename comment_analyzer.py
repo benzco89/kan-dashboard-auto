@@ -1,16 +1,18 @@
 """
-Comment Analyzer - ניתוח Gemini של תגובות לפוסטים "מדוברים" באינסטגרם.
+Comment Analyzer - ניתוח Gemini של תגובות לפוסטים "מדוברים" באינסטגרם ובפייסבוק.
 
 המספרים אומרים *כמה* פוסט עבד; התגובות מגלות *למה*. הקולקטור בוחר בכל ריצה
-את הפוסטים שעוררו הכי הרבה שיחה, מושך את שרשור התגובות המלא ומחלץ עם Gemini
-סנטימנט, נושאים דומיננטיים והשערת "למה זה עבד". כל פוסט מנותח פעם אחת בלבד
-והתוצאה נשמרת לגיליון "ניתוח תגובות" (append-only, שורה לכל media_id).
+את הפוסטים שעוררו הכי הרבה שיחה בכל פלטפורמה, מושך את שרשור התגובות המלא
+ומחלץ עם Gemini סנטימנט, נושאים דומיננטיים והשערת "למה זה עבד". כל פוסט
+מנותח פעם אחת בלבד והתוצאה נשמרת לגיליון "ניתוח תגובות" (append-only).
 
-כלל הבחירה (כויל מול נתוני אמת, 2026-07-13, 942 פוסטים / 90 יום):
-  חציון תגובות ≈ 95, p90 ≈ 500. רצפה של 300 תגובות (~p80) נותנת ~2 פוסטים
-  ביום. עד 5 ניתוחים לריצה - רזרבה להשלמות אחרי ריצה שנכשלה.
-  גיל מינימלי 24 שעות - שרשור תגובות מתייצב אחרי יום-יומיים; ניתוח מוקדם
-  מדי תופס חצי שיחה.
+כלל הבחירה, לכל פלטפורמה בנפרד (כויל מול נתוני אמת 2026-07-13):
+  אינסטגרם: רצפה 300 תגובות (~p80; חציון 95, p90 500) -> ~2 פוסטים ביום.
+  פייסבוק:  רצפה 500 תגובות (~p76; חציון 151, p90 1087) -> ~4 פוסטים ביום.
+  גיל מינימלי 24 שעות - שרשור מתייצב אחרי יום-יומיים; ניתוח מוקדם תופס
+  חצי שיחה. חריג "חם עכשיו": פוסט צעיר מ-24ש נכנס אם עבר פי-2 מהרצפה -
+  שיחה בסדר גודל כזה תוך שעות שווה מבט מיידי.
+  עד 5 ניתוחים לריצה לפלטפורמה - רזרבה להשלמות אחרי ריצה שנכשלה.
 
 Env: FACEBOOK_TOKEN, GCP_SERVICE_ACCOUNT, GEMINI_API_KEY.
 """
@@ -47,21 +49,43 @@ API_VERSION = "v25.0"
 BASE = f"https://graph.facebook.com/{API_VERSION}"
 
 SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
-SOURCE_SHEET = "נתוני אינסטגרם"
 TARGET_SHEET = "ניתוח תגובות"
 
 IL_TZ = pytz.timezone('Asia/Jerusalem')
 
-COMMENT_FLOOR = 300      # רצפת תגובות (~p80 של החשבון) - מתחתיה אין מה לנתח
-MAX_PER_RUN = 5          # תקרת ניתוחים לריצה (עלות Gemini + Graph API)
-MIN_AGE_HOURS = 24       # שרשור צעיר מזה עוד לא התייצב
+PLATFORMS = [
+    {
+        'key': 'instagram',
+        'label': 'אינסטגרם',
+        'sheet': 'נתוני אינסטגרם',
+        'id_col': 'media_id',
+        'caption_col': 'caption',
+        'floor': 300,
+        'text_field': 'text',      # שם שדה הטקסט ב-Graph API (IG: text, FB: message)
+    },
+    {
+        'key': 'facebook',
+        'label': 'פייסבוק',
+        'sheet': 'נתוני פייסבוק',
+        'id_col': 'post_id',
+        'caption_col': 'title',
+        'floor': 500,
+        'text_field': 'message',
+    },
+]
+
+HOT_MULTIPLIER = 2       # פוסט צעיר מ-24ש נכנס אם עבר פי-2 מהרצפה ("חם עכשיו")
+MAX_PER_RUN = 5          # תקרת ניתוחים לריצה לפלטפורמה
+MIN_AGE_HOURS = 24       # שרשור צעיר מזה עוד לא התייצב (אלא אם חם)
 WINDOW_DAYS = 7          # לא חוזרים אחורה מעבר לחלון האיסוף של הפוסטים
-MAX_COMMENTS_PULLED = 600    # תקרת עמודי Graph API לפוסט
+MAX_COMMENTS_PULLED = 600     # תקרת עמודי Graph API לפוסט
 MAX_COMMENTS_TO_GEMINI = 300  # הכי מלויקקות; מעבר לזה רק מנפח את הפרומפט
 
-GEMINI_MODELS = ["gemini-3.1-pro-preview", "gemini-2.5-pro"]
+# flash הוא GA (בניגוד ל-preview שנכבים בלי אזהרה - 3-pro-preview מת במרץ)
+# והמשימה לא דורשת הסקה כבדה; 2.5-pro נשאר כפולבק יציב.
+GEMINI_MODELS = ["gemini-3.5-flash", "gemini-2.5-pro"]
 
-TARGET_HEADER = ['media_id', 'post_date', 'analyzed_at', 'type', 'caption',
+TARGET_HEADER = ['media_id', 'platform', 'post_date', 'analyzed_at', 'type', 'caption',
                  'comments_in_sheet', 'comments_pulled',
                  'sentiment_positive', 'sentiment_negative', 'sentiment_neutral',
                  'themes', 'top_comments', 'why_it_worked', 'controversy',
@@ -84,28 +108,40 @@ def open_spreadsheet():
     return gspread.authorize(creds).open_by_key(SPREADSHEET_ID)
 
 
-def get_analyzed_ids(sh):
-    """media_id-ים שכבר נותחו - פוסט מנותח פעם אחת בלבד."""
+def get_target_sheet(sh):
+    """הגיליון + media_id-ים שכבר נותחו. מיגרציה חד-פעמית: שורות מהגרסה
+    הראשונה (לפני עמודת platform) מקבלות platform=instagram."""
     try:
         ws = sh.worksheet(TARGET_SHEET)
     except gspread.WorksheetNotFound:
-        return set(), None
-    ids = {str(v).strip() for v in ws.col_values(1)[1:] if str(v).strip()}
-    return ids, ws
+        return None, set()
+
+    values = ws.get_all_values()
+    if values and 'platform' not in values[0]:
+        migrated = [TARGET_HEADER]
+        for row in values[1:]:
+            row = row + [''] * (len(TARGET_HEADER) - 1 - len(row))
+            migrated.append([row[0], 'instagram'] + row[1:len(TARGET_HEADER) - 1])
+        ws.clear()
+        ws.update(migrated)
+        print(f"🔄 Migrated {len(migrated) - 1} legacy rows to platform-aware schema")
+        values = migrated
+
+    analyzed = {str(r[0]).strip() for r in values[1:] if r and str(r[0]).strip()}
+    return ws, analyzed
 
 
-def pick_candidates(sh, analyzed_ids):
-    """הפוסטים המדוברים של השבוע שטרם נותחו: רצפה + top-N + גיל מינימלי."""
-    rows = sh.worksheet(SOURCE_SHEET).get_all_records()
+def pick_candidates(rows, plat, analyzed_ids):
+    """המדוברים של השבוע שטרם נותחו: רצפה + גיל 24ש (או "חם" בפי-2) + top-N."""
     now = datetime.now(IL_TZ)
     cutoff_old = now - timedelta(days=WINDOW_DAYS)
     cutoff_young = now - timedelta(hours=MIN_AGE_HOURS)
 
     candidates = []
     for r in rows:
-        media_id = str(r.get('media_id', '')).strip()
+        item_id = str(r.get(plat['id_col'], '')).strip()
         comments = _to_int(r.get('comments'))
-        if not media_id or media_id in analyzed_ids or comments < COMMENT_FLOOR:
+        if not item_id or item_id in analyzed_ids or comments < plat['floor']:
             continue
         try:
             posted = IL_TZ.localize(datetime.strptime(
@@ -113,34 +149,39 @@ def pick_candidates(sh, analyzed_ids):
                 '%Y-%m-%d %H:%M'))
         except ValueError:
             continue
-        if posted < cutoff_old or posted > cutoff_young:
+        if posted < cutoff_old:
             continue
-        candidates.append((comments, media_id, r))
+        is_young = posted > cutoff_young
+        if is_young and comments < plat['floor'] * HOT_MULTIPLIER:
+            continue  # צעיר ולא מספיק חם
+        candidates.append((comments, item_id, r, is_young))
 
     candidates.sort(key=lambda c: c[0], reverse=True)
     return candidates[:MAX_PER_RUN]
 
 
-def fetch_comments(media_id):
+def fetch_comments(item_id, text_field):
     """שרשור התגובות המלא כולל רמה אחת של replies (מקוצב ב-MAX_COMMENTS_PULLED)."""
+    reply_edge = 'replies' if text_field == 'text' else 'comments'
     comments = []
-    url = f"{BASE}/{media_id}/comments"
+    url = f"{BASE}/{item_id}/comments"
     params = {
         'access_token': ACCESS_TOKEN,
-        'fields': 'text,like_count,timestamp,replies{text,like_count}',
+        'fields': f"{text_field},like_count,{reply_edge}{{{text_field},like_count}}",
         'limit': 50,
     }
     while url and len(comments) < MAX_COMMENTS_PULLED:
         res = http_get_json(url, params=params, timeout=20, max_retries=2)
         if 'error' in res:
-            print(f"⚠️ Comments error for {media_id}: {res['error'].get('message', '')[:120]}")
+            print(f"⚠️ Comments error for {item_id}: {res['error'].get('message', '')[:120]}")
             break
         for c in res.get('data', []):
             comments.append({
-                'text': c.get('text', ''),
+                'text': c.get(text_field, '') or '',
                 'like_count': c.get('like_count', 0) or 0,
-                'replies': [{'text': r.get('text', ''), 'like_count': r.get('like_count', 0) or 0}
-                            for r in c.get('replies', {}).get('data', [])],
+                'replies': [{'text': r.get(text_field, '') or '',
+                             'like_count': r.get('like_count', 0) or 0}
+                            for r in c.get(reply_edge, {}).get('data', [])],
             })
         url = res.get('paging', {}).get('next')
         params = None  # ה-URL הבא כבר נושא את הפרמטרים
@@ -167,7 +208,7 @@ ANALYSIS_SCHEMA = {
 }
 
 
-def analyze_with_gemini(client, post, comments):
+def analyze_with_gemini(client, plat, post, comments):
     """מחלץ מהשרשור סנטימנט, נושאים והשערת 'למה זה עבד' - JSON מובנה."""
     ranked = sorted(comments, key=lambda c: c['like_count'], reverse=True)
     lines = []
@@ -176,13 +217,13 @@ def analyze_with_gemini(client, post, comments):
         for r in c['replies'][:3]:
             lines.append(f"    ↳ [{r['like_count']}] {r['text'][:150]}")
 
-    prompt = f"""אתה אנליסט סושיאל של חדר חדשות (כאן חדשות). לפניך פוסט אינסטגרם והתגובות אליו.
+    prompt = f"""אתה אנליסט סושיאל של חדר חדשות (כאן חדשות). לפניך פוסט {plat['label']} והתגובות אליו.
 המספר בסוגריים בתחילת כל תגובה הוא כמות הלייקים שלה - תגובה מלויקקת משקפת סנטימנט רחב.
 
 הפוסט ({post.get('type', '')}):
-{str(post.get('caption', ''))[:500]}
+{str(post.get(plat['caption_col'], ''))[:500]}
 
-מדדים: {_to_int(post.get('views'))} צפיות, {_to_int(post.get('comments'))} תגובות, {_to_int(post.get('shares'))} שיתופים, {_to_int(post.get('saved'))} שמירות.
+מדדים: {_to_int(post.get('views'))} צפיות, {_to_int(post.get('comments'))} תגובות, {_to_int(post.get('shares'))} שיתופים.
 
 התגובות ({len(comments)} נמשכו, מוצגות לפי לייקים):
 {chr(10).join(lines)}
@@ -208,52 +249,39 @@ def analyze_with_gemini(client, post, comments):
     raise RuntimeError(f"all Gemini models failed: {last_err}")
 
 
-def main():
-    print(f"\n{'='*50}")
-    print(f"💬 Comment Analyzer - {datetime.now(IL_TZ).strftime('%Y-%m-%d %H:%M')}")
-    print(f"{'='*50}\n")
-
-    missing = [n for n, v in [('FACEBOOK_TOKEN', ACCESS_TOKEN),
-                              ('GEMINI_API_KEY', GEMINI_API_KEY)] if not v]
-    if missing:
-        print(f"❌ Missing env vars: {', '.join(missing)}")
-        sys.exit(1)
-
-    sh = open_spreadsheet()
-    analyzed_ids, target_ws = get_analyzed_ids(sh)
-    print(f"📋 {len(analyzed_ids)} posts already analyzed")
-
-    candidates = pick_candidates(sh, analyzed_ids)
+def run_platform(sh, client, plat, analyzed_ids):
+    """מריץ פלטפורמה אחת; מחזיר (שורות חדשות, מספר כשלונות)."""
+    rows = sh.worksheet(plat['sheet']).get_all_records()
+    candidates = pick_candidates(rows, plat, analyzed_ids)
     if not candidates:
-        print(f"ℹ️ No posts above {COMMENT_FLOOR} comments awaiting analysis - nothing to do.")
-        return
-    print(f"🎯 {len(candidates)} candidates (floor={COMMENT_FLOOR}, max={MAX_PER_RUN}):")
-    for comments, media_id, _ in candidates:
-        print(f"   {media_id}  ({comments} comments)")
+        print(f"ℹ️ {plat['key']}: no posts above {plat['floor']} comments awaiting analysis.")
+        return [], 0
+    print(f"🎯 {plat['key']}: {len(candidates)} candidates (floor={plat['floor']}):")
+    for comments, item_id, _, is_young in candidates:
+        print(f"   {item_id}  ({comments} comments{' · 🔥 hot <24h' if is_young else ''})")
 
-    client = genai.Client(api_key=GEMINI_API_KEY)
     new_rows, failures = [], 0
-
-    for sheet_comments, media_id, post in candidates:
-        print(f"\n--- {media_id} ---")
+    for sheet_comments, item_id, post, _ in candidates:
+        print(f"\n--- {plat['key']} · {item_id} ---")
         try:
-            comments = fetch_comments(media_id)
+            comments = fetch_comments(item_id, plat['text_field'])
             if len(comments) < 20:
-                # פוסט עם מאות תגובות בשיטס אבל שרשור כמעט ריק = בעיית API, לא תוכן
+                # מאות תגובות בשיטס אבל שרשור כמעט ריק = בעיית API, לא תוכן
                 print(f"⚠️ Only {len(comments)} comments pulled (sheet says {sheet_comments}) - skipping")
                 failures += 1
                 continue
             print(f"📥 {len(comments)} comments pulled")
 
-            analysis = analyze_with_gemini(client, post, comments)
+            analysis = analyze_with_gemini(client, plat, post, comments)
             print(f"🧠 {analysis.get('summary', '')[:100]}")
 
             new_rows.append([
-                media_id,
+                item_id,
+                plat['key'],
                 str(post.get('date', '')),
                 datetime.now(IL_TZ).strftime('%Y-%m-%d %H:%M'),
                 str(post.get('type', '')),
-                str(post.get('caption', ''))[:200],
+                str(post.get(plat['caption_col'], ''))[:200],
                 sheet_comments,
                 len(comments),
                 analysis['sentiment_positive'],
@@ -267,24 +295,48 @@ def main():
                 str(post.get('permalink', '')),
             ])
         except Exception as e:
-            print(f"❌ Failed to analyze {media_id}: {str(e)[:200]}")
+            print(f"❌ Failed to analyze {item_id}: {str(e)[:200]}")
             failures += 1
         time.sleep(0.5)
+    return new_rows, failures
 
-    if new_rows:
+
+def main():
+    print(f"\n{'='*50}")
+    print(f"💬 Comment Analyzer - {datetime.now(IL_TZ).strftime('%Y-%m-%d %H:%M')}")
+    print(f"{'='*50}\n")
+
+    missing = [n for n, v in [('FACEBOOK_TOKEN', ACCESS_TOKEN),
+                              ('GEMINI_API_KEY', GEMINI_API_KEY)] if not v]
+    if missing:
+        print(f"❌ Missing env vars: {', '.join(missing)}")
+        sys.exit(1)
+
+    sh = open_spreadsheet()
+    target_ws, analyzed_ids = get_target_sheet(sh)
+    print(f"📋 {len(analyzed_ids)} posts already analyzed")
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    all_rows, total_failures = [], 0
+    for plat in PLATFORMS:
+        new_rows, failures = run_platform(sh, client, plat, analyzed_ids)
+        all_rows.extend(new_rows)
+        total_failures += failures
+
+    if all_rows:
         if target_ws is None:
             target_ws = sh.add_worksheet(title=TARGET_SHEET, rows=1000,
                                          cols=len(TARGET_HEADER))
             target_ws.append_row(TARGET_HEADER)
             print(f"✅ Created new sheet: {TARGET_SHEET}")
-        target_ws.append_rows(new_rows, value_input_option='RAW')
-        print(f"\n✅ Saved {len(new_rows)} analyses to {TARGET_SHEET}")
+        target_ws.append_rows(all_rows, value_input_option='RAW')
+        print(f"\n✅ Saved {len(all_rows)} analyses to {TARGET_SHEET}")
 
-    if failures and not new_rows:
-        print(f"❌ All {failures} candidate analyses failed")
+    if total_failures and not all_rows:
+        print(f"❌ All {total_failures} candidate analyses failed")
         sys.exit(1)
-    if failures:
-        print(f"⚠️ {failures} candidates failed - will retry in the next run")
+    if total_failures:
+        print(f"⚠️ {total_failures} candidates failed - will retry in the next run")
 
 
 if __name__ == "__main__":

@@ -385,6 +385,29 @@ def build_youtube(data, days):
     }
 
 
+def _comment_analyses(data, platform):
+    """Gemini comment analyses keyed by post/media id, filtered per platform.
+    Legacy rows (written before the platform column existed) are Instagram."""
+    out = {}
+    for a in data.get("comment_analysis", []):
+        mid = str(a.get("media_id", "")).strip()
+        plat = str(a.get("platform", "")).strip() or "instagram"
+        if not mid or plat != platform:
+            continue
+        out[mid] = {
+            "summary": a.get("summary", ""),
+            "why": a.get("why_it_worked", ""),
+            "themes": [t.strip() for t in str(a.get("themes", "")).split(";") if t.strip()],
+            "top_comments": [t.strip() for t in str(a.get("top_comments", "")).split("|") if t.strip()],
+            "pos": _int(a.get("sentiment_positive")),
+            "neg": _int(a.get("sentiment_negative")),
+            "neu": _int(a.get("sentiment_neutral")),
+            "controversy": str(a.get("controversy", "")).strip() == "כן",
+            "n": _int(a.get("comments_pulled")),
+        }
+    return out
+
+
 def build_facebook(data, days):
     start, end, p_start, p_end = _window(days)
     fb = data["facebook"]
@@ -412,6 +435,8 @@ def build_facebook(data, days):
     # reach comes only from Meta insights and has broken before (v25); when the
     # whole column is zero the page should say so instead of drawing zeros
     reach_ok = (not cur) or any(_num(p.get("reach")) > 0 for p in cur)
+
+    analyses = _comment_analyses(data, "facebook")
 
     posts = []
     for p in cur:
@@ -443,6 +468,7 @@ def build_facebook(data, days):
             "avg_watch": round(_num(p.get("avg_watch_sec")), 1),
             "total_watch_min": _int(p.get("total_watch_min")),
             "share_rate": round(shares / views * 100, 2) if views else 0,
+            "analysis": analyses.get(str(p.get("post_id", "")).strip()),
         })
     posts.sort(key=lambda x: x["views"], reverse=True)
 
@@ -503,12 +529,7 @@ def build_instagram(data, days):
     total_fb_views = sum(_num(p.get("fb_views")) for p in cur)
     fb_share = (total_fb_views / (total_views + total_fb_views) * 100) if (total_views + total_fb_views) else 0
 
-    # Gemini comment analyses (one per media_id, only for high-conversation posts)
-    analyses = {}
-    for a in data.get("comment_analysis", []):
-        mid = str(a.get("media_id", "")).strip()
-        if mid:
-            analyses[mid] = a
+    analyses = _comment_analyses(data, "instagram")
 
     posts = []
     for p in cur:
@@ -541,17 +562,7 @@ def build_instagram(data, days):
             "save_rate": round(saved / views * 100, 2) if views else 0,
             "share_rate": round(shares / views * 100, 2) if views else 0,
             "fb_share": round(fb_v / (views + fb_v) * 100, 1) if (views + fb_v) else 0,
-            "analysis": {
-                "summary": a.get("summary", ""),
-                "why": a.get("why_it_worked", ""),
-                "themes": [t.strip() for t in str(a.get("themes", "")).split(";") if t.strip()],
-                "top_comments": [t.strip() for t in str(a.get("top_comments", "")).split("|") if t.strip()],
-                "pos": _int(a.get("sentiment_positive")),
-                "neg": _int(a.get("sentiment_negative")),
-                "neu": _int(a.get("sentiment_neutral")),
-                "controversy": str(a.get("controversy", "")).strip() == "כן",
-                "n": _int(a.get("comments_pulled")),
-            } if a else None,
+            "analysis": a,
         })
     posts.sort(key=lambda x: x["views"], reverse=True)
 

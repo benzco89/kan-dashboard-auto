@@ -228,6 +228,22 @@
     return '<span class="km-chip"><span class="l">' + esc(label) + '</span><span class="r ' + (up ? "up" : "down") +
       '">×' + ratio.toFixed(1) + "</span></span>";
   }
+  // Gemini comment-analysis block for the drill-down modal (IG + FB pages)
+  function kmAnalysis(an) {
+    if (!an) return "";
+    var senti = '<div class="km-senti"><div class="bar">' +
+      '<span class="pos" style="width:' + an.pos + '%"></span>' +
+      '<span class="neu" style="width:' + an.neu + '%"></span>' +
+      '<span class="neg" style="width:' + an.neg + '%"></span></div>' +
+      '<div class="legend"><span class="p">חיובי ' + an.pos + '%</span><span>ניטרלי ' + an.neu + '%</span><span class="n">שלילי ' + an.neg + '%</span></div></div>';
+    var themes = an.themes.length ? '<div class="km-themes">' + an.themes.map(function (t) { return '<span class="km-theme">' + esc(t) + '</span>'; }).join("") + '</div>' : "";
+    var quotes = an.top_comments.length ? '<div class="km-quotes">' + an.top_comments.map(function (q) { return '<div class="km-quote">' + esc(q) + '</div>'; }).join("") + '</div>' : "";
+    return kmSection("ניתוח שיחה · AI" + (an.controversy ? " · 🔥 שיחה טעונה" : "")) +
+      senti + (an.why ? '<p class="km-why">' + esc(an.why) + '</p>' : "") + themes + quotes +
+      '<div class="km-ai-note">מבוסס על ' + an.n + ' תגובות · ניתוח Gemini</div>';
+  }
+  // "יש ניתוח שיחה" label for the table date line
+  function aiDot(p) { return p.analysis ? '<span class="ai-dot" title="יש ניתוח שיחה">💬 ניתוח שיחה</span>' : ""; }
 
   // ---------- theme + state ----------
   function getTheme() { try { return localStorage.getItem("pm_theme") || "dark"; } catch (e) { return "dark"; } }
@@ -333,6 +349,7 @@
     fmt: fmt, fmtHtml: fmtHtml, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc, mdInline: mdInline,
     fillIcon: fillIcon, strokeIcon: strokeIcon, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
     openModal: openModal, closeModal: closeModal, kmCell: kmCell, kmSection: kmSection, kmCmp: kmCmp,
+    kmAnalysis: kmAnalysis, aiDot: aiDot,
     RANGE_LABEL: RANGE_LABEL, FILL: FILL
   };
 })();
