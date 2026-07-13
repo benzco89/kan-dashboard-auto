@@ -3,6 +3,15 @@ name: Hot Sniffer
 on:
   workflow_dispatch:      # הטריגר: טיימר על ה-VPS (kan-hot-sniffer.timer), כמו הריצה היומית.
                           # בכוונה בלי schedule: - ה-cron של GitHub מפגר בשעות.
+    inputs:
+      dry_run:
+        description: 'מצב בדיקה: הדפסת ההודעה בלי שליחה ובלי רישום דה-דופ'
+        required: false
+        default: ''
+      test_mult:
+        description: 'דריסת מכפיל הסף (למשל 0.1 לאילוץ התראות בבדיקה)'
+        required: false
+        default: ''
 
 jobs:
   sniff:
@@ -25,4 +34,7 @@ jobs:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          TEST_MULT: ${{ inputs.test_mult }}
         run: python hot_sniffer.py

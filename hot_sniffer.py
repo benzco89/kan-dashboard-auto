@@ -13,7 +13,14 @@ Hot Sniffer - זיהוי תוך-יומי של פוסט שמתפוצץ עכשיו
   ריצה מהגיליון). הריצה הראשונה הראתה ש-p90 לבדו רועש - פוסט בן 20+ שעות
   נושק ל-p90 באופן טבעי; רק חצייה ברורה של מה שפוסט *בשל* משיג = מתפוצץ.
 
-Env: FACEBOOK_TOKEN, GCP_SERVICE_ACCOUNT, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID.
+ההתראה עצמה: המספרים דטרמיניסטיים (בלי AI), ומעליהם שורת Gemini אחת
+שמנסחת "על מה הפוסט" - הכיתובים הגולמיים מגיעים קטועים ומלאי סימנים.
+Gemini הוא best-effort: אם הוא נופל ההתראה יוצאת עם הכיתוב הגולמי.
+
+Env: FACEBOOK_TOKEN, GCP_SERVICE_ACCOUNT, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
+     GEMINI_API_KEY (אופציונלי - לשורת התיאור).
+     DRY_RUN=1 - מצב בדיקה: מדפיס את ההודעה בלי לשלוח ובלי לרשום דה-דופ.
+     TEST_MULT - דריסת מכפיל הסף לבדיקות (למשל 0.1 כדי לאלץ התראות).
 """
 
 import os
@@ -51,9 +58,10 @@ STATE_HEADER = ['post_id', 'platform', 'alerted_at', 'triggers', 'permalink']
 IL_TZ = pytz.timezone('Asia/Jerusalem')
 
 HOT_COMMENTS = {'instagram': 600, 'facebook': 1000}  # = 2x רצפת comment_analyzer
-BASELINE_MULT = 1.5   # "חם" = פי-1.5 מ-p90, לא סתם לגעת בו
+BASELINE_MULT = float(os.environ.get('TEST_MULT') or 1.5)  # "חם" = פי-1.5 מ-p90
 BASELINE_DAYS = 7
 YOUNG_HOURS = 24
+DRY_RUN = os.environ.get('DRY_RUN', '') not in ('', '0', 'false')
 
 
 def _num(v):
@@ -194,13 +202,42 @@ def check_triggers(post, baseline):
     """אילו ספים הפוסט חצה. מחזיר רשימת תיאורים להתראה (ריק = לא חם)."""
     trig = []
     if post['comments'] >= HOT_COMMENTS[post['platform']]:
-        trig.append(f"💬 {post['comments']:,.0f} תגובות (סף {HOT_COMMENTS[post['platform']]:,})")
+        trig.append(f"💬 {post['comments']:,.0f} תגובות — כמות נדירה, השיחה בוערת")
     for key, emoji, label in (('views', '👁', 'צפיות'), ('likes', '❤️', 'לייקים'),
                               ('shares', '🔁', 'שיתופים')):
         floor = baseline[key] * BASELINE_MULT
         if floor and post[key] >= floor:
-            trig.append(f"{emoji} {post[key]:,.0f} {label} (פי-{post[key] / baseline[key]:.1f} מ-p90 השבועי)")
+            trig.append(f"{emoji} {post[key]:,.0f} {label} — פי {post[key] / baseline[key]:.1f} "
+                        f"ממה שפוסט מצליח עושה בשבוע שלם")
     return trig
+
+
+def describe_with_gemini(hot_posts):
+    """שורת 'על מה הפוסט' לכל התראה - קריאת flash אחת לכולן. best-effort."""
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        return {}
+    try:
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=api_key)
+        items = "\n".join(f"{i + 1}. [{p['platform']}] {p['title']}"
+                          for i, (p, _) in enumerate(hot_posts))
+        res = client.models.generate_content(
+            model="gemini-3.5-flash",
+            contents="לפניך כיתובים גולמיים (קטועים, עם סימנים) של פוסטים חדשותיים. "
+                     "נסח לכל אחד משפט תיאור אחד קצר ונקי בעברית - על מה הפוסט. "
+                     "בלי פרשנות, בלי סופרלטיבים.\n\n" + items,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema={"type": "array", "items": {"type": "string"}},
+            ),
+        )
+        lines = json.loads(res.text)
+        return {i: str(lines[i]).strip() for i in range(min(len(lines), len(hot_posts)))}
+    except Exception as e:
+        print(f"⚠️ Gemini description failed (alert goes out with raw captions): {str(e)[:120]}")
+        return {}
 
 
 def main():
@@ -231,21 +268,30 @@ def main():
         print("ℹ️ Nothing exploding right now.")
         return
 
+    descriptions = describe_with_gemini(hot)
+
     plat_he = {'instagram': '📸 אינסטגרם', 'facebook': '📘 פייסבוק'}
     blocks = []
     state_rows = []
-    for post, triggers in hot:
+    for i, (post, triggers) in enumerate(hot):
         age_h = (now - post['posted']).total_seconds() / 3600
+        age_txt = f"לפני {age_h:.0f} שעות" if age_h >= 1.5 else "לפני פחות משעתיים"
+        what = descriptions.get(i) or post['title']
         blocks.append(
-            f"{plat_he[post['platform']]} · לפני {age_h:.0f} שעות\n"
-            f"«{post['title']}»\n" + "\n".join(triggers) +
+            f"{plat_he[post['platform']]} · עלה {age_txt}\n"
+            f"🗞 {what}\n" + "\n".join(triggers) +
             (f"\n{post['permalink']}" if post['permalink'] else ""))
         state_rows.append([
             post['id'], post['platform'], now.strftime('%Y-%m-%d %H:%M'),
             '; '.join(triggers), post['permalink']])
 
-    message = "🔥 מתפוצץ עכשיו\n\n" + "\n\n".join(blocks)
+    header = "🔥 פוסט מתפוצץ עכשיו" if len(hot) == 1 else f"🔥 {len(hot)} פוסטים מתפוצצים עכשיו"
+    message = header + "\n\n" + "\n\n".join(blocks)
     print(message)
+
+    if DRY_RUN:
+        print(f"\n🧪 DRY RUN - not sending, not recording ({len(hot)} would alert)")
+        return
     if send_telegram_alert(message):
         print(f"\n✅ Alerted on {len(hot)} posts")
     else:
