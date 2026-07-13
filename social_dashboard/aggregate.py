@@ -566,6 +566,9 @@ def build_instagram(data, days):
             "save_rate": round(saved / views * 100, 2) if views else 0,
             "share_rate": round(shares / views * 100, 2) if views else 0,
             "fb_share": round(fb_v / (views + fb_v) * 100, 1) if (views + fb_v) else 0,
+            # conversion - the API exposes these for feed posts only, not reels
+            "profile_visits": _int(p.get("profile_visits")),
+            "follows": _int(p.get("follows")),
             "analysis": a,
         })
     posts.sort(key=lambda x: x["views"], reverse=True)
