@@ -235,7 +235,8 @@
       '<span class="pos" style="width:' + an.pos + '%"></span>' +
       '<span class="neu" style="width:' + an.neu + '%"></span>' +
       '<span class="neg" style="width:' + an.neg + '%"></span></div>' +
-      '<div class="legend"><span class="p">תומך בסיקור ' + an.pos + '%</span><span>ניטרלי ' + an.neu + '%</span><span class="n">ביקורתי ' + an.neg + '%</span></div></div>';
+      '<div class="legend"><span class="p">חיובי ' + an.pos + '%</span><span>ניטרלי ' + an.neu + '%</span><span class="n">שלילי ' + an.neg + '%</span></div>' +
+      (an.critique ? '<div class="km-critique">📣 ביקורת על הסיקור עצמו: ' + an.critique + '% מהתגובות</div>' : '') + '</div>';
     var themes = an.themes.length ? '<div class="km-themes">' + an.themes.map(function (t) { return '<span class="km-theme">' + esc(t) + '</span>'; }).join("") + '</div>' : "";
     var quotes = an.top_comments.length ? '<div class="km-quotes">' + an.top_comments.map(function (q) { return '<div class="km-quote">' + esc(q) + '</div>'; }).join("") + '</div>' : "";
     return kmSection("ניתוח שיחה · AI" + (an.controversy ? " · 🔥 שיחה טעונה" : "")) +

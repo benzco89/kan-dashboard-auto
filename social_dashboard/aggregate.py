@@ -406,6 +406,7 @@ def _comment_analyses(data, platform):
             "pos": _int(a.get("sentiment_positive")),
             "neg": _int(a.get("sentiment_negative")),
             "neu": _int(a.get("sentiment_neutral")),
+            "critique": _int(a.get("coverage_criticism")),
             "controversy": str(a.get("controversy", "")).strip() == "כן",
             "n": _int(a.get("comments_pulled")),
         }

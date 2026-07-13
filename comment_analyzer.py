@@ -93,7 +93,8 @@ PLATFORMS = [
 ]
 
 HOT_MULTIPLIER = 2       # פוסט צעיר מ-24ש נכנס אם עבר פי-2 מהרצפה ("חם עכשיו")
-MAX_PER_RUN = 5          # תקרת ניתוחים לריצה לפלטפורמה
+# תקרת ניתוחים לריצה לפלטפורמה; ניתן לדריסה ב-env לצורך backfill חד-פעמי
+MAX_PER_RUN = int(os.environ.get('MAX_PER_RUN') or 5)
 MIN_AGE_HOURS = 24       # שרשור צעיר מזה עוד לא התייצב (אלא אם חם)
 WINDOW_DAYS = 7          # לא חוזרים אחורה מעבר לחלון האיסוף של הפוסטים
 MAX_COMMENTS_PULLED = 600     # תקרת עמודי Graph API לפוסט
@@ -106,6 +107,7 @@ GEMINI_MODELS = ["gemini-3.5-flash", "gemini-2.5-pro"]
 TARGET_HEADER = ['media_id', 'platform', 'post_date', 'analyzed_at', 'type', 'caption',
                  'comments_in_sheet', 'comments_pulled',
                  'sentiment_positive', 'sentiment_negative', 'sentiment_neutral',
+                 'coverage_criticism',
                  'themes', 'top_comments', 'why_it_worked', 'controversy',
                  'summary', 'permalink']
 
@@ -237,18 +239,23 @@ def fetch_youtube_comments(video_id):
     return comments
 
 
-# ציר הסנטימנט מוגדר במפורש: היחס לסיקור/לפוסט עצמו, לא העמדה על הנושא.
-# בלי העיגון הזה המודל בוחר ציר לבד - בכתבת "המעיין הפיראטי" תגובות שזעמו
-# על הסיקור אך תמכו במהלך המסוקר נספרו 80% "חיובי" והטעו את הקורא.
+# שני מדדים נפרדים, כל אחד עם ציר מוגדר (גלגול שלישי של ההגדרה - ההיסטוריה
+# חשובה): ציר לא מוגדר נתן למודל לבחור לבד (כתבת "המעיין" יצאה 80% חיובי
+# כשהקהל זעם על הסיקור); ציר "יחס לסיקור" היה מוגדר אבל דל - רוב המגיבים
+# בכלל לא מתייחסים לסיקור, אז הכול קרס ל"ניטרלי" (קסטרו: 85%). לכן:
+#   sentiment_*        = הטמפרטורה הרגשית של השיחה, לא משנה כלפי מי
+#   coverage_criticism = הסיגנל הייחודי לכאן, כמספר נפרד (יכול לחפוף לשלילי)
 ANALYSIS_SCHEMA = {
     "type": "object",
     "properties": {
         "sentiment_positive": {"type": "integer",
-                               "description": "אחוז המגיבים שמפגינים יחס חיובי לפוסט/לסיקור עצמו: אהדה, הערכה, הזדהות עם התוכן (0-100)"},
+                               "description": "אחוז התגובות שמביעות רגש חיובי: תמיכה, הזדהות, התרגשות, שמחה, גאווה - כלפי כל גורם (0-100)"},
         "sentiment_negative": {"type": "integer",
-                               "description": "אחוז המגיבים הביקורתיים/עוינים כלפי הסיקור או הערוץ: לעג, האשמות בהטיה, תקיפת הכתבה (0-100)"},
+                               "description": "אחוז התגובות שמביעות רגש שלילי: זעם, לעג, תסכול, עצב, עוינות - כלפי כל גורם (0-100)"},
         "sentiment_neutral": {"type": "integer",
-                              "description": "אחוז המגיבים שדנים בנושא עצמו בלי להביע יחס לסיקור (0-100)"},
+                              "description": "אחוז התגובות הענייניות בלבד, בלי מטען רגשי (0-100)"},
+        "coverage_criticism": {"type": "integer",
+                               "description": "בנפרד מהסנטימנט: אחוז התגובות שמבקרות את הסיקור, הכתבה או הערוץ עצמם (0-100; יכול לחפוף לשלילי)"},
         "themes": {"type": "array", "items": {"type": "string"},
                    "description": "2-4 נושאים דומיננטיים בשיחה"},
         "top_comments": {"type": "array", "items": {"type": "string"},
@@ -259,7 +266,8 @@ ANALYSIS_SCHEMA = {
         "summary": {"type": "string", "description": "שורה אחת לדשבורד"},
     },
     "required": ["sentiment_positive", "sentiment_negative", "sentiment_neutral",
-                 "themes", "top_comments", "why_it_worked", "controversy", "summary"],
+                 "coverage_criticism", "themes", "top_comments", "why_it_worked",
+                 "controversy", "summary"],
 }
 
 
@@ -283,10 +291,12 @@ def analyze_with_gemini(client, plat, post, comments):
 התגובות ({len(comments)} נמשכו, מוצגות לפי לייקים):
 {chr(10).join(lines)}
 
-נתח בעברית. חשוב - ציר הסנטימנט: חיובי/שלילי נמדדים ביחס לפוסט ולסיקור עצמם,
-לא ביחס לנושא המסוקר. מגיב שתומך באירוע המסוקר אבל תוקף את הכתבה או את הערוץ
-נספר שלילי; מגיב שדן בנושא בלי יחס לסיקור נספר ניטרלי. את עמדת הקהל על הנושא
-עצמו בטא ב-themes וב-why_it_worked.
+נתח בעברית. שני מדדים נפרדים, אל תערבב ביניהם:
+1. סנטימנט = הטמפרטורה הרגשית של התגובות, לא משנה כלפי מי: חיובי (תמיכה,
+   הזדהות, התרגשות, שמחה), שלילי (זעם, לעג, תסכול, עצב), ניטרלי (ענייני
+   בלבד - אמור להיות מיעוט קטן ברוב השיחות).
+2. coverage_criticism = כמה מהתגובות תוקפות את הסיקור, הכתבה או הערוץ עצמם
+   (יכול לחפוף לשלילי; 0 אם השיחה בכלל לא עוסקת בסיקור).
 ב-why_it_worked אל תסתפק במה שהפוסט אומר - הסבר מה בתגובות מגלה מדוע
 הוא עורר שיחה (עצבים חשופים, ויכוח, הזדהות, סרקזם, טרנד). היה ספציפי וציטוטי."""
 
@@ -352,6 +362,7 @@ def run_platform(sh, client, plat, analyzed_ids):
                 analysis['sentiment_positive'],
                 analysis['sentiment_negative'],
                 analysis['sentiment_neutral'],
+                analysis['coverage_criticism'],
                 '; '.join(analysis['themes'][:4]),
                 ' | '.join(t[:150] for t in analysis['top_comments'][:3]),
                 analysis['why_it_worked'],

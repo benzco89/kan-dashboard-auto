@@ -259,6 +259,7 @@ h1{ margin:0; font-weight:900; letter-spacing:-.7px; }
 .km-senti .legend{ display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:5px; }
 .km-senti .legend .p{ color:var(--ok); }
 .km-senti .legend .n{ color:var(--bad); }
+.km-critique{ font-size:11.5px; color:var(--amber); margin-top:6px; }
 .km-why{ font-size:13px; line-height:1.6; color:var(--text); margin:0 0 10px; }
 .km-themes{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
 .km-theme{ font-size:11.5px; padding:3px 9px; border-radius:20px; background:var(--console); border:1px solid var(--line2); color:var(--muted); }
