@@ -43,6 +43,8 @@ BASE = f"https://graph.facebook.com/{API_VERSION}"
 
 SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
 SHEET_NAME = "מתחרים"
+POSTS_SHEET = "פוסטים מתחרים"   # שורה לכל פוסט; ספירות מתרעננות בכל ריצה
+POSTS_RETENTION_DAYS = 14       # מעבר לזה השורות נמחקות - זה פיד, לא ארכיון
 
 IL_TZ = pytz.timezone('Asia/Jerusalem')
 
@@ -67,11 +69,11 @@ def fetch_account(own_ig, username):
         'access_token': ACCESS_TOKEN,
         'fields': f"business_discovery.username({username})"
                   "{username,name,followers_count,media_count,"
-                  "media.limit(25){like_count,comments_count,timestamp,caption,permalink,media_type}}",
+                  "media.limit(25){id,like_count,comments_count,timestamp,caption,permalink,media_type}}",
     }, timeout=20, max_retries=2)
     if 'error' in res:
         print(f"⚠️ {username}: {res['error'].get('message', '')[:100]}")
-        return None
+        return None, []
     bd = res.get('business_discovery', {})
     media = bd.get('media', {}).get('data', [])
     now = datetime.now(IL_TZ)
@@ -92,9 +94,28 @@ def fetch_account(own_ig, username):
     followers = bd.get('followers_count', 0) or 0
     eng_per_1k = round((avg_likes + avg_comments) / followers * 1000, 2) if followers else 0
 
+    uname = bd.get('username', username)
+    post_rows = []
+    for m in media:
+        ts = _ts(m)
+        if not ts:
+            continue
+        post_rows.append({
+            'post_id': str(m.get('id', '') or m.get('permalink', '')),
+            'username': uname,
+            'date': ts.strftime('%Y-%m-%d'),
+            'time': ts.strftime('%H:%M'),
+            'type': m.get('media_type', ''),
+            'caption': (m.get('caption') or '').replace('\n', ' ')[:200],
+            'likes': m.get('like_count', 0) or 0,
+            'comments': m.get('comments_count', 0) or 0,
+            'permalink': m.get('permalink', ''),
+            'pulled_at': now.strftime('%Y-%m-%d %H:%M'),
+        })
+
     top = max(last_day, key=lambda m: (m.get('like_count', 0) or 0) + (m.get('comments_count', 0) or 0),
               default=None)
-    return {
+    snapshot = {
         'date': now.strftime('%Y-%m-%d'),
         'username': bd.get('username', username),
         'name': bd.get('name', ''),
@@ -111,14 +132,46 @@ def fetch_account(own_ig, username):
         'top_url': top.get('permalink', '') if top else '',
         'pulled_at': now.strftime('%Y-%m-%d %H:%M'),
     }
+    return snapshot, post_rows
 
 
-def save(new_df):
+def _open():
     creds_json = os.environ.get('GCP_SERVICE_ACCOUNT') or os.environ.get('GOOGLE_CREDENTIALS')
     creds = Credentials.from_service_account_info(json.loads(creds_json), scopes=[
         'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/drive'])
-    sh = gspread.authorize(creds).open_by_key(SPREADSHEET_ID)
+    return gspread.authorize(creds).open_by_key(SPREADSHEET_ID)
+
+
+def save_posts(sh, posts_df):
+    """שורה לכל פוסט: ספירות טריות דורסות ישנות (מיזוג לפי post_id),
+    ושורות מעבר לחלון השמירה נמחקות."""
+    try:
+        ws = sh.worksheet(POSTS_SHEET)
+        existing = pd.DataFrame(ws.get_all_records())
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title=POSTS_SHEET, rows=3000, cols=12)
+        existing = pd.DataFrame()
+        print(f"✅ Created new sheet: {POSTS_SHEET}")
+
+    if not existing.empty and 'post_id' in existing.columns:
+        posts_df['post_id'] = posts_df['post_id'].astype(str)
+        existing['post_id'] = existing['post_id'].astype(str)
+        combined = pd.concat([posts_df, existing], ignore_index=True)
+        combined = combined.drop_duplicates(subset=['post_id'], keep='first')
+    else:
+        combined = posts_df
+
+    cutoff = (datetime.now(IL_TZ) - timedelta(days=POSTS_RETENTION_DAYS)).strftime('%Y-%m-%d')
+    combined = combined[combined['date'].astype(str) >= cutoff]
+    combined = combined.sort_values(['date', 'time'], ascending=False)
+    combined = combined.fillna(0).replace([float('inf'), float('-inf')], 0)
+    ws.clear()
+    ws.update([combined.columns.tolist()] + combined.values.tolist())
+    print(f"✅ Saved {len(posts_df)} post rows ({len(combined)} kept in {POSTS_RETENTION_DAYS}d window)")
+
+
+def save(sh, new_df):
     try:
         ws = sh.worksheet(SHEET_NAME)
         existing = pd.DataFrame(ws.get_all_records())
@@ -167,13 +220,15 @@ def main():
         print("❌ Could not resolve own IG account id")
         sys.exit(1)
 
-    rows = []
+    rows, all_posts = [], []
     for username in COMPETITORS:
-        row = fetch_account(own_ig, username)
+        row, post_rows = fetch_account(own_ig, username)
         if row:
             rows.append(row)
+            all_posts.extend(post_rows)
             print(f"📥 @{row['username']}: {row['followers']:,} followers · "
-                  f"{row['posts_24h']} posts/24h · eng/1k={row['eng_per_1k']}")
+                  f"{row['posts_24h']} posts/24h · eng/1k={row['eng_per_1k']} · "
+                  f"{len(post_rows)} posts saved")
         time.sleep(0.3)
 
     if not rows:
@@ -182,7 +237,10 @@ def main():
     if len(rows) < len(COMPETITORS):
         print(f"⚠️ {len(COMPETITORS) - len(rows)} accounts failed - saving the rest")
 
-    save(pd.DataFrame(rows))
+    sh = _open()
+    save(sh, pd.DataFrame(rows))
+    if all_posts:
+        save_posts(sh, pd.DataFrame(all_posts))
     print(f"\n✅ Done! {len(rows)}/{len(COMPETITORS)} accounts tracked.")
 
 
