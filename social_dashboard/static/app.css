@@ -251,6 +251,21 @@ h1{ margin:0; font-weight:900; letter-spacing:-.7px; }
 .km-chip .r{ font-weight:700; font-family:ui-monospace,monospace; }
 .km-chip .r.up{ color:var(--ok); }
 .km-chip .r.down{ color:var(--bad); }
+.km-senti{ margin-bottom:10px; }
+.km-senti .bar{ display:flex; height:8px; border-radius:5px; overflow:hidden; background:var(--console); border:1px solid var(--line); }
+.km-senti .bar .pos{ background:var(--ok); }
+.km-senti .bar .neu{ background:var(--line2); }
+.km-senti .bar .neg{ background:var(--bad); }
+.km-senti .legend{ display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:5px; }
+.km-senti .legend .p{ color:var(--ok); }
+.km-senti .legend .n{ color:var(--bad); }
+.km-why{ font-size:13px; line-height:1.6; color:var(--text); margin:0 0 10px; }
+.km-themes{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+.km-theme{ font-size:11.5px; padding:3px 9px; border-radius:20px; background:var(--console); border:1px solid var(--line2); color:var(--muted); }
+.km-quotes{ display:grid; gap:6px; margin-bottom:8px; }
+.km-quote{ font-size:12.5px; line-height:1.5; color:var(--muted); background:var(--console); border-inline-start:2px solid var(--line2); border-radius:6px; padding:7px 10px; }
+.km-ai-note{ font-family:ui-monospace,monospace; font-size:10.5px; color:var(--faint); }
+.ai-dot{ margin-inline-start:5px; font-size:11px; }
 .km-open{ display:inline-flex; align-items:center; gap:7px; margin-top:18px; text-decoration:none; font-size:13px; font-weight:700;
   color:#fff; background:var(--pf,var(--orange)); border-radius:8px; padding:10px 16px; }
 @media (max-width:560px){ .km-hero{ grid-template-columns:repeat(3,1fr); } .kmodal-backdrop{ padding:0; } .kmodal{ border-radius:0; min-height:100vh; max-width:none; } }

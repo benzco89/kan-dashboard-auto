@@ -503,6 +503,13 @@ def build_instagram(data, days):
     total_fb_views = sum(_num(p.get("fb_views")) for p in cur)
     fb_share = (total_fb_views / (total_views + total_fb_views) * 100) if (total_views + total_fb_views) else 0
 
+    # Gemini comment analyses (one per media_id, only for high-conversation posts)
+    analyses = {}
+    for a in data.get("comment_analysis", []):
+        mid = str(a.get("media_id", "")).strip()
+        if mid:
+            analyses[mid] = a
+
     posts = []
     for p in cur:
         views = _num(p.get("views"))
@@ -511,6 +518,7 @@ def build_instagram(data, days):
         saved = _int(p.get("saved"))
         shares = _int(p.get("shares"))
         fb_v = _num(p.get("fb_views"))
+        a = analyses.get(str(p.get("media_id", "")).strip())
         posts.append({
             "title": p.get("caption", ""),
             "date": (_parse_date(p.get("date")) or "").__str__() if p.get("date") else "",
@@ -533,6 +541,17 @@ def build_instagram(data, days):
             "save_rate": round(saved / views * 100, 2) if views else 0,
             "share_rate": round(shares / views * 100, 2) if views else 0,
             "fb_share": round(fb_v / (views + fb_v) * 100, 1) if (views + fb_v) else 0,
+            "analysis": {
+                "summary": a.get("summary", ""),
+                "why": a.get("why_it_worked", ""),
+                "themes": [t.strip() for t in str(a.get("themes", "")).split(";") if t.strip()],
+                "top_comments": [t.strip() for t in str(a.get("top_comments", "")).split("|") if t.strip()],
+                "pos": _int(a.get("sentiment_positive")),
+                "neg": _int(a.get("sentiment_negative")),
+                "neu": _int(a.get("sentiment_neutral")),
+                "controversy": str(a.get("controversy", "")).strip() == "כן",
+                "n": _int(a.get("comments_pulled")),
+            } if a else None,
         })
     posts.sort(key=lambda x: x["views"], reverse=True)
 

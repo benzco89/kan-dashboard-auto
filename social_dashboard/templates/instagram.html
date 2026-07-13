@@ -94,7 +94,7 @@
       var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : (hlR ? "border-inline-start-color:var(--hi-alt);background:var(--hi-alt-bg);" : "");
       return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" data-idx="' + idx + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
         '<span class="cell" style="' + rankStyle + '">' + rank + '</span>' +
-        '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + '</span><span class="t-date">' + KS.fmtDate(p.date) + '</span></span>' +
+        '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + (p.analysis ? '<span class="ai-dot" title="יש ניתוח שיחה">💬</span>' : '') + '</span><span class="t-date">' + KS.fmtDate(p.date) + '</span></span>' +
         '<span class="center"><span class="tag" style="color:' + (TYPE_COLOR[p.type] || "var(--muted)") + ';">' + p.type + '</span></span>' +
         '<span class="cell strong">' + KS.fmt(p.views) + '</span>' +
         '<span class="cell">' + KS.fmt(p.reach) + '</span>' +
@@ -139,6 +139,20 @@
       var cmp = (mv || msr) ? (KS.kmSection("ביחס לטיפוסי בפלטפורמה") + '<div class="km-cmp">' +
         (mv ? KS.kmCmp("צפיות מול חציון", p.views / mv) : "") +
         (msr && p.save_rate ? KS.kmCmp("שמירה מול חציון", p.save_rate / msr) : "") + '</div>') : "";
+      var ai = "";
+      if (p.analysis) {
+        var an = p.analysis;
+        var senti = '<div class="km-senti"><div class="bar">' +
+          '<span class="pos" style="width:' + an.pos + '%"></span>' +
+          '<span class="neu" style="width:' + an.neu + '%"></span>' +
+          '<span class="neg" style="width:' + an.neg + '%"></span></div>' +
+          '<div class="legend"><span class="p">חיובי ' + an.pos + '%</span><span>ניטרלי ' + an.neu + '%</span><span class="n">שלילי ' + an.neg + '%</span></div></div>';
+        var themes = an.themes.length ? '<div class="km-themes">' + an.themes.map(function (t) { return '<span class="km-theme">' + KS.esc(t) + '</span>'; }).join("") + '</div>' : "";
+        var quotes = an.top_comments.length ? '<div class="km-quotes">' + an.top_comments.map(function (q) { return '<div class="km-quote">' + KS.esc(q) + '</div>'; }).join("") + '</div>' : "";
+        ai = KS.kmSection("ניתוח שיחה · AI" + (an.controversy ? " · 🔥 שיחה טעונה" : "")) +
+          senti + (an.why ? '<p class="km-why">' + KS.esc(an.why) + '</p>' : "") + themes + quotes +
+          '<div class="km-ai-note">מבוסס על ' + an.n + ' תגובות · ניתוח Gemini</div>';
+      }
       var openBtn = p.url ? '<a class="km-open" href="' + KS.esc(p.url) + '" target="_blank" rel="noopener">פתח באינסטגרם ↗</a>' : "";
       KS.openModal({
         iconHtml: KS.fillIcon("ig", "#fff", 19),
@@ -146,7 +160,7 @@
         type: "Instagram · " + p.type,
         title: p.title || "(ללא כותרת)",
         date: KS.fmtFullDate(p.date),
-        bodyHtml: hero + inter + rates + cross + cmp + openBtn
+        bodyHtml: hero + inter + rates + cross + cmp + ai + openBtn
       });
     }
     function medStory(key) {

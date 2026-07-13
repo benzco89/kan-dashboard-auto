@@ -87,6 +87,17 @@ jobs:
           TWITTER_USERNAME: kann_news
         run: python twitter_collector.py
 
+      # שלב 4.7: ניתוח תגובות לפוסטים מדוברים (רץ אחרי איסוף אינסטגרם כדי
+      # שהמועמדים ייבחרו מנתוני הבוקר) - best-effort: כשל לא מכשיל את ה-run
+      - name: Analyze Post Comments
+        id: comments
+        continue-on-error: true
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python comment_analyzer.py
+
       # שלב 5: שליחת דוח טלגרם (רץ גם אם חלק מהאיסופים נכשלו - מדווח על מה שיש)
       - name: Send Telegram Report
         id: report
@@ -115,6 +126,7 @@ jobs:
           [ "${{ steps.report.outcome }}"    = "failure" ] && critical="$critical telegram-report"
           [ "${{ steps.twitter.outcome }}"   = "failure" ] && optional="$optional twitter(best-effort)"
           [ "${{ steps.stories.outcome }}"   = "failure" ] && optional="$optional stories(best-effort)"
+          [ "${{ steps.comments.outcome }}"  = "failure" ] && optional="$optional comments(best-effort)"
 
           if [ -z "$critical$optional" ]; then
             echo "All steps succeeded."
