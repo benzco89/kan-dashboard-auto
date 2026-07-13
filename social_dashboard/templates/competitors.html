@@ -14,10 +14,49 @@
 (function () {
   function stat(v, l) { return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
 
+  var TYPE_HE = { IMAGE: "תמונה", VIDEO: "וידאו", CAROUSEL_ALBUM: "קרוסלה", Reel: "ריל", Photo: "תמונה", Carousel: "קרוסלה" };
+
+  function postRow(p, withAccount) {
+    var head = '<div class="hot-row-head"><span>' +
+      (withAccount ? (p.is_kan ? "🔴 " : "") + KS.esc(p.name || p.username) + ' · ' : "") +
+      (TYPE_HE[p.type] || KS.esc(p.type || "")) + '</span>' +
+      '<span class="hot-time">' + KS.fmtDate(p.date) + (p.time ? " " + KS.esc(p.time) : "") + '</span></div>';
+    var body = '<div class="hot-trig">' + KS.esc(p.caption || "(ללא כיתוב)") +
+      '<br>❤️ ' + KS.fmt(p.likes) + ' · 💬 ' + KS.fmt(p.comments) + '</div>';
+    return p.url
+      ? '<a class="hot-row" href="' + KS.esc(p.url) + '" target="_blank" rel="noopener">' + head + body + '</a>'
+      : '<div class="hot-row">' + head + body + '</div>';
+  }
+
+  var displayList = [];
+  function openAccountModal(c) {
+    var posts = c.posts || [];
+    var body = posts.length
+      ? KS.kmSection("הפוסטים החזקים בטווח · לפי מעורבות") + posts.map(function (p) { return postRow(p, false); }).join("")
+      : '<div style="padding:16px;color:var(--muted);">אין פוסטים שמורים בטווח — האיסוף התחיל היום, הפיד מתמלא מיום ליום (עד 14 יום אחורה)</div>';
+    KS.openModal({
+      iconHtml: KS.fillIcon("ig", "#fff", 19),
+      iconBg: c.is_kan ? "var(--pf)" : "linear-gradient(135deg,#feda75,#d62976 45%,#962fbf 80%)",
+      type: "@" + c.username + " · " + KS.fmt(c.followers) + " עוקבים",
+      title: (c.is_kan ? "🔴 " : "") + (c.name || c.username),
+      date: "",
+      bodyHtml: body
+    });
+  }
+
   function render(data, app) {
     var rl = KS.RANGE_LABEL[data.range];
     var s = data.summary;
     var comps = data.competitors || [];
+    displayList = comps;
+
+    var arena = data.arena || [];
+    var arenaSection = arena.length
+      ? '<div class="section-label"><span>🥊 הזירה · 48 השעות האחרונות</span><span></span></div>' +
+        '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">הפוסטים החזקים של כל החשבונות (כולל כאן), לפי לייקים+תגובות</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;">' +
+        arena.map(function (p) { return postRow(p, true); }).join("") + '</div></div>'
+      : "";
 
     var stats = [
       stat("" + s.tracked, "חשבונות במעקב"),
@@ -40,7 +79,7 @@
           '<span class="t-title" style="font-weight:400;font-size:12px;">' + KS.esc(c.top.caption || "") + '</span>' +
           '<span class="t-date">❤️ ' + KS.fmt(c.top.likes) + ' · 💬 ' + KS.fmt(c.top.comments) + '</span></a>'
         : '<span style="color:var(--faint);font-size:12px;">' + (c.is_kan ? "ראו בעמוד האינסטגרם" : "אין פוסט ב-24ש") + '</span>';
-      return '<div class="trow" ' + kan + ' style="display:grid;grid-template-columns:' + cols + ';gap:10px;">' +
+      return '<div class="trow" ' + kan + ' data-idx="' + i + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;cursor:pointer;">' +
         '<span class="cell" style="color:var(--faint);">' + (i + 1) + '</span>' +
         '<span style="min-width:0;"><span class="t-title">' + (c.is_kan ? "🔴 " : "") + KS.esc(c.name || c.username) + '</span>' +
         '<span class="t-date">@' + KS.esc(c.username) + '</span></span>' +
@@ -59,11 +98,20 @@
 
       '<div class="panel mb-m"><div class="grid-4">' + stats + '</div></div>' +
 
+      arenaSection +
+
       '<div class="table"><div class="table-head"><div><div class="panel-title">דירוג לפי עוקבים</div>' +
-      '<div class="panel-sub">מעורבות/1K = ממוצע לייקים+תגובות ל-10 הפוסטים האחרונים, מנורמל לגודל הקהל · צפיות אינן ציבוריות</div></div></div>' +
-      '<div class="table-scroll">' + thead + rows + '</div></div>' +
+      '<div class="panel-sub">מעורבות/1K = ממוצע לייקים+תגובות ל-10 הפוסטים האחרונים, מנורמל לגודל הקהל · צפיות אינן ציבוריות · לחצו על חשבון לכל הפוסטים שלו</div></div></div>' +
+      '<div class="table-scroll" id="comp-body">' + thead + rows + '</div></div>' +
 
       '<div class="panel-sub" style="margin-top:10px;">🔴 = כאן חדשות (מהנתונים המלאים שלנו) · שינויי עוקבים מצטברים מיום תחילת המעקב</div>';
+
+    document.getElementById("comp-body").addEventListener("click", function (e) {
+      if (e.target.closest("a")) return;  // קישור לפוסט גובר על המודל
+      var row = e.target.closest(".trow"); if (!row) return;
+      var idx = parseInt(row.getAttribute("data-idx"), 10);
+      if (!isNaN(idx) && displayList[idx]) openAccountModal(displayList[idx]);
+    });
   }
 
   KanSocial.init("competitors", render);

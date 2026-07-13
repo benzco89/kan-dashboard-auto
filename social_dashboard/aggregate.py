@@ -905,6 +905,24 @@ def build_competitors(data, days):
         if d and u:
             by_user.setdefault(u, []).append((d, r))
 
+    # per-post feed (kept 14 days by the collector); grouped per account
+    posts_by_user = {}
+    for p in data.get("competitor_posts", []):
+        d = _parse_date(p.get("date"))
+        u = str(p.get("username", "")).strip()
+        if not d or not u or not (start <= d <= end):
+            continue
+        likes, comments = _int(p.get("likes")), _int(p.get("comments"))
+        posts_by_user.setdefault(u, []).append({
+            "date": str(d), "time": p.get("time", ""),
+            "type": p.get("type", ""),
+            "caption": p.get("caption", ""),
+            "likes": likes, "comments": comments, "eng": likes + comments,
+            "url": p.get("permalink", ""),
+        })
+    for items in posts_by_user.values():
+        items.sort(key=lambda x: -x["eng"])
+
     competitors = []
     for username, entries in by_user.items():
         entries.sort(key=lambda e: e[0])
@@ -928,6 +946,7 @@ def build_competitors(data, days):
                 "comments": _int(latest.get("top_comments")),
                 "url": latest.get("top_url", ""),
             },
+            "posts": posts_by_user.get(username, [])[:15],
             "is_kan": False,
         })
 
@@ -952,6 +971,15 @@ def build_competitors(data, days):
         "eng_per_1k": round((own_avg_likes + own_avg_comments) / kan_followers * 1000, 2) if kan_followers else 0,
         "spark": [],
         "top": {},
+        "posts": sorted(({
+            "date": str(_parse_date(p.get("date")) or ""), "time": p.get("time", ""),
+            "type": p.get("type", ""),
+            "caption": str(p.get("caption", ""))[:200],
+            "likes": _int(p.get("likes")), "comments": _int(p.get("comments")),
+            "eng": _int(p.get("likes")) + _int(p.get("comments")),
+            "url": p.get("permalink", ""),
+        } for p in ig if (_parse_date(p.get("date")) or start) >= start and _parse_date(p.get("date"))),
+            key=lambda x: -x["eng"])[:15],
         "is_kan": True,
     })
 
@@ -959,6 +987,16 @@ def build_competitors(data, days):
     kan_rank = next((i + 1 for i, c in enumerate(competitors) if c["is_kan"]), 0)
     growers = [c for c in competitors if not c["is_kan"]]
     fastest = max(growers, key=lambda c: c["change_range"], default=None)
+
+    # הזירה: הפוסטים החזקים של כל החשבונות (כולל כאן) ב-48 השעות האחרונות
+    arena_cutoff = end - timedelta(days=1)
+    arena = []
+    for c in competitors:
+        for p in c["posts"]:
+            pdate = _parse_date(p["date"])
+            if pdate and pdate >= arena_cutoff:
+                arena.append(dict(p, name=c["name"], username=c["username"], is_kan=c["is_kan"]))
+    arena.sort(key=lambda x: -x["eng"])
 
     return {
         "range": days,
@@ -969,6 +1007,7 @@ def build_competitors(data, days):
             "leader": growers[0]["name"] if growers else "",
             "fastest": {"name": fastest["name"], "change": fastest["change_range"]} if fastest else None,
         },
+        "arena": arena[:12],
         "competitors": competitors,
     }
 
