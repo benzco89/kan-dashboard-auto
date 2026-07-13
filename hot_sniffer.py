@@ -13,12 +13,11 @@ Hot Sniffer - זיהוי תוך-יומי של פוסט שמתפוצץ עכשיו
   ריצה מהגיליון). הריצה הראשונה הראתה ש-p90 לבדו רועש - פוסט בן 20+ שעות
   נושק ל-p90 באופן טבעי; רק חצייה ברורה של מה שפוסט *בשל* משיג = מתפוצץ.
 
-ההתראה עצמה: המספרים דטרמיניסטיים (בלי AI), ומעליהם שורת Gemini אחת
-שמנסחת "על מה הפוסט" - הכיתובים הגולמיים מגיעים קטועים ומלאי סימנים.
-Gemini הוא best-effort: אם הוא נופל ההתראה יוצאת עם הכיתוב הגולמי.
+ההתראה כולה דטרמיניסטית - בלי AI. הכותרת היא הכיתוב המקורי של הפוסט
+(מנוקה מסימני bidi וקטוע נקי בגבול מילה): מי שמקבל את ההתראה מזהה את
+הפוסט מיד מהמילים של עצמו, ופרפרזה של מודל רק מוסיפה שכבת עיוות אפשרית.
 
-Env: FACEBOOK_TOKEN, GCP_SERVICE_ACCOUNT, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
-     GEMINI_API_KEY (אופציונלי - לשורת התיאור).
+Env: FACEBOOK_TOKEN, GCP_SERVICE_ACCOUNT, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID.
      DRY_RUN=1 - מצב בדיקה: מדפיס את ההודעה בלי לשלוח ובלי לרשום דה-דופ.
      TEST_MULT - דריסת מכפיל הסף לבדיקות (למשל 0.1 כדי לאלץ התראות).
 """
@@ -161,7 +160,7 @@ def fetch_young_instagram():
                 shares = v
         posts.append({
             'id': m['id'], 'platform': 'instagram',
-            'title': (m.get('caption') or '')[:120],
+            'title': (m.get('caption') or '')[:200],
             'posted': posted, 'permalink': m.get('permalink', ''),
             'views': views, 'likes': m.get('like_count', 0) or 0,
             'comments': m.get('comments_count', 0) or 0, 'shares': shares,
@@ -188,7 +187,7 @@ def fetch_young_facebook():
             continue
         posts.append({
             'id': p['id'], 'platform': 'facebook',
-            'title': (p.get('message') or '').replace('\n', ' ')[:120],
+            'title': (p.get('message') or '').replace('\n', ' ')[:200],
             'posted': posted, 'permalink': p.get('permalink_url', ''),
             'views': 0,  # צפיות FB דורשות insights; הריאקציות/תגובות מספיקות לזיהוי
             'likes': p.get('reactions', {}).get('summary', {}).get('total_count', 0),
@@ -212,32 +211,13 @@ def check_triggers(post, baseline):
     return trig
 
 
-def describe_with_gemini(hot_posts):
-    """שורת 'על מה הפוסט' לכל התראה - קריאת flash אחת לכולן. best-effort."""
-    api_key = os.environ.get('GEMINI_API_KEY')
-    if not api_key:
-        return {}
-    try:
-        from google import genai
-        from google.genai import types
-        client = genai.Client(api_key=api_key)
-        items = "\n".join(f"{i + 1}. [{p['platform']}] {p['title']}"
-                          for i, (p, _) in enumerate(hot_posts))
-        res = client.models.generate_content(
-            model="gemini-3.5-flash",
-            contents="לפניך כיתובים גולמיים (קטועים, עם סימנים) של פוסטים חדשותיים. "
-                     "נסח לכל אחד משפט תיאור אחד קצר ונקי בעברית - על מה הפוסט. "
-                     "בלי פרשנות, בלי סופרלטיבים.\n\n" + items,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema={"type": "array", "items": {"type": "string"}},
-            ),
-        )
-        lines = json.loads(res.text)
-        return {i: str(lines[i]).strip() for i in range(min(len(lines), len(hot_posts)))}
-    except Exception as e:
-        print(f"⚠️ Gemini description failed (alert goes out with raw captions): {str(e)[:120]}")
-        return {}
+def clean_title(raw):
+    """כיתוב גולמי -> שורת כותרת: בלי סימני bidi/עיצוב, חיתוך נקי בגבול מילה."""
+    text = re.sub(r'[‎‏‪-‮⁦-⁩﻿]', '', str(raw))
+    text = re.sub(r'\s+', ' ', text).strip()
+    if len(text) > 140:
+        text = text[:140].rsplit(' ', 1)[0] + "…"
+    return text or "(ללא כיתוב)"
 
 
 def main():
@@ -268,18 +248,15 @@ def main():
         print("ℹ️ Nothing exploding right now.")
         return
 
-    descriptions = describe_with_gemini(hot)
-
     plat_he = {'instagram': '📸 אינסטגרם', 'facebook': '📘 פייסבוק'}
     blocks = []
     state_rows = []
-    for i, (post, triggers) in enumerate(hot):
+    for post, triggers in hot:
         age_h = (now - post['posted']).total_seconds() / 3600
         age_txt = f"לפני {age_h:.0f} שעות" if age_h >= 1.5 else "לפני פחות משעתיים"
-        what = descriptions.get(i) or post['title']
         blocks.append(
             f"{plat_he[post['platform']]} · עלה {age_txt}\n"
-            f"🗞 {what}\n" + "\n".join(triggers) +
+            f"🗞 {clean_title(post['title'])}\n" + "\n".join(triggers) +
             (f"\n{post['permalink']}" if post['permalink'] else ""))
         state_rows.append([
             post['id'], post['platform'], now.strftime('%Y-%m-%d %H:%M'),
