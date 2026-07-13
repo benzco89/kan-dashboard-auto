@@ -137,6 +137,12 @@ def summarize_youtube(df, yesterday_date):
     top_delta = ""
     if 'views_delta' in df.columns:
         old_videos = df[df['published_at'] < yesterday_date].copy()
+        # רק שורות שהקולקטור באמת רענן בריצה האחרונה: סרטון שיצא מחלון
+        # 30 הימים מפסיק להתעדכן, והדלתא האחרונה שלו קופאת בגיליון לנצח.
+        # בלי הסינון הזה סרטון "תומר בר" מאפריל (דלתא קפואה +26K) ככב
+        # בכל דוח יומי במשך חודשים.
+        if 'last_updated' in old_videos.columns:
+            old_videos = old_videos[old_videos['last_updated'].astype(str).str[:10] >= yesterday_date]
         if not old_videos.empty:
             old_videos = old_videos[old_videos['views_delta'] > 0].sort_values('views_delta', ascending=False)
             for _, row in old_videos.head(3).iterrows():
