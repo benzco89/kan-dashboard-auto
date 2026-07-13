@@ -237,12 +237,18 @@ def fetch_youtube_comments(video_id):
     return comments
 
 
+# ציר הסנטימנט מוגדר במפורש: היחס לסיקור/לפוסט עצמו, לא העמדה על הנושא.
+# בלי העיגון הזה המודל בוחר ציר לבד - בכתבת "המעיין הפיראטי" תגובות שזעמו
+# על הסיקור אך תמכו במהלך המסוקר נספרו 80% "חיובי" והטעו את הקורא.
 ANALYSIS_SCHEMA = {
     "type": "object",
     "properties": {
-        "sentiment_positive": {"type": "integer", "description": "אחוז 0-100"},
-        "sentiment_negative": {"type": "integer", "description": "אחוז 0-100"},
-        "sentiment_neutral": {"type": "integer", "description": "אחוז 0-100"},
+        "sentiment_positive": {"type": "integer",
+                               "description": "אחוז המגיבים שמפגינים יחס חיובי לפוסט/לסיקור עצמו: אהדה, הערכה, הזדהות עם התוכן (0-100)"},
+        "sentiment_negative": {"type": "integer",
+                               "description": "אחוז המגיבים הביקורתיים/עוינים כלפי הסיקור או הערוץ: לעג, האשמות בהטיה, תקיפת הכתבה (0-100)"},
+        "sentiment_neutral": {"type": "integer",
+                              "description": "אחוז המגיבים שדנים בנושא עצמו בלי להביע יחס לסיקור (0-100)"},
         "themes": {"type": "array", "items": {"type": "string"},
                    "description": "2-4 נושאים דומיננטיים בשיחה"},
         "top_comments": {"type": "array", "items": {"type": "string"},
@@ -277,7 +283,11 @@ def analyze_with_gemini(client, plat, post, comments):
 התגובות ({len(comments)} נמשכו, מוצגות לפי לייקים):
 {chr(10).join(lines)}
 
-נתח בעברית. ב-why_it_worked אל תסתפק במה שהפוסט אומר - הסבר מה בתגובות מגלה מדוע
+נתח בעברית. חשוב - ציר הסנטימנט: חיובי/שלילי נמדדים ביחס לפוסט ולסיקור עצמם,
+לא ביחס לנושא המסוקר. מגיב שתומך באירוע המסוקר אבל תוקף את הכתבה או את הערוץ
+נספר שלילי; מגיב שדן בנושא בלי יחס לסיקור נספר ניטרלי. את עמדת הקהל על הנושא
+עצמו בטא ב-themes וב-why_it_worked.
+ב-why_it_worked אל תסתפק במה שהפוסט אומר - הסבר מה בתגובות מגלה מדוע
 הוא עורר שיחה (עצבים חשופים, ויכוח, הזדהות, סרקזם, טרנד). היה ספציפי וציטוטי."""
 
     last_err = None
