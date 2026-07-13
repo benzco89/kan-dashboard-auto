@@ -394,7 +394,7 @@ def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagr
     ]
     
     # Try primary model first, fallback to secondary if it fails
-    models_to_try = ["gemini-3-pro-preview", "gemini-2.5-pro"]
+    models_to_try = ["gemini-3.1-pro-preview", "gemini-2.5-pro"]
     
     for model_name in models_to_try:
         try:

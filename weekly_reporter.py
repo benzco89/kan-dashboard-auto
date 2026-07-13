@@ -303,7 +303,7 @@ def analyze_weekly_with_gemini(stats_text, daily_insights_text, week_start, week
         ]
         
         # Try models in order
-        models_to_try = ["gemini-3-pro-preview", "gemini-2.5-pro"]
+        models_to_try = ["gemini-3.1-pro-preview", "gemini-2.5-pro"]
         
         for model_name in models_to_try:
             try:

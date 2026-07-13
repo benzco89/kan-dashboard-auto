@@ -29,6 +29,10 @@ SHEETS = {
     "top_combined": "Top Combined",
 }
 
+# Fetched separately from the batchGet: the tab is created lazily by
+# comment_analyzer.py, and a missing range would 400 the whole batch.
+COMMENT_ANALYSIS_SHEET = "ניתוח תגובות"
+
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 _CACHE_TTL = int(os.environ.get("CACHE_TTL_SECONDS", "600"))
@@ -102,6 +106,19 @@ def _fetch_all():
                 "platform": r[3],
             })
 
+    # Comment-analysis tab may not exist yet - never let it break the dashboard
+    analysis = []
+    try:
+        resp = (
+            service.spreadsheets()
+            .values()
+            .get(spreadsheetId=SPREADSHEET_ID, range=COMMENT_ANALYSIS_SHEET)
+            .execute()
+        )
+        analysis = _rows_to_dicts(resp.get("values", []))
+    except Exception:
+        pass
+
     return {
         "youtube": _rows_to_dicts(result.get("youtube", [])),
         "facebook": _rows_to_dicts(result.get("facebook", [])),
@@ -111,6 +128,7 @@ def _fetch_all():
         "followers": _rows_to_dicts(result.get("followers", [])),
         "insights": _rows_to_dicts(result.get("insights", [])),
         "top_combined": top,
+        "comment_analysis": analysis,
     }
 
 
