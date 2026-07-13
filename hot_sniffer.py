@@ -9,8 +9,9 @@ Hot Sniffer - זיהוי תוך-יומי של פוסט שמתפוצץ עכשיו
 
 ספים (פוסט צעיר מ-24ש שחוצה אחד מהם = חם):
   תגובות: רצפת ה"חם" של comment_analyzer (אינסטגרם 600, פייסבוק 1000)
-  צפיות / לייקים / שיתופים: p90 של 7 הימים האחרונים, מחושב בזמן ריצה
-  מהגיליון - פוסט שמגיע ל-p90 של פוסטים *בשלים* תוך שעות בבירור מתפוצץ.
+  צפיות / לייקים / שיתופים: פי-1.5 מ-p90 של 7 הימים האחרונים (מחושב בזמן
+  ריצה מהגיליון). הריצה הראשונה הראתה ש-p90 לבדו רועש - פוסט בן 20+ שעות
+  נושק ל-p90 באופן טבעי; רק חצייה ברורה של מה שפוסט *בשל* משיג = מתפוצץ.
 
 Env: FACEBOOK_TOKEN, GCP_SERVICE_ACCOUNT, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID.
 """
@@ -50,6 +51,7 @@ STATE_HEADER = ['post_id', 'platform', 'alerted_at', 'triggers', 'permalink']
 IL_TZ = pytz.timezone('Asia/Jerusalem')
 
 HOT_COMMENTS = {'instagram': 600, 'facebook': 1000}  # = 2x רצפת comment_analyzer
+BASELINE_MULT = 1.5   # "חם" = פי-1.5 מ-p90, לא סתם לגעת בו
 BASELINE_DAYS = 7
 YOUNG_HOURS = 24
 
@@ -193,12 +195,11 @@ def check_triggers(post, baseline):
     trig = []
     if post['comments'] >= HOT_COMMENTS[post['platform']]:
         trig.append(f"💬 {post['comments']:,.0f} תגובות (סף {HOT_COMMENTS[post['platform']]:,})")
-    if baseline['views'] and post['views'] >= baseline['views']:
-        trig.append(f"👁 {post['views']:,.0f} צפיות (p90 שבועי: {baseline['views']:,.0f})")
-    if baseline['likes'] and post['likes'] >= baseline['likes']:
-        trig.append(f"❤️ {post['likes']:,.0f} לייקים (p90 שבועי: {baseline['likes']:,.0f})")
-    if baseline['shares'] and post['shares'] >= baseline['shares']:
-        trig.append(f"🔁 {post['shares']:,.0f} שיתופים (p90 שבועי: {baseline['shares']:,.0f})")
+    for key, emoji, label in (('views', '👁', 'צפיות'), ('likes', '❤️', 'לייקים'),
+                              ('shares', '🔁', 'שיתופים')):
+        floor = baseline[key] * BASELINE_MULT
+        if floor and post[key] >= floor:
+            trig.append(f"{emoji} {post[key]:,.0f} {label} (פי-{post[key] / baseline[key]:.1f} מ-p90 השבועי)")
     return trig
 
 
