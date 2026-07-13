@@ -8,7 +8,8 @@ IG account-access probe - READ ONLY. Does NOT write to Google Sheets.
   2. Business Discovery - נתונים ציבוריים של כל חשבון עסקי/יוצר אחר:
      עוקבים, כמות פוסטים, ולכל פוסט לייקים/תגובות. בלי views/reach/סטוריז.
 
-Env: FACEBOOK_TOKEN (required). IG_TARGET_USERNAME (default kan_reshetb).
+Env: FACEBOOK_TOKEN (required).
+     IG_TARGET_USERNAME (default kan_reshetb; מקבל גם רשימה מופרדת בפסיקים).
 """
 
 import os
@@ -57,27 +58,24 @@ def main():
         print("could not resolve own IG id - business discovery needs it")
         sys.exit(1)
 
-    print(f"\n=== 2. business discovery for @{TARGET} ===")
-    res = get(f"{BASE}/{own_ig}", {
-        "access_token": TOKEN,
-        "fields": f"business_discovery.username({TARGET})"
-                  "{username,name,followers_count,media_count,"
-                  "media.limit(5){caption,media_type,like_count,comments_count,timestamp,permalink}}",
-    })
-    if "error" in res:
-        print("DISCOVERY ERROR:", res["error"].get("message"))
-        sys.exit(1)
-
-    bd = res.get("business_discovery", {})
-    print(f"  @{bd.get('username')} · {bd.get('name')}")
-    print(f"  followers: {bd.get('followers_count', 0):,} · total media: {bd.get('media_count', 0):,}")
-    print("  --- 5 recent posts ---")
-    for m in bd.get("media", {}).get("data", []):
-        cap = (m.get("caption") or "").replace("\n", " ")[:70]
-        print(f"  [{m.get('timestamp', '')[:10]}] {m.get('media_type', '')} · "
-              f"{m.get('like_count', 0):,} likes · {m.get('comments_count', 0):,} comments · {cap}")
-
-    print("\n✅ business discovery works - public metrics available for this account")
+    for target in [t.strip() for t in TARGET.split(",") if t.strip()]:
+        print(f"\n=== business discovery for @{target} ===")
+        res = get(f"{BASE}/{own_ig}", {
+            "access_token": TOKEN,
+            "fields": f"business_discovery.username({target})"
+                      "{username,name,followers_count,media_count,"
+                      "media.limit(5){caption,media_type,like_count,comments_count,timestamp,permalink}}",
+        })
+        if "error" in res:
+            print("  ❌", res["error"].get("message", "")[:120])
+            continue
+        bd = res.get("business_discovery", {})
+        print(f"  ✅ @{bd.get('username')} · {bd.get('name')}")
+        print(f"  followers: {bd.get('followers_count', 0):,} · total media: {bd.get('media_count', 0):,}")
+        for m in bd.get("media", {}).get("data", [])[:3]:
+            cap = (m.get("caption") or "").replace("\n", " ")[:60]
+            print(f"    [{m.get('timestamp', '')[:10]}] {m.get('media_type', '')} · "
+                  f"{m.get('like_count', 0):,} likes · {m.get('comments_count', 0):,} comments · {cap}")
 
 
 if __name__ == "__main__":
