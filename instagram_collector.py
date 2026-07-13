@@ -109,6 +109,8 @@ def get_media_insights(media_id, media_type):
             'saved',
             'shares',
             'total_interactions',
+            'profile_visits',     # המרה - זמין רק לפוסטי פיד (probe 2026-07-13)
+            'follows',            # עוקבים שהפוסט הביא - לא נתמך ברילס
         ]
     else:  # IMAGE
         metrics = [
@@ -117,6 +119,8 @@ def get_media_insights(media_id, media_type):
             'saved',
             'shares',
             'total_interactions',
+            'profile_visits',
+            'follows',
         ]
     
     url = f"https://graph.facebook.com/{API_VERSION}/{media_id}/insights"
@@ -132,6 +136,8 @@ def get_media_insights(media_id, media_type):
         'shares': 0,
         'total_interactions': 0,
         'avg_watch_sec': 0,
+        'profile_visits': 0,
+        'follows': 0,
     }
     
     try:
@@ -159,6 +165,10 @@ def get_media_insights(media_id, media_type):
                 result['total_interactions'] = v
             elif name == 'ig_reels_avg_watch_time':
                 result['avg_watch_sec'] = round(v / 1000, 2) if v else 0
+            elif name == 'profile_visits':
+                result['profile_visits'] = v
+            elif name == 'follows':
+                result['follows'] = v
                 
     except Exception as e:
         print(f"⚠️ Error fetching insights for {media_id}: {e}")
@@ -306,6 +316,8 @@ def fetch_instagram_media(ig_account_id):
                 'fb_views': reel_v25['fb_views'],
                 'total_views': reel_v25['total_views'],
                 'reposts': reel_v25['reposts'],
+                'profile_visits': insights.get('profile_visits', 0),
+                'follows': insights.get('follows', 0),
                 'engagement_rate': 0,  # יחושב אחר כך
                 'permalink': media.get('permalink', ''),
                 'pulled_at': datetime.now(pytz.timezone('Asia/Jerusalem')).strftime('%Y-%m-%d %H:%M')
@@ -386,7 +398,8 @@ def save_to_sheets(new_df):
             new_df, existing_df, key='media_id',
             cols=['likes', 'comments', 'views', 'reach', 'saved', 'shares',
                   'total_interactions', 'avg_watch_sec', 'engagement_rate',
-                  'skip_rate', 'fb_views', 'total_views', 'reposts']
+                  'skip_rate', 'fb_views', 'total_views', 'reposts',
+                  'profile_visits', 'follows']
         )
 
         # חישוב דלתא לצפיות

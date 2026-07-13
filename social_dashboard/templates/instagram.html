@@ -132,6 +132,9 @@
         KS.kmCell("שיעור שיתוף", p.share_rate.toFixed(2) + "%") +
         (p.skip_rate ? KS.kmCell("Skip% (הוק)", p.skip_rate.toFixed(1) + "%") : "") +
         (p.avg_watch ? KS.kmCell("צפייה ממוצעת", p.avg_watch.toFixed(1), "שנ׳") : "") + '</div>';
+      var conv = (p.profile_visits || p.follows) ? (KS.kmSection("המרה") + '<div class="km-grid">' +
+        KS.kmCell("ביקורי פרופיל", KS.fmtHtml(p.profile_visits)) +
+        KS.kmCell("עוקבים חדשים מהפוסט", KS.fmtHtml(p.follows)) + '</div>') : "";
       var cross = (p.fb_views || p.total_views) ? (KS.kmSection("קרוספוסט לפייסבוק") + '<div class="km-grid">' +
         KS.kmCell("צפיות בפייסבוק", KS.fmtHtml(p.fb_views)) +
         KS.kmCell("צפיות כולל (IG+FB)", KS.fmtHtml(p.total_views || (p.views + p.fb_views))) +
@@ -147,7 +150,7 @@
         type: "Instagram · " + p.type,
         title: p.title || "(ללא כותרת)",
         date: KS.fmtFullDate(p.date),
-        bodyHtml: hero + inter + rates + cross + cmp + ai + openBtn
+        bodyHtml: hero + inter + rates + conv + cross + cmp + ai + openBtn
       });
     }
     function cmpFn(a, b) {
