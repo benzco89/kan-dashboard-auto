@@ -37,6 +37,7 @@ LAZY_SHEETS = {
     "hot_alerts": "hot_alerts",
     "competitors": "מתחרים",
     "competitor_posts": "פוסטים מתחרים",
+    "demographics": "דמוגרפיה",
 }
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]

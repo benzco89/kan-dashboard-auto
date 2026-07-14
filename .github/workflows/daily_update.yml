@@ -108,6 +108,15 @@ jobs:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: python competitors_collector.py
 
+      # שלב 4.9: דמוגרפיית קהל אינסטגרם (צילום יומי, בונה מגמות) - best-effort
+      - name: Collect Audience Demographics
+        id: demographics
+        continue-on-error: true
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: python demographics_collector.py
+
       # שלב 5: שליחת דוח טלגרם (רץ גם אם חלק מהאיסופים נכשלו - מדווח על מה שיש)
       - name: Send Telegram Report
         id: report
@@ -138,6 +147,7 @@ jobs:
           [ "${{ steps.stories.outcome }}"   = "failure" ] && optional="$optional stories(best-effort)"
           [ "${{ steps.comments.outcome }}"  = "failure" ] && optional="$optional comments(best-effort)"
           [ "${{ steps.competitors.outcome }}" = "failure" ] && optional="$optional competitors(best-effort)"
+          [ "${{ steps.demographics.outcome }}" = "failure" ] && optional="$optional demographics(best-effort)"
 
           if [ -z "$critical$optional" ]; then
             echo "All steps succeeded."
