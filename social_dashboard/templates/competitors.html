@@ -71,7 +71,7 @@
       '<span class="center">צמיחה בטווח</span><span class="center">פוסטים/יום</span><span class="center">מעורבות/1K</span></div>';
 
     var rows = comps.map(function (c, i) {
-      var kan = c.is_kan ? 'style="background:var(--pf-bg);"' : "";
+      var kanBg = c.is_kan ? "background:var(--pf-bg);" : "";
       var growth = "—";
       if (c.change_range) {
         var pct = c.followers ? (c.change_range / (c.followers - c.change_range) * 100) : 0;
@@ -81,7 +81,7 @@
       var spark = (c.spark && c.spark.length > 1)
         ? '<span style="display:block;max-width:120px;margin:0 auto;">' + KS.sparkSvg(c.spark, c.is_kan ? "#F7381B" : "#8b8fa3") + '</span>'
         : '<span style="color:var(--faint);font-size:11px;">נבנית מיום ליום</span>';
-      return '<div class="trow" ' + kan + ' data-idx="' + i + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;cursor:pointer;align-items:center;">' +
+      return '<div class="trow" data-idx="' + i + '" style="' + kanBg + 'display:grid;grid-template-columns:' + cols + ';gap:10px;cursor:pointer;align-items:center;">' +
         '<span class="cell" style="color:var(--faint);">' + (i + 1) + '</span>' +
         '<span style="min-width:0;"><span class="t-title">' + (c.is_kan ? "🔴 " : "") + KS.esc(c.name || c.username) + '</span>' +
         '<span class="t-date">@' + KS.esc(c.username) + (c.change_1d ? ' · היום: ' + KS.signed(c.change_1d) : "") + '</span></span>' +
