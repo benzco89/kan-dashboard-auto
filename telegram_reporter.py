@@ -144,7 +144,10 @@ def summarize_youtube(df, yesterday_date):
         if 'last_updated' in old_videos.columns:
             old_videos = old_videos[old_videos['last_updated'].astype(str).str[:10] >= yesterday_date]
         if not old_videos.empty:
-            old_videos = old_videos[old_videos['views_delta'] > 0].sort_values('views_delta', ascending=False)
+            # רק צבירה משמעותית: כמעט כל סרטון ישן צובר שאריות (חציון ~67
+            # צפיות/יום על 269 סרטונים, נמדד 2026-07-14) - בלי רצפה הסקשן
+            # מתמלא בזוטות בימים שקטים. אין מה לציין? עדיף לומר שאין.
+            old_videos = old_videos[old_videos['views_delta'] >= 5000].sort_values('views_delta', ascending=False)
             for _, row in old_videos.head(3).iterrows():
                 video_url = row.get('video_url', '')
                 top_delta += f"• {row['title']} | מ-{row['published_at']} | +{int(row['views_delta']):,} צפיות חדשות | LINK: {video_url}\n"
@@ -156,8 +159,8 @@ def summarize_youtube(df, yesterday_date):
 טופ מאתמול (כולל מעורבות):
 {top_new if top_new else "אין סרטונים חדשים"}
 
-סרטונים ישנים שממשיכים לצבור צפיות:
-{top_delta if top_delta else "אין מידע"}"""
+סרטונים ישנים שממשיכים לצבור צפיות (5,000+ ביום; אם ריק - אל תזכיר סרטונים ישנים בכלל):
+{top_delta if top_delta else "אין - אף סרטון ישן לא צבר צפיות משמעותיות אתמול"}"""
 
 
 def summarize_facebook(df, yesterday_date):
