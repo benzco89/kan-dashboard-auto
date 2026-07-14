@@ -2,9 +2,10 @@
 Demographics Collector - צילום יומי של דמוגרפיית קהל האינסטגרם.
 
 הדמוגרפיה משתנה לאט, אבל צילום יומי בונה לאורך זמן את התשובה לשאלות מגמה
-("הקהל הצעיר גדל?"). נאסף גם פילוח העוקבים וגם פילוח הקהל המעורב (מי
-שמגיב בפועל, 90 יום אחורה) - הפער ביניהם הוא הממצא המעניין.
-פייסבוק בכוונה לא כאן: מטא הסירו את page_fans_* (נבדק ב-probe 2026-07-14).
+("הקהל הצעיר גדל?"). נאסף פילוח העוקבים בלבד:
+  - פייסבוק: מטא הסירו את page_fans_* (נבדק ב-probe 2026-07-14)
+  - engaged_audience_demographics: כל ערך timeframe נדחה עם "no longer
+    supported" (נוסה 90/30 יום, 2026-07-14) - המטריקה בתהליך גסיסה. לא לרדוף.
 
 פורמט הגיליון ("דמוגרפיה"): שורה לכל (תאריך, קהל, מימד, ערך) - long format,
 ~60 שורות ליום. הרצה חוזרת באותו יום מחליפה את שורות היום.
@@ -92,19 +93,14 @@ def main():
 
     today = datetime.now(IL_TZ).strftime('%Y-%m-%d')
     rows = []
-    for audience, metric, timeframe in (
-            ('followers', 'follower_demographics', None),
-            # last_90_days הוסר מה-API (נבדק 2026-07-14); 30 יום הוא המקסימום
-            ('engaged', 'engaged_audience_demographics', 'last_30_days')):
-        for breakdown in BREAKDOWNS:
-            for key, value in fetch_breakdown(ig_id, metric, breakdown, timeframe):
-                rows.append({
-                    'date': today, 'audience': audience,
-                    'dimension': breakdown, 'key': key, 'value': int(value),
-                })
-            time.sleep(0.2)
-        n = sum(1 for r in rows if r['audience'] == audience)
-        print(f"📥 {audience}: {n} rows")
+    for breakdown in BREAKDOWNS:
+        for key, value in fetch_breakdown(ig_id, 'follower_demographics', breakdown):
+            rows.append({
+                'date': today, 'audience': 'followers',
+                'dimension': breakdown, 'key': key, 'value': int(value),
+            })
+        time.sleep(0.2)
+    print(f"📥 followers: {len(rows)} rows")
 
     if not rows:
         print("❌ Nothing fetched")

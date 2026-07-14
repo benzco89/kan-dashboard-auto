@@ -224,7 +224,7 @@
         '<div class="section-label"><span>מי הקהל · דמוגרפיה</span><span></span></div>' +
         '<div class="split" style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px;margin-bottom:14px;align-items:start;">' +
           '<div class="panel"><div class="panel-title">גילאים</div>' +
-          '<div class="panel-sub" style="margin-bottom:12px;">אחוז מהעוקבים · "מגיבים" = פילוח מי שהגיב בפועל ב-90 הימים האחרונים</div>' + ageBars + '</div>' +
+          '<div class="panel-sub" style="margin-bottom:12px;">אחוז מהעוקבים · נכון ל-' + KS.fmtDate(demo.date) + '</div>' + ageBars + '</div>' +
           '<div class="panel"><div class="panel-title">מגדר, ערים ומדינות</div>' + genderLine +
           '<div class="km-seclabel">ערים מובילות</div>' + topList(f.city, function (k) { return k.split(",")[0]; }) +
           '<div class="km-seclabel">מדינות</div>' + topList(f.country, function (k) { return COUNTRY_HE[k] || k; }) + '</div>' +
