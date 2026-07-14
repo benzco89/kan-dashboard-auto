@@ -926,7 +926,8 @@ def build_competitors(data, days):
     competitors = []
     for username, entries in by_user.items():
         entries.sort(key=lambda e: e[0])
-        in_range = [e for e in entries if start <= e[0] <= end]
+        # בניגוד לפוסטים, צילומי המצב של הבוקר מתוארכים היום - אין לחתוך אותם
+        in_range = [e for e in entries if e[0] >= start]
         latest = entries[-1][1]
         first_in = in_range[0][1] if in_range else latest
         competitors.append({
@@ -969,7 +970,8 @@ def build_competitors(data, days):
         "avg_likes": own_avg_likes,
         "avg_comments": own_avg_comments,
         "eng_per_1k": round((own_avg_likes + own_avg_comments) / kan_followers * 1000, 2) if kan_followers else 0,
-        "spark": [],
+        "spark": [_int(r.get("ig_followers")) for r in data["followers"]
+                  if (_parse_date(r.get("date")) or start) >= start and _int(r.get("ig_followers"))],
         "top": {},
         "posts": sorted(({
             "date": str(_parse_date(p.get("date")) or ""), "time": p.get("time", ""),

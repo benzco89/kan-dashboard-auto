@@ -65,30 +65,31 @@
       stat("#" + s.kan_rank, "המיקום של כאן")
     ].join("");
 
-    var cols = "40px minmax(140px,1.2fr) 90px 80px 90px 60px 70px minmax(0,1.6fr)";
+    var cols = "40px minmax(150px,1.3fr) 95px minmax(120px,1fr) 110px 85px 90px";
     var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;">' +
-      '<span class="center">#</span><span>חשבון</span><span class="center">עוקבים</span><span class="center">מהיום</span>' +
-      '<span class="center">בטווח</span><span class="center">פוסטים/יום</span><span class="center">מעורבות/1K</span><span>הפוסט החזק אתמול</span></div>';
+      '<span class="center">#</span><span>חשבון</span><span class="center">עוקבים</span><span class="center">מגמה</span>' +
+      '<span class="center">צמיחה בטווח</span><span class="center">פוסטים/יום</span><span class="center">מעורבות/1K</span></div>';
 
     var rows = comps.map(function (c, i) {
       var kan = c.is_kan ? 'style="background:var(--pf-bg);"' : "";
-      var d1 = c.change_1d ? '<span style="color:' + (c.change_1d > 0 ? "var(--ok)" : "var(--bad)") + ';">' + KS.signed(c.change_1d) + '</span>' : "—";
-      var dr = c.change_range ? '<span style="color:' + (c.change_range > 0 ? "var(--ok)" : "var(--bad)") + ';">' + KS.signed(c.change_range) + '</span>' : "—";
-      var top = (c.top && c.top.url)
-        ? '<a href="' + KS.esc(c.top.url) + '" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;display:block;min-width:0;">' +
-          '<span class="t-title" style="font-weight:400;font-size:12px;">' + KS.esc(c.top.caption || "") + '</span>' +
-          '<span class="t-date">❤️ ' + KS.fmt(c.top.likes) + ' · 💬 ' + KS.fmt(c.top.comments) + '</span></a>'
-        : '<span style="color:var(--faint);font-size:12px;">' + (c.is_kan ? "ראו בעמוד האינסטגרם" : "אין פוסט ב-24ש") + '</span>';
-      return '<div class="trow" ' + kan + ' data-idx="' + i + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;cursor:pointer;">' +
+      var growth = "—";
+      if (c.change_range) {
+        var pct = c.followers ? (c.change_range / (c.followers - c.change_range) * 100) : 0;
+        growth = '<span style="color:' + (c.change_range > 0 ? "var(--ok)" : "var(--bad)") + ';">' +
+          KS.signed(c.change_range) + '<span style="color:var(--muted);font-size:11px;"> · ' + (pct >= 0 ? "+" : "") + pct.toFixed(2) + '%</span></span>';
+      }
+      var spark = (c.spark && c.spark.length > 1)
+        ? '<span style="display:block;max-width:120px;margin:0 auto;">' + KS.sparkSvg(c.spark, c.is_kan ? "#F7381B" : "#8b8fa3") + '</span>'
+        : '<span style="color:var(--faint);font-size:11px;">נבנית מיום ליום</span>';
+      return '<div class="trow" ' + kan + ' data-idx="' + i + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;cursor:pointer;align-items:center;">' +
         '<span class="cell" style="color:var(--faint);">' + (i + 1) + '</span>' +
         '<span style="min-width:0;"><span class="t-title">' + (c.is_kan ? "🔴 " : "") + KS.esc(c.name || c.username) + '</span>' +
-        '<span class="t-date">@' + KS.esc(c.username) + '</span></span>' +
+        '<span class="t-date">@' + KS.esc(c.username) + (c.change_1d ? ' · היום: ' + KS.signed(c.change_1d) : "") + '</span></span>' +
         '<span class="cell strong">' + KS.fmt(c.followers) + '</span>' +
-        '<span class="cell">' + d1 + '</span>' +
-        '<span class="cell">' + dr + '</span>' +
+        '<span class="center">' + spark + '</span>' +
+        '<span class="cell">' + growth + '</span>' +
         '<span class="cell">' + c.posts_24h + '</span>' +
-        '<span class="cell">' + c.eng_per_1k.toFixed(1) + '</span>' +
-        top + '</div>';
+        '<span class="cell">' + c.eng_per_1k.toFixed(1) + '</span></div>';
     }).join("");
 
     document.getElementById("main").innerHTML =
@@ -101,7 +102,7 @@
       arenaSection +
 
       '<div class="table"><div class="table-head"><div><div class="panel-title">דירוג לפי עוקבים</div>' +
-      '<div class="panel-sub">מעורבות/1K = ממוצע לייקים+תגובות ל-10 הפוסטים האחרונים, מנורמל לגודל הקהל · צפיות אינן ציבוריות · לחצו על חשבון לכל הפוסטים שלו</div></div></div>' +
+      '<div class="panel-sub">מעורבות/1K = ממוצע לייקים+תגובות ל-10 הפוסטים האחרונים, מנורמל לגודל הקהל · צפיות אינן ציבוריות · לחצו על חשבון לפוסטים שלו</div></div></div>' +
       '<div class="table-scroll" id="comp-body">' + thead + rows + '</div></div>' +
 
       '<div class="panel-sub" style="margin-top:10px;">🔴 = כאן חדשות (מהנתונים המלאים שלנו) · שינויי עוקבים מצטברים מיום תחילת המעקב</div>';
