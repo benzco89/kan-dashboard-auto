@@ -117,6 +117,21 @@ jobs:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: python demographics_collector.py
 
+      # שלב 4.95: בדיקת כיול - רק ב-1 בחודש; מתריעה בטלגרם רק אם ספים נסחפו
+      - name: Monthly Calibration Check
+        id: calibration
+        continue-on-error: true
+        env:
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "$(date +%d)" = "01" ]; then
+            python calibration_check.py
+          else
+            echo "skipped - runs on the 1st of each month"
+          fi
+
       # שלב 5: שליחת דוח טלגרם (רץ גם אם חלק מהאיסופים נכשלו - מדווח על מה שיש)
       - name: Send Telegram Report
         id: report

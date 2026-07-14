@@ -50,6 +50,29 @@
     var comps = data.competitors || [];
     displayList = comps;
 
+    var NAME_BY_USER = {};
+    comps.forEach(function (c) { NAME_BY_USER[c.username] = c.name || c.username; });
+
+    var gaps = data.gaps || [];
+    var gapsSection =
+      '<div class="section-label"><span>🕳 פערי סיקור · 72 השעות האחרונות</span><span></span></div>' +
+      '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">סיפורים שרצו חזק אצל המתחרים (פי-3 מהחציון שלהם) בלי פוסט תואם אצלנו באף פלטפורמה</div>' +
+      (gaps.length ? gaps.map(function (g) {
+        var outlets = g.outlets.map(function (o) {
+          var nm = NAME_BY_USER[o.username] || o.username;
+          return o.url
+            ? '<a class="km-theme" style="text-decoration:none;" href="' + KS.esc(o.url) + '" target="_blank" rel="noopener">' + KS.esc(nm) + ' · ' + KS.fmt(o.eng) + '</a>'
+            : '<span class="km-theme">' + KS.esc(nm) + ' · ' + KS.fmt(o.eng) + '</span>';
+        }).join("");
+        return '<div class="hot-row"><div class="hot-row-head"><span>' +
+          (g.outlets.length > 1 ? "רץ אצל " + g.outlets.length + " מתחרים" : "") +
+          '</span><span class="hot-time">' + KS.fmtDate(g.date) + '</span></div>' +
+          '<div class="hot-trig">' + KS.esc(g.caption) + '</div>' +
+          '<div class="km-themes" style="margin-top:6px;">' + outlets + '</div></div>';
+      }).join("")
+      : '<div style="padding:8px 4px;color:var(--muted);font-size:13px;">✔ אין פערים בולטים — כל מה שרץ חזק אצל המתחרים קיבל כיסוי אצלנו</div>') +
+      '</div>';
+
     var arena = data.arena || [];
     var arenaSection = arena.length
       ? '<div class="section-label"><span>🥊 הזירה · 48 השעות האחרונות</span><span></span></div>' +
@@ -98,6 +121,8 @@
       '<div style="text-align:left;"><div class="asof-label">נתונים עד</div><div class="asof-date">' + KS.fmtFullDate(data.last_date) + '</div></div></div>' +
 
       '<div class="panel mb-m"><div class="grid-4">' + stats + '</div></div>' +
+
+      gapsSection +
 
       arenaSection +
 

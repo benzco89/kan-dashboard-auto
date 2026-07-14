@@ -918,6 +918,89 @@ def build_viral(data, days):
 
 # ---------- competitors (IG business discovery snapshots) ----------
 
+def _coverage_gaps(data, end):
+    """סיפורים שרצו חזק אצל המתחרים (72 שעות) בלי התאמה אצלנו (4 ימים,
+    כל הפלטפורמות). שיוך באותו מנוע טוקנים של עמוד הוויראלי. פוסט מתחרה
+    נחשב "רץ חזק" רק ביחס לחשבון שלו - פי-3 מחציון המעורבות שלו - כדי
+    שוואלה עם 1K לייקים ייחשב כמו N12 עם 8K."""
+    # מאגר הטוקנים שלנו
+    ours = []
+    for rows, cap_col, date_col in (
+            (data["instagram"], "caption", "date"),
+            (data["facebook"], "title", "date"),
+            (data["youtube"], "title", "published_at"),
+            (data.get("twitter", []), "text", "date")):
+        for p in rows:
+            d = _parse_date(p.get(date_col))
+            if d and d >= end - timedelta(days=4):
+                toks = _viral_tokens(p.get(cap_col, ""))
+                if len(toks) >= _MIN_TOKENS:
+                    ours.append(toks)
+
+    # סף "כוסה אצלנו" נמוך מסף האשכול הפנימי (0.6): הקרוספוסט של כאן משכפל
+    # נוסח כמעט מילולית, אבל מתחרה מנסח את אותו סיפור במילים שלו - כתבת
+    # גלית/תאילנד חפפה רק 0.35 בין N12 לכאן. עדיף לפספס פער מלהכריז פער
+    # על סיפור שדווקא סוקר.
+    def covered(toks):
+        for o in ours:
+            inter = len(toks & o)
+            if inter >= 4 and inter / min(len(toks), len(o)) >= 0.3:
+                return True
+        return False
+
+    # חציון מעורבות פר-חשבון, מכל הפיד השמור (14 יום)
+    per_account = {}
+    for p in data.get("competitor_posts", []):
+        u = str(p.get("username", "")).strip()
+        if u:
+            per_account.setdefault(u, []).append(_int(p.get("likes")) + _int(p.get("comments")))
+    med = {u: _median(v) for u, v in per_account.items()}
+
+    candidates = []
+    cutoff = end - timedelta(days=2)
+    for p in data.get("competitor_posts", []):
+        d = _parse_date(p.get("date"))
+        u = str(p.get("username", "")).strip()
+        if not d or d < cutoff:
+            continue
+        eng = _int(p.get("likes")) + _int(p.get("comments"))
+        if eng < max(300, 3 * med.get(u, 0)):
+            continue
+        toks = _viral_tokens(p.get("caption", ""))
+        if len(toks) < _MIN_TOKENS or covered(toks):
+            continue
+        candidates.append({
+            "username": u, "date": str(d),
+            "caption": _clean_caption(p.get("caption", ""))[:180],
+            "eng": eng, "likes": _int(p.get("likes")), "comments": _int(p.get("comments")),
+            "url": p.get("permalink", ""), "toks": toks,
+        })
+
+    # איחוד אותו סיפור בין כמה מתחרים לפער אחד
+    candidates.sort(key=lambda c: -c["eng"])
+    gaps = []
+    for c in candidates:
+        home = None
+        for g in gaps:
+            inter = len(c["toks"] & g["toks"])
+            if inter and inter / min(len(c["toks"]), len(g["toks"])) >= _MATCH_CONTAINMENT:
+                home = g
+                break
+        if home:
+            home["outlets"].append({"username": c["username"], "eng": c["eng"], "url": c["url"]})
+            home["total_eng"] += c["eng"]
+        else:
+            gaps.append({
+                "caption": c["caption"], "date": c["date"], "toks": c["toks"],
+                "outlets": [{"username": c["username"], "eng": c["eng"], "url": c["url"]}],
+                "total_eng": c["eng"],
+            })
+    gaps.sort(key=lambda g: -g["total_eng"])
+    for g in gaps:
+        g.pop("toks", None)
+    return gaps[:10]
+
+
 def build_competitors(data, days):
     start, end, _p1, _p2 = _window(days)
     rows = data.get("competitors", [])
@@ -1035,6 +1118,7 @@ def build_competitors(data, days):
             "fastest": {"name": fastest["name"], "change": fastest["change_range"]} if fastest else None,
         },
         "arena": arena[:12],
+        "gaps": _coverage_gaps(data, end),
         "competitors": competitors,
     }
 
