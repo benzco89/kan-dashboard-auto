@@ -604,6 +604,7 @@ def build_instagram(data, days):
             "fb_views_share": round(fb_share, 1),
         },
         "stories": build_stories(data, days),
+        "demographics": _demographics(data),
         "posts": posts,
     }
 
@@ -677,6 +678,25 @@ def build_twitter(data, days):
         },
         "posts": posts,
     }
+
+
+def _demographics(data):
+    """הצילום הדמוגרפי האחרון, לפי קהל (עוקבים / מעורבים) ומימד."""
+    rows = data.get("demographics", [])
+    if not rows:
+        return None
+    latest = max(str(r.get("date", "")) for r in rows)
+    cur = [r for r in rows if str(r.get("date")) == latest]
+    out = {"date": latest}
+    for audience in ("followers", "engaged"):
+        aud = {}
+        for dim in ("age", "gender", "city", "country"):
+            items = [(str(r.get("key", "")), _int(r.get("value"))) for r in cur
+                     if str(r.get("audience")) == audience and str(r.get("dimension")) == dim]
+            items.sort(key=lambda kv: -kv[1])
+            aud[dim] = [{"k": k, "v": v} for k, v in items]
+        out[audience] = aud
+    return out
 
 
 def build_stories(data, days):

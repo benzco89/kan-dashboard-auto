@@ -191,6 +191,46 @@
         '<div class="grid-4">' + sStats + '</div></div>';
     }
 
+    // ---- audience demographics (account-level; collected daily) ----
+    var demoSection = "";
+    var demo = data.demographics;
+    if (demo && demo.followers && (demo.followers.age || []).length) {
+      var COUNTRY_HE = { IL: "ישראל", US: "ארה\"ב", IR: "איראן", PS: "רש\"פ", BR: "ברזיל", FR: "צרפת", DE: "גרמניה", GB: "בריטניה", RU: "רוסיה", UA: "אוקראינה", EG: "מצרים", JO: "ירדן", CA: "קנדה", AU: "אוסטרליה", NL: "הולנד", ES: "ספרד", IT: "איטליה", AR: "ארגנטינה", CH: "שווייץ", BE: "בלגיה" };
+      var f = demo.followers, e = demo.engaged || {};
+      var totF = f.age.reduce(function (a, x) { return a + x.v; }, 0) || 1;
+      var totE = (e.age || []).reduce(function (a, x) { return a + x.v; }, 0) || 0;
+      var eByK = {};
+      (e.age || []).forEach(function (x) { eByK[x.k] = x.v; });
+      var maxV = Math.max.apply(null, f.age.map(function (x) { return x.v; })) || 1;
+      var ORDER = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
+      var ageBars = f.age.slice().sort(function (a, b) { return ORDER.indexOf(a.k) - ORDER.indexOf(b.k); }).map(function (x) {
+        var pctF = (x.v / totF * 100);
+        var pctE = totE ? ((eByK[x.k] || 0) / totE * 100) : null;
+        return '<div class="typebar"><div class="typebar-top"><span class="typebar-name">' + x.k +
+          (pctE !== null ? '<span class="cnt">מגיבים: ' + pctE.toFixed(0) + '%</span>' : '') +
+          '</span><span class="typebar-val">' + pctF.toFixed(0) + '%</span></div>' +
+          '<span class="typebar-track"><span class="typebar-fill" style="width:' + Math.round(x.v / maxV * 100) + '%;background:var(--pf);"></span></span></div>';
+      }).join("");
+      var g = {};
+      (f.gender || []).forEach(function (x) { g[x.k] = x.v; });
+      var totG = (g.F || 0) + (g.M || 0) + (g.U || 0) || 1;
+      var genderLine = '<div class="panel-sub" style="margin-bottom:12px;">נשים ' + Math.round((g.F || 0) / totG * 100) + '% · גברים ' + Math.round((g.M || 0) / totG * 100) + '% · לא צוין ' + Math.round((g.U || 0) / totG * 100) + '%</div>';
+      function topList(items, mapFn) {
+        return '<div class="km-themes" style="margin-bottom:10px;">' + (items || []).slice(0, 6).map(function (x) {
+          return '<span class="km-theme">' + KS.esc(mapFn(x.k)) + ' · ' + KS.fmt(x.v) + '</span>';
+        }).join("") + '</div>';
+      }
+      demoSection =
+        '<div class="section-label"><span>מי הקהל · דמוגרפיה</span><span></span></div>' +
+        '<div class="split" style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px;margin-bottom:14px;align-items:start;">' +
+          '<div class="panel"><div class="panel-title">גילאים</div>' +
+          '<div class="panel-sub" style="margin-bottom:12px;">אחוז מהעוקבים · "מגיבים" = פילוח מי שהגיב בפועל ב-90 הימים האחרונים</div>' + ageBars + '</div>' +
+          '<div class="panel"><div class="panel-title">מגדר, ערים ומדינות</div>' + genderLine +
+          '<div class="km-seclabel">ערים מובילות</div>' + topList(f.city, function (k) { return k.split(",")[0]; }) +
+          '<div class="km-seclabel">מדינות</div>' + topList(f.country, function (k) { return COUNTRY_HE[k] || k; }) + '</div>' +
+        '</div>';
+    }
+
     document.getElementById("main").innerHTML =
       '<div class="platform-head"><span class="pf-icon" style="background:linear-gradient(135deg,#feda75,#d62976 45%,#962fbf 80%);">' + KS.fillIcon("ig", "#fff", 24) + '</span>' +
       '<div><h1>Instagram Analytics</h1><p>ניתוח ביצועי עמוד האינסטגרם של כאן חדשות · ' + rl + '</p></div></div>' +
@@ -210,6 +250,8 @@
       '<div class="grid-4 mb-m">' + summary + '</div>' +
 
       storiesSection +
+
+      demoSection +
 
       '<div class="table"><div class="table-head"><div><div class="panel-title">פוסטים מדורגים לפי מעורבות</div>' +
       '<div class="panel-sub">' + data.summary.total + ' פוסטים · ' + rl + ' · לחצו על פוסט לפירוט מלא</div></div>' +
