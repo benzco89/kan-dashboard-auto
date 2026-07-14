@@ -94,7 +94,8 @@ def main():
     rows = []
     for audience, metric, timeframe in (
             ('followers', 'follower_demographics', None),
-            ('engaged', 'engaged_audience_demographics', 'last_90_days')):
+            # last_90_days הוסר מה-API (נבדק 2026-07-14); 30 יום הוא המקסימום
+            ('engaged', 'engaged_audience_demographics', 'last_30_days')):
         for breakdown in BREAKDOWNS:
             for key, value in fetch_breakdown(ig_id, metric, breakdown, timeframe):
                 rows.append({
