@@ -266,7 +266,9 @@ def fetch_facebook_data():
                 'date': post_datetime.strftime('%Y-%m-%d'),
                 'time': post_datetime.strftime('%H:%M'),
                 'type': media_type,
-                'title': (post.get('message', '') or '').replace('\n', ' ')[:500],
+                # 700 ולא 500: חתימת "כאן חדשות ברשת ב'" יושבת בסוף הכיתוב,
+                # וב-500 היא נחתכת בפוסטים ארוכים (נמדד: החתימה עד תו ~490)
+                'title': (post.get('message', '') or '').replace('\n', ' ')[:700],
                 'reach': reach,
                 'clicks': clicks,
                 'views': views,

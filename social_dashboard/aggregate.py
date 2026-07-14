@@ -443,6 +443,10 @@ def build_facebook(data, days):
 
     analyses = _comment_analyses(data, "facebook")
 
+    # תכני רשת ב' עולים לעמוד הפייסבוק של כאן חדשות עם חתימה קבועה בכיתוב.
+    # חובה לעגן ל"כאן חדשות" - "רשת ב" לבד תופס גם "ברשת בשנים האחרונות".
+    reshetb_re = re.compile(r"כאן חדשות ב?רשת ב")
+
     posts = []
     for p in cur:
         views = _num(p.get("views"))
@@ -473,6 +477,7 @@ def build_facebook(data, days):
             "avg_watch": round(_num(p.get("avg_watch_sec")), 1),
             "total_watch_min": _int(p.get("total_watch_min")),
             "share_rate": round(shares / views * 100, 2) if views else 0,
+            "reshetb": bool(reshetb_re.search(str(p.get("title", "")))),
             "analysis": analyses.get(str(p.get("post_id", "")).strip()),
         })
     posts.sort(key=lambda x: x["views"], reverse=True)

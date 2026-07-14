@@ -80,7 +80,7 @@
       var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : (hlR ? "border-inline-start-color:var(--hi-alt);background:var(--hi-alt-bg);" : "");
       return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" data-idx="' + idx + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
         '<span class="cell" style="' + rankStyle + '">' + rank + '</span>' +
-        '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + '</span><span class="t-date">' + KS.fmtDate(p.date) + KS.aiDot(p) + '</span></span>' +
+        '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + '</span><span class="t-date">' + KS.fmtDate(p.date) + (p.reshetb ? '<span class="ai-dot" title="תוכן רשת ב\'">🎙 רשת ב\'</span>' : "") + KS.aiDot(p) + '</span></span>' +
         '<span class="center"><span class="tag" style="color:' + (TYPE_COLOR[p.type] || "var(--muted)") + ';">' + p.type + '</span></span>' +
         '<span class="cell strong">' + KS.fmt(p.views) + '</span>' +
         '<span class="cell">' + KS.fmt(p.reach) + '</span>' +
@@ -91,6 +91,12 @@
     var ENG_KEY = "engagement";
     var sortState = { key: ENG_KEY, dir: "desc" };
     var displayList = [];
+    var srcFilter = "all";  // all | reshetb | news
+    function bySource(list) {
+      if (srcFilter === "reshetb") return list.filter(function (p) { return p.reshetb; });
+      if (srcFilter === "news") return list.filter(function (p) { return !p.reshetb; });
+      return list;
+    }
 
     function medOf(key) {
       var xs = posts.map(function (x) { return Number(x[key]) || 0; }).filter(function (v) { return v > 0; }).sort(function (a, b) { return a - b; });
@@ -165,6 +171,11 @@
       '<div class="table"><div class="table-head"><div><div class="panel-title">פוסטים מדורגים לפי מעורבות</div>' +
       '<div class="panel-sub">' + data.summary.total + ' פוסטים · ' + rl + ' · לחצו על פוסט לפירוט מלא</div></div>' +
       '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">' +
+      (posts.some(function (p) { return p.reshetb; })
+        ? '<div id="src-toggle" class="ranges" style="padding:2px;"><button class="range active" data-src="all">הכל</button>' +
+          '<button class="range" data-src="reshetb">🎙 רשת ב\'</button>' +
+          '<button class="range" data-src="news">בלי רשת ב\'</button></div>'
+        : "") +
       '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span>' +
       '<span><span class="sq" style="background:var(--hi-alt);"></span>חשיפה גבוהה</span></div></div></div>' +
@@ -183,7 +194,15 @@
       var idx = parseInt(row.getAttribute("data-idx"), 10);
       if (!isNaN(idx) && displayList[idx]) openPostModal(displayList[idx]);
     });
-    function renderBody() { tblBody.innerHTML = buildRows(posts.slice().sort(cmpFn)); wireShowAll(); }
+    function renderBody() { tblBody.innerHTML = buildRows(bySource(posts.slice()).sort(cmpFn)); wireShowAll(); }
+    document.querySelectorAll("#src-toggle [data-src]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        document.querySelectorAll("#src-toggle [data-src]").forEach(function (x) { x.classList.remove("active"); });
+        b.classList.add("active");
+        srcFilter = b.getAttribute("data-src");
+        renderBody();
+      });
+    });
     function refreshHeader() {
       document.querySelectorAll("#thead [data-sk]").forEach(function (h) {
         var ar = h.querySelector(".sk-ar");
