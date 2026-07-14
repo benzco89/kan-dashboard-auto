@@ -89,12 +89,13 @@ def main():
                 f"(p{FLOOR_PERCENTILE[plat['key']]} של 30 יום = {target:,.0f}). "
                 f"לעדכן גם את רצפת ה\"חם\" ברחרחן (פי-2).")
 
-    # 2. רצפת "סרטונים ישנים שממשיכים לצבור" בדוח היומי
+    # 2. רצפת "סרטונים ישנים שממשיכים לצבור" בדוח היומי.
+    # "ישן" כמו אצל telegram_reporter: פורסם לפני אתמול ורוענן בריצה האחרונה.
     yt = sh.worksheet('נתוני יוטיוב').get_all_records()
-    week_ago = (datetime.now(IL_TZ) - timedelta(days=7)).strftime('%Y-%m-%d')
+    yesterday = (datetime.now(IL_TZ) - timedelta(days=1)).strftime('%Y-%m-%d')
     fresh_old = [_num(r.get('views_delta')) for r in yt
-                 if str(r.get('last_updated', ''))[:10] >= week_ago
-                 and str(r.get('published_at', '')) < week_ago
+                 if str(r.get('last_updated', ''))[:10] >= yesterday
+                 and str(r.get('published_at', '')) < yesterday
                  and _num(r.get('views_delta')) > 0]
     # כמה עוברים את הרצפה "ביום" (מקורב: ההתפלגות של הריצה האחרונה)
     qualifying = sum(1 for d in fresh_old if d >= OLD_VIDEO_FLOOR)
