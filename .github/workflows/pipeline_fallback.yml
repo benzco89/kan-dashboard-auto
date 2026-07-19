@@ -1,0 +1,86 @@
+name: Pipeline Fallback
+
+# רשת ביטחון לטריגרים של ה-VPS: אם ה-PAT בשרת פג (כמו ב-2026-07-18) או שהשרת
+# לא זמין, הריצה היומית וה-Hot Sniffer פשוט לא קורים. ה-workflow הזה רץ על
+# ה-cron של GitHub עם GITHUB_TOKEN המובנה (שלא פג תוקף), מזהה שריצה חסרה
+# ומפעיל אותה בעצמו. ה-cron של GitHub מאחר בדרך כלל בעד שעה - לכן הוא נשאר
+# גיבוי בלבד; הטריגר הדייקן (08:30) נשאר ה-VPS.
+#
+# הריצה היומית: ה-VPS מפעיל ב-05:30 UTC (קיץ) / 06:30 UTC (חורף). מ-07:00 UTC,
+# אם אין אף ריצה היום - מפעילים + התראת טלגרם להחליף את הטוקן בשרת.
+# ריצה שנכשלה נחשבת "רצה" - dispatch חוזר היה מוסיף שורות כפולות לגיליונות.
+#
+# Hot Sniffer: סלוטים כל 3 שעות (11-23 שעון ישראל). אם הריצה האחרונה ישנה
+# מ-3.5 שעות בתוך חלון הפעילות - מפעילים בשקט (בלי התראה: ההתראה היומית
+# וה-Health Check מכסים את הזיהוי, וריצת סניפר מאוחרת/כפולה בטוחה בזכות הדה-דופ).
+
+on:
+  schedule:
+    # 07:20 - בדיקת הריצה היומית; השאר - כיסוי סלוטים של הסניפר
+    - cron: '20 7,9,12,15,18,21 * * *'
+  workflow_dispatch:      # לבדיקה ידנית
+
+permissions:
+  actions: write
+
+jobs:
+  fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Daily run fallback
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          today=$(date -u +%Y-%m-%d)
+          hour=$(date -u +%-H)
+          runs_today=$(gh run list --workflow daily_update.yml --limit 10 --json createdAt \
+            --jq "[.[] | select(.createdAt | startswith(\"$today\"))] | length")
+          echo "hour=$hour runs_today=$runs_today"
+
+          if [ "$hour" -lt 7 ]; then
+            echo "before 07:00 UTC - the VPS dispatch may not be due yet"
+            exit 0
+          fi
+          if [ "$runs_today" -gt 0 ]; then
+            echo "daily run already exists today - nothing to do"
+            exit 0
+          fi
+
+          echo "daily run missing - dispatching via fallback"
+          gh workflow run daily_update.yml --ref main
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            --data-urlencode text="⚠️ הריצה היומית לא הופעלה מה-VPS - הופעלה עכשיו דרך מנגנון הגיבוי (הדוח יגיע באיחור).
+          כנראה פג תוקף ה-GH_DISPATCH_TOKEN בשרת - יש להנפיק PAT חדש ולעדכן את /etc/kan-dispatch.env.
+          ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" || true
+
+      - name: Hot sniffer fallback
+        if: always()
+        run: |
+          hour=$(date -u +%-H)
+          if [ "$hour" -lt 8 ]; then
+            echo "outside the sniffer window (morning is covered by the daily run)"
+            exit 0
+          fi
+
+          last=$(gh run list --workflow hot_sniffer.yml --limit 1 --json createdAt --jq '.[0].createdAt // empty')
+          if [ -n "$last" ]; then
+            age=$(( $(date -u +%s) - $(date -u -d "$last" +%s) ))
+          else
+            age=999999
+          fi
+          echo "last sniffer run: ${last:-never} (${age}s ago)"
+
+          if [ "$age" -le 12600 ]; then
+            echo "sniffer ran within the last 3.5h - nothing to do"
+            exit 0
+          fi
+
+          echo "sniffer stale - dispatching via fallback"
+          gh workflow run hot_sniffer.yml --ref main
