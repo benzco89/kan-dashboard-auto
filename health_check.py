@@ -58,6 +58,13 @@ PLATFORM_CHECKS = [
         'nonzero_cols': ['views'],
         'optional': True,  # GetXAPI הוא best-effort גם ב-daily_update.yml
     },
+    {
+        'sheet': 'נתוני טיקטוק',
+        'date_col': 'date',
+        'pulled_col': 'pulled_at',
+        'nonzero_cols': ['views'],
+        'optional': True,  # TikHub הוא best-effort גם ב-daily_update.yml
+    },
 ]
 
 

@@ -60,10 +60,10 @@ HEADERS = [
     'tw_followers',
     'tw_followers_change',
     'tw_tweet_count',
-    # TikTok (לעתיד)
+    # TikTok
     'tt_followers',
     'tt_followers_change',
-    'tt_daily_views',
+    'tt_video_count',
 ]
 
 # --- Helper Functions ---
@@ -371,6 +371,40 @@ def get_twitter_stats():
         print(f"❌ Twitter (GetXAPI) Error: {e}")
         return None
 
+# --- TikTok Functions ---
+
+def get_tiktok_stats():
+    """משיכת מספר עוקבים וסרטונים מטיקטוק דרך TikHub. מוגן: בלי טוקן -> None."""
+    api_key = os.environ.get('TIKHUB_TOKEN')
+    if not api_key:
+        print("⚠️ Missing TIKHUB_TOKEN - skipping TikTok")
+        return None
+
+    username = os.environ.get('TIKTOK_USERNAME', 'kan_news')
+    try:
+        res = requests.get(
+            "https://api.tikhub.io/api/v1/tiktok/web/fetch_user_profile",
+            headers={"Authorization": f"Bearer {api_key}"},
+            params={"uniqueId": username},
+            timeout=30,
+        ).json()
+
+        stats = ((res.get('data') or {}).get('userInfo') or {}).get('stats') or {}
+        followers = stats.get('followerCount', 0)
+        video_count = stats.get('videoCount', 0)
+
+        if not followers:
+            print(f"❌ TikTok (TikHub) returned no follower count: {str(res)[:150]}")
+            return None
+
+        return {
+            'followers': int(followers or 0),
+            'video_count': int(video_count or 0),
+        }
+    except Exception as e:
+        print(f"❌ TikTok (TikHub) Error: {e}")
+        return None
+
 # --- Google Sheets Functions ---
 
 def get_sheet_client():
@@ -384,7 +418,7 @@ def get_sheet_client():
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds)
 
-def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_stats=None):
+def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_stats=None, tiktok_stats=None):
     """שמירת נתוני העוקבים לגיליון בפורמט Wide"""
     gc = get_sheet_client()
     sh = gc.open_by_key(SPREADSHEET_ID)
@@ -426,6 +460,7 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
     fb_followers_change = 0
     ig_followers_change = 0
     tw_followers_change = 0
+    tt_followers_change = 0
 
     if prev_row and len(prev_row) >= 10:
         try:
@@ -444,6 +479,9 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
             if twitter_stats and len(prev_row) > 19 and prev_row[19]:
                 prev_tw_followers = int(prev_row[19] or 0)
                 tw_followers_change = twitter_stats['followers'] - prev_tw_followers
+            if tiktok_stats and len(prev_row) > 22 and prev_row[22]:
+                prev_tt_followers = int(prev_row[22] or 0)
+                tt_followers_change = tiktok_stats['followers'] - prev_tt_followers
         except (ValueError, IndexError):
             pass
     
@@ -479,8 +517,10 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
         twitter_stats['followers'] if twitter_stats else '',
         tw_followers_change if twitter_stats else '',
         twitter_stats['tweet_count'] if twitter_stats else '',
-        # TikTok (לעתיד)
-        '', '', '',
+        # TikTok
+        tiktok_stats['followers'] if tiktok_stats else '',
+        tt_followers_change if tiktok_stats else '',
+        tiktok_stats['video_count'] if tiktok_stats else '',
     ]
     
     # בדיקה אם כבר יש שורה להיום
@@ -513,6 +553,8 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
             print(f"   Daily: {ig_daily.get('daily_reach', 0):,} reach, {ig_daily.get('daily_impressions', 0):,} impressions")
     if twitter_stats:
         print(f"🐦 Twitter: {twitter_stats['followers']:,} followers ({tw_followers_change:+,})")
+    if tiktok_stats:
+        print(f"🎵 TikTok: {tiktok_stats['followers']:,} followers ({tt_followers_change:+,})")
 
     return True
 
@@ -528,14 +570,15 @@ def main():
     facebook_stats = get_facebook_stats()
     instagram_stats = get_instagram_stats()
     twitter_stats = get_twitter_stats()
+    tiktok_stats = get_tiktok_stats()
 
     # בדיקה שיש לפחות פלטפורמה אחת עם נתונים
-    if not youtube_stats and not facebook_stats and not instagram_stats and not twitter_stats:
+    if not youtube_stats and not facebook_stats and not instagram_stats and not twitter_stats and not tiktok_stats:
         print("❌ No data collected from any platform!")
         return
 
     # שמירה לשיטס
-    save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_stats)
+    save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_stats, tiktok_stats)
     
     print(f"\n{'='*50}")
     print("✅ Followers tracking complete!")

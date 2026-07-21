@@ -36,6 +36,7 @@ jobs:
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}  # לעוקבי טוויטר (מוגן: בלי מפתח -> ריק)
+          TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}  # לעוקבי טיקטוק (מוגן: בלי טוקן -> ריק)
         run: python followers_tracker.py
 
       # שלב 2: איסוף יוטיוב (בלי טלגרם)
@@ -86,6 +87,17 @@ jobs:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           TWITTER_USERNAME: kann_news
         run: python twitter_collector.py
+
+      # שלב 4.6: איסוף טיקטוק (TikHub) - best-effort: כשל פה (ספק לא-רשמי)
+      # מדווח בהתראה אבל לא מכשיל את ה-run
+      - name: Collect TikTok Data
+        id: tiktok
+        continue-on-error: true
+        env:
+          TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          TIKTOK_USERNAME: kan_news
+        run: python tiktok_collector.py
 
       # שלב 4.7: ניתוח תגובות לפוסטים מדוברים (רץ אחרי איסוף אינסטגרם כדי
       # שהמועמדים ייבחרו מנתוני הבוקר) - best-effort: כשל לא מכשיל את ה-run
@@ -159,6 +171,7 @@ jobs:
           [ "${{ steps.instagram.outcome }}" = "failure" ] && critical="$critical instagram"
           [ "${{ steps.report.outcome }}"    = "failure" ] && critical="$critical telegram-report"
           [ "${{ steps.twitter.outcome }}"   = "failure" ] && optional="$optional twitter(best-effort)"
+          [ "${{ steps.tiktok.outcome }}"    = "failure" ] && optional="$optional tiktok(best-effort)"
           [ "${{ steps.stories.outcome }}"   = "failure" ] && optional="$optional stories(best-effort)"
           [ "${{ steps.comments.outcome }}"  = "failure" ] && optional="$optional comments(best-effort)"
           [ "${{ steps.competitors.outcome }}" = "failure" ] && optional="$optional competitors(best-effort)"
