@@ -59,7 +59,7 @@ Flags: `--thumbstyle portrait|blur` (see below) · `--no-thumbs` (skip downloads
 ```
 
 Everything is derived at render time: platform order (by `weekly_views`), the
-`חריג` badges (each metric vs a normal post that week), number formatting, and the
+`חריג` badges (each metric's rate vs a normal post's rate that week), number formatting, and the
 thumbnails (read from `out/thumbs/` and inlined as data URIs). So editing
 `weekly_views` reorders the deck; editing `engagement` re-flags anomalies.
 
@@ -77,8 +77,12 @@ prior Sun–Sat is the baseline for week-over-week deltas. Running Tue 2026-07-2
 - **Per-platform slides** (dynamic order by views) — top-3 highlight cards + a
   top-10 table (square leading thumbnails) with its own **חריג column** saying
   *what* is unusual about an item — shares, comments, likes or engagement at
-  2.5x or more of a normal post that week, shown as e.g. `🔁 שיתופים ×3.4`
-  (empty on most rows) — and a `נתון מעניין` picked from the platform's
+  2.5x or more of a normal post's **rate** that week, shown as e.g.
+  `🔁 שיתופים ×3.4` (empty on most rows). Rates, not absolute counts: the top-10
+  are the week's biggest posts by definition, so comparing raw counts would flag
+  almost every row and only restate the views column. Comparing
+  interactions-per-view instead surfaces the post that punched above its own
+  reach — and a `נתון מעניין` picked from the platform's
   candidate list (`fun_fact.chosen`).
 - **מה למדנו** — 3–4 learning cards `{icon, number, color, title, sentence}`
   plus an optional wider **story of the week** block that names one story and

@@ -401,6 +401,16 @@ def _looks_like_name(s):
     return bool(_NAME_RE.match(s))
 
 
+# The account's own handles/name are never a reporter credit (YouTube
+# descriptions sign off with @kan_news).
+_BRAND_HANDLES = {'kan_news', 'kann_news', 'kannews', 'kan11', 'kan',
+                  'כאן חדשות', 'כאן 11', 'כאן11', 'כאן'}
+
+
+def _is_brand(s):
+    return str(s or '').strip().lstrip('@').lower() in _BRAND_HANDLES
+
+
 def reporter_fallback(text):
     """Deterministic reporter credit from the FULL caption. Kan credits at the
     end, so we look for: an explicit 'כתב: X' credit, a parenthesised person
@@ -419,9 +429,9 @@ def reporter_fallback(text):
     if named:
         return named[-1]
 
-    h = re.search(r"@([A-Za-z0-9_]{2,30})", text)
-    if h:
-        return "@" + h.group(1)
+    for hm in re.finditer(r"@([A-Za-z0-9_]{2,30})", text):
+        if not _is_brand(hm.group(1)):
+            return "@" + hm.group(1)
     return ""
 
 
@@ -595,6 +605,12 @@ def _role_suffix_name(text):
 
 
 def resolve_reporter_detailed(text, rmap):
+    """Brand-safe wrapper: the account's own handle is never a credit."""
+    res = _resolve_detailed(text, rmap)
+    return dict(name='', source='', others=[]) if _is_brand(res['name']) else res
+
+
+def _resolve_detailed(text, rmap):
     """-> dict(name, source, others). `source` records HOW the credit was found
     so low-confidence guesses can be reviewed; `others` holds any additional
     trailing name (Kan usually lists reporter first, then photographer)."""
@@ -761,6 +777,18 @@ def _row_int(row, *cols):
     return 0
 
 
+def _rate_median(df, views, *cols):
+    """Median interactions-per-view over the week's items that have views."""
+    for c in cols:
+        if c in df.columns:
+            col = to_num(df[c])
+            if col.sum() > 0:
+                r = col[views > 0] / views[views > 0]
+                if len(r):
+                    return round(float(r.median()), 6)
+    return 0.0
+
+
 def _median_of(df, *cols):
     """Median of the first column that exists and has data. 0.0 when none."""
     for c in cols:
@@ -838,12 +866,16 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
         if need:
             print(f"      youtube: {sum(1 for i in items if i['reporter'])}/{len(items)} credited after description lookup")
 
-    # typical values for this week, used at render time to flag what is unusual
-    out['medians'] = dict(
-        likes=_median_of(this_df, 'likes'),
-        comments=_median_of(this_df, 'comments', 'replies'),
-        shares=_median_of(this_df, 'shares', 'retweets'),
-        engagement=round(float(this_df['_eng'].median()), 2) if len(this_df) else 0.0,
+    # Typical RATES (interactions per view) for the week. Comparing absolute
+    # counts would just re-flag the biggest posts - which the views column
+    # already says - so the חריג column compares each item against a normal
+    # post's rate instead.
+    _v = to_num(this_df['views'])
+    out['median_rates'] = dict(
+        likes=_rate_median(this_df, _v, 'likes'),
+        comments=_rate_median(this_df, _v, 'comments', 'replies'),
+        shares=_rate_median(this_df, _v, 'shares', 'retweets'),
+        engagement=round(float(this_df['_eng'].median()), 3) if len(this_df) else 0.0,
     )
 
     # thumbnails for all top-10 (X excluded by design)
@@ -1205,35 +1237,53 @@ ANOMALY_SPECS = (
 ANOMALY_MIN = 2.5   # at least 2.5x a normal post that week
 
 
-def _typical(platform):
-    """This week's typical value per metric. Prefers the medians stored at
+def _typical_rates(platform):
+    """This week's typical interactions-per-view. Prefers median_rates stored at
     extract (computed over the whole week); falls back to the items present so
     an older deck_content.json still renders."""
-    meds = dict(platform.get('medians') or {})
+    med = dict(platform.get('median_rates') or {})
     items = platform.get('top', []) or []
     for key in ('likes', 'comments', 'shares', 'engagement'):
-        if float(meds.get(key) or 0) > 0:
+        if float(med.get(key) or 0) > 0:
             continue
-        vals = sorted(float(it.get(key) or 0) for it in items if float(it.get(key) or 0) > 0)
-        if vals:
-            n = len(vals)
-            meds[key] = vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2
-        else:
-            meds[key] = 0.0
-    return meds
+        vals = []
+        for it in items:
+            views = float(it.get('views') or 0)
+            if key == 'engagement':
+                x = float(it.get('engagement') or 0)
+            elif views > 0:
+                x = float(it.get(key) or 0) / views
+            else:
+                continue
+            if x > 0:
+                vals.append(x)
+        vals.sort()
+        n = len(vals)
+        med[key] = (vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2) if n else 0.0
+    return med
 
 
-def _anomaly_of(item, meds):
-    """The single most unusual thing about this item, or None for most rows."""
+def _anomaly_of(item, med_rates):
+    """The single most unusual thing about this item, or None for most rows.
+    Compares RATES, so a post that is merely big does not flag - only one that
+    got shared/discussed/liked far beyond what its own reach explains."""
+    views = float(item.get('views') or 0)
     best = None
     for key, icon, label in ANOMALY_SPECS:
-        typical = float(meds.get(key) or 0)
-        value = float(item.get(key) or 0)
-        if typical <= 0 or value <= 0:
+        typical = float(med_rates.get(key) or 0)
+        if typical <= 0:
+            continue
+        if key == 'engagement':
+            value = float(item.get('engagement') or 0)
+        elif views > 0:
+            value = float(item.get(key) or 0) / views
+        else:
+            continue
+        if value <= 0:
             continue
         ratio = value / typical
         if ratio >= ANOMALY_MIN and (best is None or ratio > best['ratio']):
-            best = dict(ratio=ratio, icon=icon, label=label, mult=f"×{ratio:.1f}")
+            best = dict(ratio=ratio, icon=icon, label=label, mult="×%.1f" % ratio)
     return best
 
 
@@ -1251,7 +1301,7 @@ def content_to_context(content, thumbstyle='portrait'):
         meta = PLATFORMS[key]
         dl = build_delta(p.get('delta_pct'))
         rows = []
-        meds = _typical(p)
+        meds = _typical_rates(p)
         for n, it in enumerate(p.get('top', []), start=1):
             rows.append(dict(rank=n, title=it.get('title', ''), reporter=it.get('reporter', '') or '',
                              views_fmt=fmt_num(it.get('views', 0)),

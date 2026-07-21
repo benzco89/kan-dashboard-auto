@@ -78,7 +78,7 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 {%- endmacro %}
 
 {% macro anomaly_legend(p) -%}
-{% if p.has_anomaly %}<div style="display:flex;align-items:center;gap:10px;font-size:15px;color:#808080;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:2px 8px">חריג</span> פריט שעשה פי 2.5 ומעלה מפוסט רגיל השבוע — בשיתופים, בתגובות, בלייקים או במעורבות</div>{% else %}<div style="margin-bottom:8px;height:23px"></div>{% endif %}
+{% if p.has_anomaly %}<div style="display:flex;align-items:center;gap:10px;font-size:15px;color:#808080;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:2px 8px">חריג</span> פריט שקיבל פי 2.5 ומעלה מהרגיל <b>ביחס לכמות הצפיות שלו</b> — בשיתופים, בתגובות, בלייקים או במעורבות</div>{% else %}<div style="margin-bottom:8px;height:23px"></div>{% endif %}
 {%- endmacro %}
 
 {#
