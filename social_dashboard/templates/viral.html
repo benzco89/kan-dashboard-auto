@@ -44,10 +44,10 @@
     var body = s.posts.map(function (p) {
       var m = PLAT[p.platform] || { label: p.platform };
       var cells = KS.kmSection(m.label) + '<div class="km-grid">' +
-        KS.kmCell("צפיות", KS.fmtHtml(p.views)) +
+        KS.kmCell("צפיות", KS.fmtFull(p.views)) +
         KS.kmCell("מעורבות", p.eng.toFixed(1) + "%") +
-        KS.kmCell("תגובות", KS.fmtHtml(p.comments)) +
-        KS.kmCell("שיתופים", KS.fmtHtml(p.shares)) + '</div>';
+        KS.kmCell("תגובות", KS.fmtFull(p.comments)) +
+        KS.kmCell("שיתופים", KS.fmtFull(p.shares)) + '</div>';
       var link = p.url ? '<a class="viral-open" href="' + KS.esc(p.url) + '" target="_blank" rel="noopener">פתח ב-' + m.label + ' ↗</a>' : "";
       return cells + sentiMini(p.analysis) + link;
     }).join("");

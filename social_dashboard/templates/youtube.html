@@ -91,9 +91,9 @@
       var mv = medOf("views");
       var thumbHtml = v.thumb ? '<img class="km-thumb" src="' + KS.esc(v.thumb) + '" alt="" loading="lazy">' : "";
       var hero = '<div class="km-hero">' +
-        '<div><div class="v">' + KS.fmtHtml(v.views) + '</div><div class="l">צפיות</div></div>' +
-        '<div><div class="v">' + KS.fmtHtml(v.likes) + '</div><div class="l">לייקים</div></div>' +
-        '<div><div class="v">' + KS.fmtHtml(v.comments) + '</div><div class="l">תגובות</div></div></div>';
+        '<div><div class="v">' + KS.fmtFull(v.views) + '</div><div class="l">צפיות</div></div>' +
+        '<div><div class="v">' + KS.fmtFull(v.likes) + '</div><div class="l">לייקים</div></div>' +
+        '<div><div class="v">' + KS.fmtFull(v.comments) + '</div><div class="l">תגובות</div></div></div>';
       var meta = KS.kmSection("מדדים") + '<div class="km-grid">' +
         (v.duration ? KS.kmCell("אורך", KS.esc(v.duration)) : "") +
         KS.kmCell("% לייקים", v.like_rate.toFixed(2) + "%") +

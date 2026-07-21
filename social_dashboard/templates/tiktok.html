@@ -110,17 +110,17 @@
     function openPostModal(p) {
       var mv = medOf("views");
       var hero = '<div class="km-hero">' +
-        '<div><div class="v">' + KS.fmtHtml(p.views) + '</div><div class="l">צפיות</div></div>' +
-        '<div><div class="v">' + KS.fmtHtml(p.likes) + '</div><div class="l">לייקים</div></div>' +
+        '<div><div class="v">' + KS.fmtFull(p.views) + '</div><div class="l">צפיות</div></div>' +
+        '<div><div class="v">' + KS.fmtFull(p.likes) + '</div><div class="l">לייקים</div></div>' +
         '<div><div class="v">' + p.engagement.toFixed(1) + '%</div><div class="l">מעורבות</div></div></div>';
       var inter = KS.kmSection("אינטראקציות") + '<div class="km-grid">' +
-        KS.kmCell("שיתופים", KS.fmtHtml(p.shares)) +
-        KS.kmCell("מתוכם בוואטסאפ", KS.fmtHtml(p.whatsapp_shares)) +
-        KS.kmCell("תגובות", KS.fmtHtml(p.comments)) +
-        KS.kmCell("שמירות", KS.fmtHtml(p.saves)) +
-        KS.kmCell("הורדות", KS.fmtHtml(p.downloads)) +
+        KS.kmCell("שיתופים", KS.fmtFull(p.shares)) +
+        KS.kmCell("מתוכם בוואטסאפ", KS.fmtFull(p.whatsapp_shares)) +
+        KS.kmCell("תגובות", KS.fmtFull(p.comments)) +
+        KS.kmCell("שמירות", KS.fmtFull(p.saves)) +
+        KS.kmCell("הורדות", KS.fmtFull(p.downloads)) +
         (p.duration_sec ? KS.kmCell("משך", fmtDur(p.duration_sec), "דק׳") : "") +
-        (p.total_engagement ? KS.kmCell("סה״כ מעורבות", KS.fmtHtml(p.total_engagement)) : "") + '</div>';
+        (p.total_engagement ? KS.kmCell("סה״כ מעורבות", KS.fmtFull(p.total_engagement)) : "") + '</div>';
       var cmp = mv ? (KS.kmSection("ביחס לטיפוסי בחשבון") + '<div class="km-cmp">' + KS.kmCmp("צפיות מול חציון", p.views / mv) + '</div>') : "";
       var openBtn = p.url ? '<a class="km-open" href="' + KS.esc(p.url) + '" target="_blank" rel="noopener">פתח בטיקטוק ↗</a>' : "";
       KS.openModal({

@@ -107,26 +107,26 @@
     function openPostModal(p) {
       var mv = medOf("views"), msr = medOf("share_rate");
       var hero = '<div class="km-hero">' +
-        '<div><div class="v">' + KS.fmtHtml(p.views) + '</div><div class="l">צפיות</div></div>' +
-        '<div><div class="v">' + KS.fmtHtml(p.reach) + '</div><div class="l">חשיפה</div></div>' +
+        '<div><div class="v">' + KS.fmtFull(p.views) + '</div><div class="l">צפיות</div></div>' +
+        '<div><div class="v">' + KS.fmtFull(p.reach) + '</div><div class="l">חשיפה</div></div>' +
         '<div><div class="v">' + p.engagement.toFixed(1) + '%</div><div class="l">מעורבות</div></div></div>';
       var breakdown = p.love + p.haha + p.wow + p.sad + p.angry;
       var thumbs = Math.max(0, p.likes - breakdown);
-      var react = breakdown > 0 ? (KS.kmSection("פילוח רגשות · " + KS.fmt(p.likes) + " תגובות") + '<div class="km-grid">' +
-        KS.kmCell("👍 לייק", KS.fmtHtml(thumbs)) +
-        KS.kmCell("❤️ אהבתי", KS.fmtHtml(p.love)) +
-        KS.kmCell("😆 חחח", KS.fmtHtml(p.haha)) +
-        KS.kmCell("😮 וואו", KS.fmtHtml(p.wow)) +
-        KS.kmCell("😢 עצוב", KS.fmtHtml(p.sad)) +
-        KS.kmCell("😡 כועס", KS.fmtHtml(p.angry)) + '</div>') : "";
+      var react = breakdown > 0 ? (KS.kmSection("פילוח רגשות · " + KS.fmtFull(p.likes) + " תגובות") + '<div class="km-grid">' +
+        KS.kmCell("👍 לייק", KS.fmtFull(thumbs)) +
+        KS.kmCell("❤️ אהבתי", KS.fmtFull(p.love)) +
+        KS.kmCell("😆 חחח", KS.fmtFull(p.haha)) +
+        KS.kmCell("😮 וואו", KS.fmtFull(p.wow)) +
+        KS.kmCell("😢 עצוב", KS.fmtFull(p.sad)) +
+        KS.kmCell("😡 כועס", KS.fmtFull(p.angry)) + '</div>') : "";
       var inter = KS.kmSection("אינטראקציות") + '<div class="km-grid">' +
-        KS.kmCell("רגשות (סה״כ)", KS.fmtHtml(p.likes)) +
-        KS.kmCell("תגובות", KS.fmtHtml(p.comments)) +
-        KS.kmCell("שיתופים", KS.fmtHtml(p.shares)) +
-        (p.clicks ? KS.kmCell("קליקים", KS.fmtHtml(p.clicks)) : "") + '</div>';
+        KS.kmCell("רגשות (סה״כ)", KS.fmtFull(p.likes)) +
+        KS.kmCell("תגובות", KS.fmtFull(p.comments)) +
+        KS.kmCell("שיתופים", KS.fmtFull(p.shares)) +
+        (p.clicks ? KS.kmCell("קליקים", KS.fmtFull(p.clicks)) : "") + '</div>';
       var watch = p.avg_watch ? (KS.kmSection("צפייה בווידאו") + '<div class="km-grid">' +
         KS.kmCell("צפייה ממוצעת", p.avg_watch.toFixed(1), "שנ׳") +
-        (p.total_watch_min ? KS.kmCell("סה״כ דקות צפייה", KS.fmtHtml(p.total_watch_min)) : "") + '</div>') : "";
+        (p.total_watch_min ? KS.kmCell("סה״כ דקות צפייה", KS.fmtFull(p.total_watch_min)) : "") + '</div>') : "";
       var rates = KS.kmSection("שיעורים") + '<div class="km-grid">' +
         KS.kmCell("שיעור שיתוף", p.share_rate.toFixed(2) + "%") +
         KS.kmCell("% מעורבות", p.engagement.toFixed(1) + "%") + '</div>';
