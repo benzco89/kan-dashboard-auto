@@ -307,6 +307,192 @@ def tiktok_cover_map(wanted_ids, token, max_pages=5):
     return covers
 
 
+def _x_media_url(tweet):
+    """First renderable media preview URL on a tweet (fields vary by provider)."""
+    for m in (tweet.get("media") or []):
+        for k in ("media_url_https", "preview_image_url", "thumbnail_url", "media_url", "url"):
+            u = m.get(k)
+            if isinstance(u, str) and u.startswith("http"):
+                return u
+    return None
+
+
+def x_thumb_map(wanted_ids, token, max_pages=15):
+    """Map tweet_id -> media data URI via GetXAPI (same contract as
+    twitter_collector.get_tweets: tweets[] + has_more + next_cursor)."""
+    import re as _re
+    covers = {}
+    if not token or not wanted_ids:
+        return covers
+    try:
+        from utils import http_get_json
+    except Exception:
+        return covers
+    wanted = set(str(x) for x in wanted_ids)
+    headers = {"Authorization": f"Bearer {token}"}
+    cursor = None
+    for _ in range(max_pages):
+        if not wanted:
+            break
+        params = {"userName": "kann_news"}
+        if cursor:
+            params["cursor"] = cursor
+        try:
+            data = http_get_json("https://api.getxapi.com/twitter/user/tweets",
+                                 headers=headers, params=params, timeout=15, max_retries=2)
+        except Exception as e:
+            print(f"      x thumb fetch failed: {e}")
+            break
+        tweets = data.get("tweets")
+        if not isinstance(tweets, list) or not tweets:
+            break
+        for t in tweets:
+            tid = ""
+            for k in ("id", "tweetId", "id_str", "rest_id"):
+                if t.get(k):
+                    tid = str(t[k])
+                    break
+            if not tid:
+                m = _re.search(r"/status/(\d+)", t.get("url", ""))
+                tid = m.group(1) if m else ""
+            if tid and tid in wanted:
+                url = _x_media_url(t)
+                if url:
+                    du = _download(url)
+                    if du:
+                        covers[tid] = du
+                wanted.discard(tid)
+        if not data.get("has_more") or not data.get("next_cursor"):
+            break
+        cursor = data["next_cursor"]
+    return covers
+
+
+# ---------------------------------------------------------------- Gemini helpers
+
+def _gemini_text(prompt):
+    """One Gemini text call, model fallback list. None on any failure."""
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        return None
+    try:
+        from google import genai
+    except Exception as e:
+        print(f"   google-genai unavailable: {e}")
+        return None
+    client = genai.Client(api_key=api_key)
+    for model in ["gemini-3.5-flash", "gemini-2.5-pro"]:
+        try:
+            resp = client.models.generate_content(model=model, contents=prompt)
+            t = (resp.text or "").strip()
+            if t:
+                return t
+        except Exception as e:
+            print(f"   Gemini {model} failed: {e}")
+    return None
+
+
+def _parse_json(text):
+    """Parse a JSON array/object, tolerating ``` fences and surrounding prose."""
+    if not text:
+        return None
+    t = text.strip()
+    if t.startswith("```"):
+        t = t.strip("`")
+        nl = t.find("\n")
+        if nl != -1 and t[:nl].strip().lower() in ("json", ""):
+            t = t[nl + 1:]
+    try:
+        return json.loads(t)
+    except Exception:
+        pass
+    for op, cl in (("[", "]"), ("{", "}")):
+        i, j = t.find(op), t.rfind(cl)
+        if i != -1 and j > i:
+            try:
+                return json.loads(t[i:j + 1])
+            except Exception:
+                continue
+    return None
+
+
+# ---------------------------------------------------------------- reporters
+
+import re as _re_mod
+
+# 2-3 Hebrew words, apostrophes/geresh/hyphen allowed inside a word.
+_NAME_RE = _re_mod.compile(r"^[֐-׿]+(?:[ ׳״'\"׳״\-][֐-׿]+){1,2}$")
+
+
+def _looks_like_name(s):
+    s = (s or "").strip()
+    if not s or any(ch.isdigit() for ch in s):
+        return False
+    if 'צילום' in s or ':' in s or '@' in s:
+        return False
+    return bool(_NAME_RE.match(s))
+
+
+def reporter_fallback(title):
+    """Deterministic reporter credit: trailing '(שם כתב)' that looks like a
+    person, else a bare @handle. '' when nothing credible."""
+    title = str(title or "")
+    m = _re_mod.search(r"\(([^)]{2,30})\)\s*$", title)
+    if m and _looks_like_name(m.group(1)):
+        return m.group(1).strip()
+    h = _re_mod.search(r"@([A-Za-z0-9_]{2,30})", title)
+    if h:
+        return "@" + h.group(1)
+    return ""
+
+
+def _reporters_gemini(items):
+    """items: list of (key, row). Returns {(key,id): reporter|None} or None."""
+    payload = [{"platform": key, "id": r['_id'], "title": r['title']} for key, r in items]
+    prompt = (
+        "אתה מזהה את שם הכתב/ת שזוכה בקרדיט בכל כותרת של כאן חדשות.\n"
+        "כללים: החזר שם אדם רק אם הוא מיוחס במפורש (בסוגריים בסוף, @שם משתמש, או שם מפורש). "
+        "\"צילום: X\" הוא צלם ולא כתב — החזר null אלא אם מצוין גם כתב. "
+        "לעולם אל תמציא שם. כשלא בטוח — null.\n"
+        "החזר JSON תקין בלבד: רשימה של אובייקטים {platform, id, reporter}, reporter הוא מחרוזת או null.\n\n"
+        + json.dumps(payload, ensure_ascii=False)
+    )
+    arr = _parse_json(_gemini_text(prompt))
+    if not isinstance(arr, list):
+        return None
+    out = {}
+    for o in arr:
+        if isinstance(o, dict) and 'platform' in o and 'id' in o:
+            rep = o.get('reporter')
+            if isinstance(rep, str) and rep.strip() and rep.strip().lower() not in ('null', 'none'):
+                out[(str(o['platform']), str(o['id']))] = rep.strip()
+            else:
+                out[(str(o['platform']), str(o['id']))] = None
+    return out
+
+
+def assign_reporters(plat_ctx, use_gemini):
+    """Fill row['reporter'] (and the matching top-3 card) for every top-10 item.
+    Gemini batch (one call) primary; deterministic regex fallback on failure."""
+    items = [(c['key'], r) for c in plat_ctx for r in c.get('top10', [])]
+    if not items:
+        return "none"
+    mode = "fallback"
+    result = _reporters_gemini(items) if use_gemini else None
+    if result is not None:
+        mode = "gemini"
+        for key, r in items:
+            r['reporter'] = result.get((key, str(r['_id']))) or ""
+    else:
+        for key, r in items:
+            r['reporter'] = reporter_fallback(r['title'])
+    for c in plat_ctx:
+        by_id = {str(r['_id']): r['reporter'] for r in c.get('top10', [])}
+        for card in c.get('top3', []):
+            card['reporter'] = by_id.get(str(card['_id']), "")
+    return mode
+
+
 # ---------------------------------------------------------------- per platform
 
 def engagement_series(key, df):
@@ -337,43 +523,116 @@ def mark_anomalies(rows):
         r['anomaly'] = bool(i >= 3 and med > 0 and r['eng'] >= 1.4 * med)
 
 
-def fun_fact_for(key, df):
-    """Deterministic 'נתון מעניין' matching each design slot. None -> omitted."""
+def _cand(label, value, suffix, text):
+    return dict(label=label, value=str(value), suffix=suffix, text=text)
+
+
+def fun_fact_candidates(key, df):
+    """4-6 deterministic candidate facts per platform (value copied verbatim by
+    the LLM curator). candidates[0] is the platform's default (== the old fixed
+    fun-fact) so a failed/invalid curation degrades to prior behavior."""
+    c = []
     try:
-        views_sum = to_num(df['views']).sum()
-        if key == 'youtube' and 'video_type' in df.columns and views_sum > 0:
-            sv = to_num(df[df['video_type'] == 'Shorts']['views']).sum()
-            return dict(value=str(int(round(sv / views_sum * 100))), suffix='%',
-                        text='מהצפיות ביוטיוב הגיעו מ‑Shorts')
-        if key == 'tiktok' and 'whatsapp_shares' in df.columns and 'shares' in df.columns:
-            sh = to_num(df['shares']).sum()
-            if sh > 0:
-                wa = to_num(df['whatsapp_shares']).sum()
-                return dict(value=str(int(round(wa / sh * 100))), suffix='%',
-                            text='מהשיתופים בטיקטוק הופנו לוואטסאפ — הכי הרבה מכל פלטפורמה')
-        if key == 'instagram' and 'type' in df.columns and views_sum > 0:
-            rv = to_num(df[df['type'].astype(str).str.contains('Reel', case=False, na=False)]['views']).sum()
-            return dict(value=str(int(round(rv / views_sum * 100))), suffix='%',
-                        text='מהצפיות באינסטגרם הגיעו מ‑Reels — הפורמט שמוביל את הצמיחה')
-        if key == 'facebook' and 'reach' in df.columns:
-            reach = to_num(df['reach']).sum()
-            if reach > 0:
-                return dict(value=fmt_num(reach), suffix='',
-                            text='סך החשיפה (reach) של פוסטי פייסבוק השבוע')
-        if key == 'x':
-            cols = [c for c in ('likes', 'retweets', 'replies', 'quotes') if c in df.columns]
-            if 'replies' in df.columns and cols:
-                total = sum(to_num(df[c]).sum() for c in cols)
-                if total > 0:
-                    rep = to_num(df['replies']).sum()
-                    return dict(value=str(int(round(rep / total * 100))), suffix='%',
-                                text='מהמעורבות ב‑X הגיעה מתגובות — קהל שמדבר בחזרה')
-    except Exception as e:
-        print(f"      fun-fact failed for {key}: {e}")
-    return None
+        v = to_num(df['views'])
+        vsum = float(v.sum())
+        n = len(df)
+        eng = engagement_series(key, df)
+        med = float(v.median()) if n else 0.0
+
+        # --- platform-specific PRIMARY (candidates[0] = default) ---
+        if key == 'youtube':
+            if 'video_type' in df.columns and vsum > 0:
+                sv = float(to_num(df[df['video_type'] == 'Shorts']['views']).sum())
+                c.append(_cand('shorts_share', int(round(sv / vsum * 100)), '%', 'מהצפיות ביוטיוב הגיעו מ‑Shorts'))
+            if 'likes' in df.columns:
+                c.append(_cand('likes_total', fmt_num(to_num(df['likes']).sum()), '', 'לייקים על סרטוני יוטיוב השבוע'))
+            if 'comments' in df.columns:
+                c.append(_cand('comments_total', fmt_num(to_num(df['comments']).sum()), '', 'תגובות על סרטוני יוטיוב השבוע'))
+        elif key == 'tiktok':
+            if 'whatsapp_shares' in df.columns and 'shares' in df.columns and float(to_num(df['shares']).sum()) > 0:
+                wa = float(to_num(df['whatsapp_shares']).sum()); sh = float(to_num(df['shares']).sum())
+                c.append(_cand('whatsapp', int(round(wa / sh * 100)), '%', 'מהשיתופים בטיקטוק הופנו לוואטסאפ'))
+            if 'saves' in df.columns:
+                c.append(_cand('saves', fmt_num(to_num(df['saves']).sum()), '', 'שמירות על סרטוני טיקטוק השבוע'))
+            if 'shares' in df.columns:
+                c.append(_cand('shares', fmt_num(to_num(df['shares']).sum()), '', 'שיתופים של סרטוני טיקטוק השבוע'))
+        elif key == 'instagram':
+            if 'type' in df.columns and vsum > 0:
+                rv = float(to_num(df[df['type'].astype(str).str.contains('Reel', case=False, na=False)]['views']).sum())
+                c.append(_cand('reels_share', int(round(rv / vsum * 100)), '%', 'מהצפיות באינסטגרם הגיעו מ‑Reels'))
+            if 'saved' in df.columns:
+                c.append(_cand('saves', fmt_num(to_num(df['saved']).sum()), '', 'שמירות על תכני אינסטגרם השבוע'))
+            if 'reach' in df.columns:
+                c.append(_cand('reach', fmt_num(to_num(df['reach']).sum()), '', 'חשיפה (reach) לתכני אינסטגרם השבוע'))
+        elif key == 'facebook':
+            if 'reach' in df.columns:
+                c.append(_cand('reach', fmt_num(to_num(df['reach']).sum()), '', 'סך החשיפה (reach) של פוסטי פייסבוק השבוע'))
+            if 'shares' in df.columns:
+                c.append(_cand('shares', fmt_num(to_num(df['shares']).sum()), '', 'שיתופים של פוסטי פייסבוק השבוע'))
+            if 'comments' in df.columns:
+                c.append(_cand('comments', fmt_num(to_num(df['comments']).sum()), '', 'תגובות על פוסטי פייסבוק השבוע'))
+        elif key == 'x':
+            cols = [c2 for c2 in ('likes', 'retweets', 'replies', 'quotes') if c2 in df.columns]
+            if 'replies' in df.columns and cols and sum(float(to_num(df[c2]).sum()) for c2 in cols) > 0:
+                total = sum(float(to_num(df[c2]).sum()) for c2 in cols)
+                c.append(_cand('reply_share', int(round(float(to_num(df['replies']).sum()) / total * 100)), '%', 'מהמעורבות ב‑X הגיעה מתגובות'))
+            if 'retweets' in df.columns:
+                c.append(_cand('retweets', fmt_num(to_num(df['retweets']).sum()), '', 'ריטוויטים על ציוצי כאן השבוע'))
+            if 'quotes' in df.columns:
+                c.append(_cand('quotes', fmt_num(to_num(df['quotes']).sum()), '', 'ציטוטים (quote tweets) של כאן השבוע'))
+
+        # --- generic extras (give the curator week-to-week variety) ---
+        if n >= 3 and med > 0 and float(v.max()) / med >= 1.5:
+            r = float(v.max()) / med
+            c.append(_cand('overperformer', f"{r:.1f}", '×', f"הפריט המוביל השבוע עשה פי {r:.1f} מחציון הצפיות בפלטפורמה"))
+        if len(eng) and float(eng.max()) > 0:
+            e = float(eng.max())
+            c.append(_cand('eng_leader', f"{e:.1f}", '%', f"שיא מעורבות של {e:.1f}% על פריט בודד השבוע"))
+    except Exception as ex:
+        print(f"      candidates failed for {key}: {ex}")
+    return c
 
 
-def process_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token):
+def curate_fun_facts(plat_ctx, use_gemini):
+    """One Gemini call picks the most newsworthy candidate per platform and
+    phrases it; the headline number is validated against the candidate's own
+    values (LLM never does arithmetic). Invalid/failed -> keep the default."""
+    if not use_gemini:
+        return
+    payload = []
+    for c in plat_ctx:
+        cands = c.get('fun_fact_candidates') or []
+        if cands:
+            payload.append({"platform": c['key'],
+                            "candidates": [{"label": x['label'], "number": x['value'], "suffix": x['suffix'], "hint": x['text']} for x in cands]})
+    if not payload:
+        return
+    prompt = (
+        "אתה עורך של כאן חדשות. לכל פלטפורמה קיבלת מספר עובדות-מועמדות עם מספר קבוע.\n"
+        "בחר לכל פלטפורמה את העובדה הכי מעניינת/עיתונאית, ונסח משפט אחד קצר בעברית סביבה.\n"
+        "העתק את המספר מילה-במילה מה-number של המועמד שבחרת. אל תמציא מספרים ואל תשנה ספרות.\n"
+        "החזר JSON תקין בלבד: רשימה של {platform, chosen_label, headline_number, sentence}.\n\n"
+        + json.dumps(payload, ensure_ascii=False)
+    )
+    arr = _parse_json(_gemini_text(prompt))
+    if not isinstance(arr, list):
+        return
+    chosen = {str(o.get('platform')): o for o in arr if isinstance(o, dict)}
+    for c in plat_ctx:
+        cands = c.get('fun_fact_candidates') or []
+        o = chosen.get(c['key'])
+        if not cands or not o:
+            continue
+        num = str(o.get('headline_number', '')).strip()
+        lbl = o.get('chosen_label')
+        match = next((x for x in cands if x['label'] == lbl and x['value'] == num), None) \
+            or next((x for x in cands if x['value'] == num), None)
+        sent = o.get('sentence')
+        if match and isinstance(sent, str) and sent.strip():
+            c['fun_fact'] = dict(value=match['value'], suffix=match['suffix'], text=clean_title(sent, 120))
+
+
+def process_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token, getxapi_token=''):
     """Return (ctx, metrics) for one platform. Filters to this/last week."""
     import pandas as pd
     meta = PLATFORMS[key]
@@ -422,10 +681,10 @@ def process_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
     rows = []
     for i, (_, r) in enumerate(this_df.head(10).iterrows(), start=1):
         rows.append(dict(rank=i, title=clean_title(r.get(tc, '')),
-                         reporter="",  # sheets carry no reporter/author field
+                         reporter="",  # filled later by assign_reporters()
                          views=float(r['views']), views_fmt=fmt_num(r['views']),
                          eng=float(r['_eng']), eng_str=f"{float(r['_eng']):.1f}%",
-                         highlight=(i <= 3), anomaly=False,
+                         highlight=(i <= 3), anomaly=False, thumb=None,
                          _id=str(r.get(idc, ''))))
     mark_anomalies(rows)
     ctx['top10'] = rows
@@ -450,24 +709,29 @@ def process_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
                                    views_fmt=top['views_fmt'], accent=meta['colors']['accent'],
                                    name=meta['name'])
 
-    ctx['fun_fact'] = fun_fact_for(key, this_df)
+    cands = fun_fact_candidates(key, this_df)
+    ctx['fun_fact_candidates'] = cands
+    ctx['fun_fact'] = dict(value=cands[0]['value'], suffix=cands[0]['suffix'],
+                           text=cands[0]['text']) if cands else None
 
-    # thumbnails (top-3 only)
+    # thumbnails for ALL top-10 rows (+ the top-3 cards), per platform
     if thumbs_enabled:
+        ids = [r['_id'] for r in rows]
+        tmap = {}
         if key == 'youtube':
-            for c in top3:
-                c['thumb'] = thumb_youtube(c['_id'])
+            tmap = {i: thumb_youtube(i) for i in ids}
         elif key == 'facebook':
-            for c in top3:
-                c['thumb'] = thumb_fb(c['_id'], fb_token)
+            tmap = {i: thumb_fb(i, fb_token) for i in ids}
         elif key == 'instagram':
-            for c in top3:
-                c['thumb'] = thumb_ig(c['_id'], fb_token)
+            tmap = {i: thumb_ig(i, fb_token) for i in ids}
         elif key == 'tiktok':
-            covers = tiktok_cover_map([c['_id'] for c in top3], tikhub_token)
-            for c in top3:
-                c['thumb'] = covers.get(c['_id'])
-        # x: no cheap thumbnail source -> placeholder
+            tmap = tiktok_cover_map(ids, tikhub_token, max_pages=8)
+        elif key == 'x':
+            tmap = x_thumb_map(ids, getxapi_token, max_pages=15)
+        for r in rows:
+            r['thumb'] = tmap.get(r['_id'])
+        for c in top3:
+            c['thumb'] = tmap.get(c['_id'])
 
     return ctx, metrics
 
@@ -624,11 +888,16 @@ def _gemini_polish(primary, secondary, daily_insights, metrics_list):
 # ---------------------------------------------------------------- assembly
 
 def compute_window(today=None):
+    """Last COMPLETE Israeli week: Sunday..Saturday (Asia/Jerusalem). Running on
+    Tue 2026-07-21 -> 2026-07-12..2026-07-18; prior week (for deltas) =
+    2026-07-05..2026-07-11. Running on a Sunday -> the just-finished Sun..Sat."""
     today = today or datetime.now(IL_TZ)
-    ws = (today - timedelta(days=7))
-    we = (today - timedelta(days=1))
-    lws = (today - timedelta(days=14))
-    lwe = (today - timedelta(days=8))
+    days_since_sunday = (today.weekday() + 1) % 7   # Python: Mon=0..Sun=6
+    this_week_sunday = today - timedelta(days=days_since_sunday)
+    we = this_week_sunday - timedelta(days=1)        # last complete Saturday
+    ws = we - timedelta(days=6)                      # its Sunday
+    lwe = ws - timedelta(days=1)                     # prior Saturday
+    lws = lwe - timedelta(days=6)                    # prior Sunday
     fmt = lambda d: d.strftime('%Y-%m-%d')
     return dict(this=(fmt(ws), fmt(we)), last=(fmt(lws), fmt(lwe)),
                 d1=ws, d2=we)
@@ -694,13 +963,19 @@ def build_context(gc, use_gemini, thumbs_enabled):
     window = compute_window()
     fb_token = os.environ.get('FACEBOOK_TOKEN', '')
     tikhub_token = os.environ.get('TIKHUB_TOKEN', '')
+    getxapi_token = os.environ.get('GETXAPI_KEY', '')
 
     plat_ctx, metrics = [], []
     for key in PLATFORM_ORDER:
         df = load_sheet(gc, PLATFORMS[key]['sheet']) if gc else None
-        c, m = process_platform(key, df, window, thumbs_enabled, fb_token, tikhub_token)
+        c, m = process_platform(key, df, window, thumbs_enabled, fb_token,
+                                tikhub_token, getxapi_token)
         plat_ctx.append(c)
         metrics.append(m)
+
+    mode = assign_reporters(plat_ctx, use_gemini)
+    print(f"   reporters: {mode}")
+    curate_fun_facts(plat_ctx, use_gemini)
 
     follows = followers_map(gc)
     daily_insights = _daily_insights(gc, window)
@@ -752,6 +1027,16 @@ def _assemble(plat_ctx, metrics, follows, daily_insights, window, use_gemini):
 
     learnings = build_learnings(metrics, daily_insights, use_gemini)
 
+    # closing credits: unique reporter names (skip @handles), in rank order
+    reporters, seen = [], set()
+    for key in ordered:
+        for r in by_key[key].get('top10', []):
+            nm = (r.get('reporter') or '').strip()
+            if nm and not nm.startswith('@') and nm not in seen:
+                seen.add(nm)
+                reporters.append(nm)
+    reporters = reporters[:12]
+
     return dict(
         font_faces=font_faces(),
         logo_black=logo_data_uri(),
@@ -764,7 +1049,7 @@ def _assemble(plat_ctx, metrics, follows, daily_insights, window, use_gemini):
         overview_rows=overview_rows,
         platforms=platforms,
         learnings=learnings,
-        reporters=[],  # no author data in the sheets -> block omitted
+        reporters=reporters,  # extracted credits; empty -> closing block omitted
     )
 
 
@@ -790,14 +1075,14 @@ def build_mock_context():
         return pd.DataFrame(out)
 
     yt = rows([
-        ("תיעוד: רגע פגיעת הרקטה בעוטף עזה", 1_400_000, 42000, 3100, 900, 9.1, dict(video_id="dQw4w9WgXcQ", video_type="Regular")),
+        ("תיעוד: רגע פגיעת הרקטה בעוטף עזה (יואב לימור)", 1_400_000, 42000, 3100, 900, 9.1, dict(video_id="dQw4w9WgXcQ", video_type="Regular")),
         ("ראיון בלעדי עם ראש הממשלה על ההסכם", 980_000, 21000, 2400, 600, 7.4, dict(video_id="9bZkp7q19f0", video_type="Regular")),
-        ("כך נראתה ההצפה בצפון מהאוויר", 720_000, 15000, 900, 400, 6.0, dict(video_id="kJQP7kiw5Fk", video_type="Shorts")),
+        ("כך נראתה ההצפה בצפון מהאוויר (צילום: מוטי מילרוד)", 720_000, 15000, 900, 400, 6.0, dict(video_id="kJQP7kiw5Fk", video_type="Shorts")),
         ("מבזק: החלטת בג\"ץ בעניין הגיוס", 610_000, 18000, 2600, 800, 8.2, dict(video_id="a", video_type="Regular")),
-        ("הפגנת ענק בכיכר — תיעוד מרחפן", 540_000, 9000, 500, 300, 7.1, dict(video_id="b", video_type="Shorts")),
+        ("הפגנת ענק בכיכר — תיעוד מרחפן @haimgoldich", 540_000, 9000, 500, 300, 7.1, dict(video_id="b", video_type="Shorts")),
         ("פאנל אולפן: לאן הולך המשק", 430_000, 4000, 300, 120, 4.4, dict(video_id="c", video_type="Regular")),
         ("דיווח מהשטח: שריפה בהרי ירושלים", 390_000, 6000, 400, 200, 5.8, dict(video_id="d", video_type="Shorts")),
-        ("הטור השבועי של הפרשן הצבאי", 310_000, 3000, 250, 90, 3.9, dict(video_id="e", video_type="Regular")),
+        ("הטור השבועי של הפרשן הצבאי (רון בן ישי)", 310_000, 3000, 250, 90, 3.9, dict(video_id="e", video_type="Regular")),
         ("כתבת תחקיר: מאחורי הקלעים של העסקה", 275_000, 5000, 350, 150, 6.2, dict(video_id="f", video_type="Regular")),
         ("מזג האוויר: גל החום נמשך", 240_000, 1500, 120, 40, 2.7, dict(video_id="g", video_type="Shorts")),
     ], None)
@@ -816,8 +1101,8 @@ def build_mock_context():
     ], None)
 
     ig = rows([
-        ("רילס: תיעוד ההצפה בצפון", 1_100_000, 88000, 1200, 9000, 12.9, dict(media_id="i1", type="Reel", saved=14000, reach=1_300_000)),
-        ("קרוסלה: חמש נקודות על ההסכם", 720_000, 44000, 800, 3200, 9.6, dict(media_id="i2", type="Carousel", saved=9000, reach=820_000)),
+        ("רילס: תיעוד ההצפה בצפון (נעה לנדאו)", 1_100_000, 88000, 1200, 9000, 12.9, dict(media_id="i1", type="Reel", saved=14000, reach=1_300_000)),
+        ("קרוסלה: חמש נקודות על ההסכם (שירית אביטן)", 720_000, 44000, 800, 3200, 9.6, dict(media_id="i2", type="Carousel", saved=9000, reach=820_000)),
         ("הסטורי שהפך לרילס הכי נצפה", 560_000, 36000, 600, 2600, 8.8, dict(media_id="i3", type="Reel", saved=7000, reach=650_000)),
         ("רגע מרגש בכנסת — רילס", 480_000, 28000, 500, 2100, 7.4, dict(media_id="i4", type="Reel", saved=5200, reach=560_000)),
         ("אינפוגרפיקה: המספרים של השבוע", 390_000, 20000, 400, 1500, 6.2, dict(media_id="i5", type="Photo", saved=3800, reach=430_000)),
@@ -868,8 +1153,13 @@ def build_mock_context():
     plat_ctx, metrics = [], []
     for key in PLATFORM_ORDER:
         c, m = process_platform(key, sheets[key], window, False, '', '')
-        if c['top3']:
-            c['top3'][0]['thumb'] = mock_thumb(c['name'], PLATFORMS[key]['colors']['accent'])
+        # inject a mock thumb on every row + card so the table-row-thumb UI can
+        # be judged visually (real runs download these per platform)
+        accent = PLATFORMS[key]['colors']['accent']
+        for r in c.get('top10', []):
+            r['thumb'] = mock_thumb(c['name'], accent)
+        for card in c.get('top3', []):
+            card['thumb'] = mock_thumb(c['name'], accent)
         plat_ctx.append(c)
         metrics.append(m)
 
@@ -884,6 +1174,12 @@ def build_mock_context():
         c = ctx_by_key[m['key']]
         c.update(delta_str=dl['str_signed'], delta_arrow=dl['arrow'],
                  delta_color=dl['color'], has_delta=dl['has_delta'])
+
+    # reporter extraction (fallback/regex path — no creds in mock) + fun-fact
+    # defaults (curation needs Gemini, off in mock)
+    mode = assign_reporters(plat_ctx, use_gemini=False)
+    print(f"   reporters (mock): {mode}")
+    curate_fun_facts(plat_ctx, use_gemini=False)
 
     follows = dict(youtube=412000, tiktok=286000, instagram=531000, facebook=1_200_000, x=348000)
     daily = [(days[i], f"תובנה יומית לדוגמה מספר {i+1}") for i in range(3)]
