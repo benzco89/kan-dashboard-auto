@@ -265,14 +265,13 @@ def tiktok_cover_map(wanted_ids, token, max_pages=5):
             aid = str(v.get("aweme_id", ""))
             if aid in wanted:
                 vid = v.get("video") or {}
-                url = None
+                # ה-CDN מגיש heic (שהדפדפן לא מרנדר) וגם jpeg - אוספים את כל
+                # הווריאנטים מכל סוגי העטיפות ומעדיפים jpeg מאיזשהו סוג
+                all_urls = []
                 for k in ("cover", "origin_cover", "dynamic_cover"):
-                    ul = (vid.get(k) or {}).get("url_list") or []
-                    if ul:
-                        # ה-CDN מגיש heic (שהדפדפן לא מרנדר) וגם jpeg -
-                        # מעדיפים במפורש את וריאנט ה-jpeg
-                        url = next((u for u in ul if '.jpeg' in u or '.jpg' in u), ul[0])
-                        break
+                    all_urls.extend((vid.get(k) or {}).get("url_list") or [])
+                url = next((u for u in all_urls if '.jpeg' in u or '.jpg' in u),
+                           all_urls[0] if all_urls else None)
                 if url:
                     du = _download(url)
                     if du:
