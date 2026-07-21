@@ -269,7 +269,9 @@ def tiktok_cover_map(wanted_ids, token, max_pages=5):
                 for k in ("cover", "origin_cover", "dynamic_cover"):
                     ul = (vid.get(k) or {}).get("url_list") or []
                     if ul:
-                        url = ul[0]
+                        # ה-CDN מגיש heic (שהדפדפן לא מרנדר) וגם jpeg -
+                        # מעדיפים במפורש את וריאנט ה-jpeg
+                        url = next((u for u in ul if '.jpeg' in u or '.jpg' in u), ul[0])
                         break
                 if url:
                     du = _download(url)
