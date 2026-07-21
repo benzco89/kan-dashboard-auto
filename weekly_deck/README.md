@@ -59,7 +59,7 @@ Flags: `--thumbstyle portrait|blur` (see below) · `--no-thumbs` (skip downloads
 ```
 
 Everything is derived at render time: platform order (by `weekly_views`), the
-`חריג` badges (engagement vs the week's median), number formatting, and the
+`חריג` badges (each metric vs a normal post that week), number formatting, and the
 thumbnails (read from `out/thumbs/` and inlined as data URIs). So editing
 `weekly_views` reorders the deck; editing `engagement` re-flags anomalies.
 
@@ -75,24 +75,36 @@ prior Sun–Sat is the baseline for week-over-week deltas. Running Tue 2026-07-2
 - **Cover** — hero = sum of weekly views across platforms, delta vs the prior week.
 - **Overview** — platforms ranked by weekly views; bar width = share of the top platform.
 - **Per-platform slides** (dynamic order by views) — top-3 highlight cards + a
-  top-10 table (square leading thumbnails), `חריג` badges on rows whose
-  engagement beats the week's median for their view rank, and a `נתון מעניין`
-  picked from the platform's candidate list (`fun_fact.chosen`).
+  top-10 table (square leading thumbnails) with its own **חריג column** saying
+  *what* is unusual about an item — shares, comments, likes or engagement at
+  2.5x or more of a normal post that week, shown as e.g. `🔁 שיתופים ×3.4`
+  (empty on most rows) — and a `נתון מעניין` picked from the platform's
+  candidate list (`fun_fact.chosen`).
 - **מה למדנו** — 3–4 learning cards `{icon, number, color, title, sentence}`
   plus an optional wider **story of the week** block that names one story and
   shows its per-platform numbers. Authored in `deck_content.json`; the code only
   seeds deterministic defaults.
-- **Closing** — sign-off, week dates, and the week's credited reporters.
+- **Closing** — sign-off and week dates.
 
 Platforms with no rows in the window keep their slide but show an honest empty
 state (no fabricated numbers).
 
+## Headlines vs captions
+
+Kan captions are long and run past the headline. `--extract` stores both: the
+rendered `title` is the **headline only** — cut at the first 👇, line break or
+sentence end (never at `:`, which is part of Kan headlines like
+`פרסום ראשון: ...`), then capped ~80 chars on a word boundary — and `caption`
+keeps the first 200 chars of the original for reference while editing.
+
 ## Reporter credits (כתב/ת column)
 
 The sheets carry no author field, so `--extract` pre-fills `reporter`
-deterministically: a trailing `(שם כתב)` that looks like a 2–3-word Hebrew name,
-or a bare `@handle`. A `צילום:` photographer is never treated as a reporter, and
-nothing is ever invented — unknowns stay empty for you to fill in.
+deterministically **from the full caption** (the credit sits at the end, past
+the headline): an explicit `כתב:` / `תחקיר:` credit, a parenthesised 2–3-word
+Hebrew name (the last one wins), or an `@handle`. `צילום:` / `עריכה:` are
+photographers and editors, never reporters, and nothing is ever invented —
+unknowns stay empty for you to fill in.
 
 `reporters_map.json` (repo-tracked, **user-editable and meant to grow** — just
 add a line) maps `{"@handle": "שם בעברית"}` and is applied during extract. It

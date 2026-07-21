@@ -368,26 +368,76 @@ def tiktok_cover_map(wanted_ids, token, max_pages=8):
 _NAME_RE = re.compile(r"^[֐-׿]+(?:[ ׳״'\"\-][֐-׿]+){1,2}$")
 
 
+# Roles that are credited like a reporter but are NOT the reporter.
+_NOT_REPORTER = ('צילום', 'עריכה', 'עיבוד', 'גרפיקה', 'הפקה', 'תרגום', 'אנימציה')
+# "כתב: X" / "כתבת: X" / "תחקיר: X" style credits.
+_CREDIT_PREFIX_RE = re.compile(
+    r"(?:כתב/ת|כתבת|כתבנו|כתב|תחקיר|דיווח)\s*:\s*([^\n,|)\]]{2,40})")
+
+
 def _looks_like_name(s):
     s = (s or "").strip()
     if not s or any(ch.isdigit() for ch in s):
         return False
-    if 'צילום' in s or ':' in s or '@' in s:
+    if ':' in s or '@' in s:
+        return False
+    if any(w in s for w in _NOT_REPORTER):
         return False
     return bool(_NAME_RE.match(s))
 
 
-def reporter_fallback(title):
-    """Deterministic reporter credit: trailing '(שם כתב)' that looks like a
-    person, else a bare @handle. '' when nothing credible. Never invents."""
-    title = str(title or "")
-    m = re.search(r"\(([^)]{2,30})\)\s*$", title)
-    if m and _looks_like_name(m.group(1)):
-        return m.group(1).strip()
-    h = re.search(r"@([A-Za-z0-9_]{2,30})", title)
+def reporter_fallback(text):
+    """Deterministic reporter credit from the FULL caption. Kan credits at the
+    end, so we look for: an explicit 'כתב: X' credit, a parenthesised person
+    name anywhere (last one wins — that's where the credit sits), or an
+    @handle. 'צילום:'/'עריכה:' are photographers/editors, not reporters.
+    Never invents: returns '' when nothing credible is present."""
+    text = str(text or "")
+
+    for m in _CREDIT_PREFIX_RE.finditer(text):
+        cand = m.group(1).strip().strip('.,;')
+        if _looks_like_name(cand):
+            return cand
+
+    found = [m.group(1).strip() for m in re.finditer(r"\(([^)]{2,40})\)", text)]
+    named = [c for c in found if _looks_like_name(c)]
+    if named:
+        return named[-1]
+
+    h = re.search(r"@([A-Za-z0-9_]{2,30})", text)
     if h:
         return "@" + h.group(1)
     return ""
+
+
+# Headline stops: a sentence end (not a decimal point), the 👇 pointer Kan uses
+# before a link, or a hard line break.
+_HEADLINE_STOP_RE = re.compile(r"[.!?](?=\s|$)")
+_HEADLINE_CUT_CHARS = ('👇', '⬇️', '⬇', '🔗')
+
+
+def headline_of(text, reporter="", cap=80):
+    """The leading headline of a caption — what the table and cards show.
+    Deliberately does NOT cut at ':' — in Kan headlines the colon is part of the
+    headline ('פרסום ראשון: ...')."""
+    lines = [l for l in str(text or "").replace("\r", "\n").split("\n") if l.strip()]
+    s = lines[0] if lines else ""
+    for ch in _HEADLINE_CUT_CHARS:
+        i = s.find(ch)
+        if i != -1:
+            s = s[:i]
+    m = _HEADLINE_STOP_RE.search(s)
+    if m:
+        s = s[:m.start()]
+    s = " ".join(s.split())
+    # a trailing credit duplicates the כתב/ת column
+    if reporter and s.endswith("(" + reporter + ")"):
+        s = s[:-(len(reporter) + 2)].rstrip()
+    if len(s) > cap:
+        cut = s[:cap]
+        sp = cut.rfind(" ")
+        s = (cut[:sp] if sp > cap * 0.6 else cut).rstrip() + "…"
+    return s.strip()
 
 
 def load_reporters_map():
@@ -481,10 +531,10 @@ def fun_fact_candidates(key, df):
             if 'saved' in df.columns:
                 c.append(_cand('saves', fmt_num(to_num(df['saved']).sum()), '', 'שמירות על תכני אינסטגרם השבוע'))
             if 'reach' in df.columns:
-                c.append(_cand('reach', fmt_num(to_num(df['reach']).sum()), '', 'חשיפה (reach) לתכני אינסטגרם השבוע'))
+                c.append(_cand('reach', fmt_num(to_num(df['reach']).sum()), '', 'חשיפה לתכני אינסטגרם השבוע'))
         elif key == 'facebook':
             if 'reach' in df.columns:
-                c.append(_cand('reach', fmt_num(to_num(df['reach']).sum()), '', 'סך החשיפה (reach) של פוסטי פייסבוק השבוע'))
+                c.append(_cand('reach', fmt_num(to_num(df['reach']).sum()), '', 'סך החשיפה של פוסטי פייסבוק השבוע'))
             if 'shares' in df.columns:
                 c.append(_cand('shares', fmt_num(to_num(df['shares']).sum()), '', 'שיתופים של פוסטי פייסבוק השבוע'))
             if 'comments' in df.columns:
@@ -501,13 +551,35 @@ def fun_fact_candidates(key, df):
 
         if n >= 3 and med > 0 and float(v.max()) / med >= 1.5:
             r = float(v.max()) / med
-            c.append(_cand('overperformer', f"{r:.1f}", '×', f"הפריט המוביל השבוע עשה פי {r:.1f} מחציון הצפיות בפלטפורמה"))
+            c.append(_cand('overperformer', f"{r:.1f}", '×', f"הפריט המוביל השבוע עשה פי {r:.1f} צפיות מפוסט רגיל בפלטפורמה"))
         if len(eng) and float(eng.max()) > 0:
             e = float(eng.max())
-            c.append(_cand('eng_leader', f"{e:.1f}", '%', f"שיא מעורבות של {e:.1f}% על פריט בודד השבוע"))
+            c.append(_cand('eng_leader', f"{e:.1f}", '%', f"שיא המעורבות השבוע — {e:.1f}% על פריט בודד"))
     except Exception as ex:
         print(f"      candidates failed for {key}: {ex}")
     return c
+
+
+def _row_int(row, *cols):
+    """First present/non-zero of `cols` as an int (X calls them retweets/replies)."""
+    for c in cols:
+        try:
+            v = int(float(row.get(c, 0) or 0))
+        except (TypeError, ValueError):
+            v = 0
+        if v:
+            return v
+    return 0
+
+
+def _median_of(df, *cols):
+    """Median of the first column that exists and has data. 0.0 when none."""
+    for c in cols:
+        if c in df.columns:
+            s = to_num(df[c])
+            if s.sum() > 0:
+                return round(float(s.median()), 2)
+    return 0.0
 
 
 def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token, rmap):
@@ -544,11 +616,28 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
 
     items = []
     for _, r in this_df.head(10).iterrows():
-        title = clean_title(r.get(tc, ''))
-        items.append(dict(id=str(r.get(idc, '')), title=title,
-                          reporter=resolve_reporter(title, rmap),
-                          views=int(r['views']), engagement=round(float(r['_eng']), 1),
+        # the credit lives at the END of the caption, so resolve on the FULL raw
+        # text and only then cut down to a headline for display
+        raw = str(r.get(tc, '') or '')
+        reporter = resolve_reporter(raw, rmap)
+        items.append(dict(id=str(r.get(idc, '')),
+                          title=headline_of(raw, reporter),
+                          caption=clean_title(raw, 200),
+                          reporter=reporter,
+                          views=int(r['views']),
+                          likes=_row_int(r, 'likes'),
+                          comments=_row_int(r, 'comments', 'replies'),
+                          shares=_row_int(r, 'shares', 'retweets'),
+                          engagement=round(float(r['_eng']), 1),
                           thumb=None))
+
+    # typical values for this week, used at render time to flag what is unusual
+    out['medians'] = dict(
+        likes=_median_of(this_df, 'likes'),
+        comments=_median_of(this_df, 'comments', 'replies'),
+        shares=_median_of(this_df, 'shares', 'retweets'),
+        engagement=round(float(this_df['_eng'].median()), 2) if len(this_df) else 0.0,
+    )
 
     # thumbnails for all top-10 (X excluded by design)
     if thumbs_enabled and key not in NO_THUMBS:
@@ -838,7 +927,7 @@ CAND_LABEL_HE = {
     'reach': 'חשיפה',
     'retweets': 'ריטוויטים',
     'quotes': 'ציטוטים',
-    'overperformer': 'המוביל מול החציון',
+    'overperformer': 'המוביל מול פוסט רגיל',
     'eng_leader': 'שיא מעורבות',
 }
 
@@ -850,15 +939,47 @@ def _cand_label(c):
     return " ".join(str(c.get('text', '')).split()[:3]) or str(c.get('label', ''))
 
 
-def _mark_anomalies(rows):
-    """Ranks 4+ whose engagement clearly beats the week's median."""
-    if len(rows) < 4:
-        return
-    engs = sorted(r['eng'] for r in rows)
-    n = len(engs)
-    med = engs[n // 2] if n % 2 else (engs[n // 2 - 1] + engs[n // 2]) / 2
-    for i, r in enumerate(rows):
-        r['anomaly'] = bool(i >= 3 and med > 0 and r['eng'] >= 1.4 * med)
+# What can be unusual about an item, in priority order when several qualify.
+# Phrased for a newsroom: "פי 3.4 מהרגיל", never "מהחציון".
+ANOMALY_SPECS = (
+    ('shares', '🔁', 'שיתופים'),
+    ('comments', '💬', 'תגובות'),
+    ('likes', '❤️', 'לייקים'),
+    ('engagement', '⚡', 'מעורבות'),
+)
+ANOMALY_MIN = 2.5   # at least 2.5x a normal post that week
+
+
+def _typical(platform):
+    """This week's typical value per metric. Prefers the medians stored at
+    extract (computed over the whole week); falls back to the items present so
+    an older deck_content.json still renders."""
+    meds = dict(platform.get('medians') or {})
+    items = platform.get('top', []) or []
+    for key in ('likes', 'comments', 'shares', 'engagement'):
+        if float(meds.get(key) or 0) > 0:
+            continue
+        vals = sorted(float(it.get(key) or 0) for it in items if float(it.get(key) or 0) > 0)
+        if vals:
+            n = len(vals)
+            meds[key] = vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2
+        else:
+            meds[key] = 0.0
+    return meds
+
+
+def _anomaly_of(item, meds):
+    """The single most unusual thing about this item, or None for most rows."""
+    best = None
+    for key, icon, label in ANOMALY_SPECS:
+        typical = float(meds.get(key) or 0)
+        value = float(item.get(key) or 0)
+        if typical <= 0 or value <= 0:
+            continue
+        ratio = value / typical
+        if ratio >= ANOMALY_MIN and (best is None or ratio > best['ratio']):
+            best = dict(ratio=ratio, icon=icon, label=label, mult=f"×{ratio:.1f}")
+    return best
 
 
 def content_to_context(content, thumbstyle='portrait'):
@@ -875,14 +996,13 @@ def content_to_context(content, thumbstyle='portrait'):
         meta = PLATFORMS[key]
         dl = build_delta(p.get('delta_pct'))
         rows = []
+        meds = _typical(p)
         for n, it in enumerate(p.get('top', []), start=1):
             rows.append(dict(rank=n, title=it.get('title', ''), reporter=it.get('reporter', '') or '',
                              views_fmt=fmt_num(it.get('views', 0)),
-                             eng=float(it.get('engagement', 0) or 0),
                              eng_str=f"{float(it.get('engagement', 0) or 0):.1f}%",
-                             highlight=(n <= 3), anomaly=False,
+                             highlight=(n <= 3), anomaly=_anomaly_of(it, meds),
                              thumb=thumb_data_uri(it.get('thumb'))))
-        _mark_anomalies(rows)
 
         top3 = []
         for n, it in enumerate(p.get('top', [])[:3]):
@@ -968,10 +1088,20 @@ def build_mock_content():
     d1 = window['d1']
     days = [(d1 + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
 
+    # Real Kan captions are long and credit the reporter at the END, well past
+    # the old 100-char cut. The mock mirrors that shape so --mock exercises the
+    # headline extractor and the full-caption reporter search for real.
+    tail = ("הכתבה המלאה עם כל הפרטים, העדויות מהשטח והתגובות שהתקבלו הבוקר "
+            "ממשרד הממשלתי הרלוונטי, לצד ניתוח של מה צפוי לקרות הלאה")
+    credits = ["(יותם ווקס)", "@MoavVardi", "כתב: רועי קייס", "(צילום: מוטי מילרוד)",
+               "", "(איתי בלומנטל)", "@haimgoldich", "(הדס גרינברג)", "",
+               "(עומרי אסנהיים)"]
+
     def rows(specs):
         out = []
         for i, (title, views, likes, comments, shares, eng, extra) in enumerate(specs):
-            r = dict(title=title, caption=title, text=title, views=views, likes=likes,
+            caption = f"{title}. {tail} {credits[i % len(credits)]}".strip()
+            r = dict(title=caption, caption=caption, text=caption, views=views, likes=likes,
                      comments=comments, shares=shares, engagement_rate=eng,
                      date=days[i % 7], published_at=days[i % 7] + "T10:00:00Z")
             r.update(extra)
@@ -979,14 +1109,14 @@ def build_mock_content():
         return pd.DataFrame(out)
 
     yt = rows([
-        ("תיעוד: רגע פגיעת הרקטה בעוטף עזה (יואב לימור)", 1_400_000, 42000, 3100, 900, 9.1, dict(video_id="dQw4w9WgXcQ", video_type="Regular")),
+        ("תיעוד: רגע פגיעת הרקטה בעוטף עזה", 1_400_000, 42000, 3100, 900, 9.1, dict(video_id="dQw4w9WgXcQ", video_type="Regular")),
         ("ראיון בלעדי עם ראש הממשלה על ההסכם", 980_000, 21000, 2400, 600, 7.4, dict(video_id="9bZkp7q19f0", video_type="Regular")),
-        ("כך נראתה ההצפה בצפון מהאוויר (צילום: מוטי מילרוד)", 720_000, 15000, 900, 400, 6.0, dict(video_id="kJQP7kiw5Fk", video_type="Shorts")),
+        ("כך נראתה ההצפה בצפון מהאוויר", 720_000, 15000, 900, 400, 6.0, dict(video_id="kJQP7kiw5Fk", video_type="Shorts")),
         ("מבזק: החלטת בג\"ץ בעניין הגיוס", 610_000, 18000, 2600, 800, 8.2, dict(video_id="a", video_type="Regular")),
-        ("הפגנת ענק בכיכר — תיעוד מרחפן @haimgoldich", 540_000, 9000, 500, 300, 7.1, dict(video_id="b", video_type="Shorts")),
+        ("הפגנת ענק בכיכר — תיעוד מרחפן", 540_000, 9000, 500, 300, 7.1, dict(video_id="b", video_type="Shorts")),
         ("פאנל אולפן: לאן הולך המשק", 430_000, 4000, 300, 120, 4.4, dict(video_id="c", video_type="Regular")),
         ("דיווח מהשטח: שריפה בהרי ירושלים", 390_000, 6000, 400, 200, 5.8, dict(video_id="d", video_type="Shorts")),
-        ("הטור השבועי של הפרשן הצבאי (רון בן ישי)", 310_000, 3000, 250, 90, 3.9, dict(video_id="e", video_type="Regular")),
+        ("הטור השבועי של הפרשן הצבאי", 310_000, 3000, 250, 90, 3.9, dict(video_id="e", video_type="Regular")),
         ("כתבת תחקיר: מאחורי הקלעים של העסקה", 275_000, 5000, 350, 150, 6.2, dict(video_id="f", video_type="Regular")),
         ("מזג האוויר: גל החום נמשך", 240_000, 1500, 120, 40, 2.7, dict(video_id="g", video_type="Shorts")),
     ])
@@ -1003,8 +1133,8 @@ def build_mock_content():
         ("הצצה לחדר הבקרה בשידור חי", 190_000, 9000, 250, 800, 6.1, dict(video_id="t10", whatsapp_shares=450, saves=350, type="Video")),
     ])
     ig = rows([
-        ("רילס: תיעוד ההצפה בצפון (נעה לנדאו)", 1_100_000, 88000, 1200, 9000, 12.9, dict(media_id="i1", type="Reel", saved=14000, reach=1_300_000)),
-        ("קרוסלה: חמש נקודות על ההסכם (שירית אביטן)", 720_000, 44000, 800, 3200, 9.6, dict(media_id="i2", type="Carousel", saved=9000, reach=820_000)),
+        ("רילס: תיעוד ההצפה בצפון", 1_100_000, 88000, 1200, 9000, 12.9, dict(media_id="i1", type="Reel", saved=14000, reach=1_300_000)),
+        ("קרוסלה: חמש נקודות על ההסכם", 720_000, 44000, 800, 3200, 9.6, dict(media_id="i2", type="Carousel", saved=9000, reach=820_000)),
         ("הסטורי שהפך לרילס הכי נצפה", 560_000, 36000, 600, 2600, 8.8, dict(media_id="i3", type="Reel", saved=7000, reach=650_000)),
         ("רגע מרגש בכנסת — רילס", 480_000, 28000, 500, 2100, 7.4, dict(media_id="i4", type="Reel", saved=5200, reach=560_000)),
         ("אינפוגרפיקה: המספרים של השבוע", 390_000, 20000, 400, 1500, 6.2, dict(media_id="i5", type="Photo", saved=3800, reach=430_000)),
