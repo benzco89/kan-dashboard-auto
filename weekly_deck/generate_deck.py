@@ -308,19 +308,20 @@ def tiktok_cover_map(wanted_ids, token, max_pages=5):
 
 
 def _x_media_url(tweet):
-    """First renderable media preview URL on a tweet (fields vary by provider)."""
+    """First renderable media preview URL on a tweet. GetXAPI's Media schema is
+    {type, url, expanded_url, video_url} - `url` is the photo / video preview."""
     for m in (tweet.get("media") or []):
-        for k in ("media_url_https", "preview_image_url", "thumbnail_url", "media_url", "url"):
+        for k in ("url", "media_url_https", "preview_image_url", "expanded_url"):
             u = m.get(k)
             if isinstance(u, str) and u.startswith("http"):
                 return u
     return None
 
 
-def x_thumb_map(wanted_ids, token, max_pages=25):
-    """Map tweet_id -> media data URI via GetXAPI (same contract as
-    twitter_collector.get_tweets: tweets[] + has_more + next_cursor)."""
-    import re as _re
+def x_thumb_map(wanted_ids, token, max_pages=None):
+    """Map tweet_id -> media data URI. משיכה ישירה פר-ציוץ דרך
+    GET /twitter/tweet/detail?id= (פיד ה-user/tweets מחזיר media ריק ולא
+    מגיע מספיק עמוק לשבוע שלם; 10 קריאות ישירות = סנט אחד)."""
     covers = {}
     if not token or not wanted_ids:
         return covers
@@ -328,50 +329,26 @@ def x_thumb_map(wanted_ids, token, max_pages=25):
         from utils import http_get_json
     except Exception:
         return covers
-    wanted = set(str(x) for x in wanted_ids)
     headers = {"Authorization": f"Bearer {token}"}
-    cursor = None
-    for _ in range(max_pages):
-        if not wanted:
-            break
-        params = {"userName": "kann_news"}
-        if cursor:
-            params["cursor"] = cursor
+    misses = 0
+    for tid in [str(x) for x in wanted_ids]:
         try:
-            data = http_get_json("https://api.getxapi.com/twitter/user/tweets",
-                                 headers=headers, params=params, timeout=15, max_retries=2)
+            res = http_get_json("https://api.getxapi.com/twitter/tweet/detail",
+                                headers=headers, params={"id": tid},
+                                timeout=15, max_retries=2)
         except Exception as e:
-            print(f"      x thumb fetch failed: {e}")
-            break
-        tweets = data.get("tweets")
-        if not isinstance(tweets, list) or not tweets:
-            break
-        for t in tweets:
-            tid = ""
-            for k in ("id", "tweetId", "id_str", "rest_id"):
-                if t.get(k):
-                    tid = str(t[k])
-                    break
-            if not tid:
-                m = _re.search(r"/status/(\d+)", t.get("url", ""))
-                tid = m.group(1) if m else ""
-            if tid and tid in wanted:
-                url = _x_media_url(t)
-                if url:
-                    du = _download(url)
-                    if du:
-                        covers[tid] = du
-                else:
-                    # אבחון: הציוץ נמצא אבל בלי URL מדיה - מדפיסים את המבנה
-                    media = t.get("media")
-                    print(f"      x thumb: matched {tid} but no media url; "
-                          f"media={type(media).__name__} "
-                          f"keys={sorted((media or [{}])[0].keys()) if isinstance(media, list) and media else media}")
-                wanted.discard(tid)
-        if not data.get("has_more") or not data.get("next_cursor"):
-            break
-        cursor = data["next_cursor"]
-    print(f"      x thumbs: {len(covers)} fetched, {len(wanted)} tweet ids never seen in feed")
+            print(f"      x thumb detail failed for {tid}: {e}")
+            misses += 1
+            continue
+        data = res.get("data") or res  # מעטפת {status,msg,data}
+        url = _x_media_url(data)
+        if url:
+            du = _download(url)
+            if du:
+                covers[tid] = du
+                continue
+        misses += 1
+    print(f"      x thumbs: {len(covers)} fetched, {misses} without usable media")
     return covers
 
 
