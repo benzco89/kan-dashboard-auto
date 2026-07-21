@@ -202,40 +202,46 @@ def _last_data_date(data):
 def build_overview(data, days):
     start, end, p_start, p_end = _window(days)
     yt, fb, ig, tw = data["youtube"], data["facebook"], data["instagram"], data["twitter"]
+    tt = data.get("tiktok", [])
     foll = data["followers"]
 
     yt_p = _filter(yt, "published_at", start, end)
     fb_p = _filter(fb, "date", start, end)
     ig_p = _filter(ig, "date", start, end)
     tw_p = _filter(tw, "date", start, end)
+    tt_p = _filter(tt, "date", start, end)
     yt_pp = _filter(yt, "published_at", p_start, p_end)
     fb_pp = _filter(fb, "date", p_start, p_end)
     ig_pp = _filter(ig, "date", p_start, p_end)
     tw_pp = _filter(tw, "date", p_start, p_end)
+    tt_pp = _filter(tt, "date", p_start, p_end)
 
     def _sum(items, f):
         return sum(_num(it.get(f)) for it in items)
 
-    views = _sum(yt_p, "views") + _sum(fb_p, "views") + _sum(ig_p, "views") + _sum(tw_p, "views")
-    prev_views = _sum(yt_pp, "views") + _sum(fb_pp, "views") + _sum(ig_pp, "views") + _sum(tw_pp, "views")
-    reach = _sum(fb_p, "reach") + _sum(ig_p, "reach")  # Twitter has no reach metric
+    views = _sum(yt_p, "views") + _sum(fb_p, "views") + _sum(ig_p, "views") + _sum(tw_p, "views") + _sum(tt_p, "views")
+    prev_views = _sum(yt_pp, "views") + _sum(fb_pp, "views") + _sum(ig_pp, "views") + _sum(tw_pp, "views") + _sum(tt_pp, "views")
+    reach = _sum(fb_p, "reach") + _sum(ig_p, "reach")  # Twitter/TikTok have no reach metric
     prev_reach = _sum(fb_pp, "reach") + _sum(ig_pp, "reach")
     inter = (_sum(yt_p, "likes") + _sum(yt_p, "comments")
              + _sum(fb_p, "likes") + _sum(fb_p, "comments") + _sum(fb_p, "shares")
              + _sum(ig_p, "likes") + _sum(ig_p, "comments") + _sum(ig_p, "saved") + _sum(ig_p, "shares")
-             + _sum(tw_p, "likes") + _sum(tw_p, "replies") + _sum(tw_p, "retweets") + _sum(tw_p, "quotes"))
+             + _sum(tw_p, "likes") + _sum(tw_p, "replies") + _sum(tw_p, "retweets") + _sum(tw_p, "quotes")
+             + _sum(tt_p, "likes") + _sum(tt_p, "comments") + _sum(tt_p, "shares") + _sum(tt_p, "saves"))
     prev_inter = (_sum(yt_pp, "likes") + _sum(yt_pp, "comments")
                   + _sum(fb_pp, "likes") + _sum(fb_pp, "comments") + _sum(fb_pp, "shares")
                   + _sum(ig_pp, "likes") + _sum(ig_pp, "comments") + _sum(ig_pp, "saved") + _sum(ig_pp, "shares")
-                  + _sum(tw_pp, "likes") + _sum(tw_pp, "replies") + _sum(tw_pp, "retweets") + _sum(tw_pp, "quotes"))
-    content = len(yt_p) + len(fb_p) + len(ig_p) + len(tw_p)
-    prev_content = len(yt_pp) + len(fb_pp) + len(ig_pp) + len(tw_pp)
+                  + _sum(tw_pp, "likes") + _sum(tw_pp, "replies") + _sum(tw_pp, "retweets") + _sum(tw_pp, "quotes")
+                  + _sum(tt_pp, "likes") + _sum(tt_pp, "comments") + _sum(tt_pp, "shares") + _sum(tt_pp, "saves"))
+    content = len(yt_p) + len(fb_p) + len(ig_p) + len(tw_p) + len(tt_p)
+    prev_content = len(yt_pp) + len(fb_pp) + len(ig_pp) + len(tw_pp) + len(tt_pp)
 
     # daily views per platform
     yt_dates, yt_s = _daily(yt, "published_at", ["views"], start, end)
     _, fb_s = _daily(fb, "date", ["views"], start, end)
     _, ig_s = _daily(ig, "date", ["views"], start, end)
     _, tw_s = _daily(tw, "date", ["views"], start, end)
+    _, tt_s = _daily(tt, "date", ["views"], start, end)
 
     # per-platform sparkline = last 14 days of daily views
     spark_start = end - timedelta(days=13)
@@ -243,13 +249,15 @@ def build_overview(data, days):
     _, fb_sp = _daily(fb, "date", ["views"], spark_start, end)
     _, ig_sp = _daily(ig, "date", ["views"], spark_start, end)
     _, tw_sp = _daily(tw, "date", ["views"], spark_start, end)
+    _, tt_sp = _daily(tt, "date", ["views"], spark_start, end)
 
     foll_yt = _follower_metric(foll, "yt_subscribers", "yt_subscribers_change")
     foll_fb = _follower_metric(foll, "fb_followers", "fb_followers_change")
     foll_ig = _follower_metric(foll, "ig_followers", "ig_followers_change")
     foll_tw = _follower_metric(foll, "tw_followers", "tw_followers_change")
-    total_val = foll_yt["value"] + foll_fb["value"] + foll_ig["value"] + foll_tw["value"]
-    total_week = foll_yt["weekly_change"] + foll_fb["weekly_change"] + foll_ig["weekly_change"] + foll_tw["weekly_change"]
+    foll_tt = _follower_metric(foll, "tt_followers", "tt_followers_change")
+    total_val = foll_yt["value"] + foll_fb["value"] + foll_ig["value"] + foll_tw["value"] + foll_tt["value"]
+    total_week = foll_yt["weekly_change"] + foll_fb["weekly_change"] + foll_ig["weekly_change"] + foll_tw["weekly_change"] + foll_tt["weekly_change"]
     total_base = total_val - total_week
     total_growth = round(total_week / total_base * 100, 2) if total_base > 0 else 0.0
 
@@ -271,6 +279,10 @@ def build_overview(data, days):
     for it in tw_p:
         top.append({"platform": "twitter", "title": it.get("text", ""), "views": _int(it.get("views")),
                     "type": _tw_type(it.get("type")), "url": it.get("permalink", ""),
+                    "date": (_parse_date(it.get("date")) or "").__str__() if it.get("date") else ""})
+    for it in tt_p:
+        top.append({"platform": "tiktok", "title": it.get("title", ""), "views": _int(it.get("views")),
+                    "type": "Photo" if it.get("type") == "Photo" else "Video", "url": it.get("permalink", ""),
                     "date": (_parse_date(it.get("date")) or "").__str__() if it.get("date") else ""})
     top.sort(key=lambda x: x["views"], reverse=True)
     top_content = top[:8]
@@ -294,7 +306,7 @@ def build_overview(data, days):
         "range": days,
         "last_date": _last_data_date(data),
         "followers": {
-            "youtube": foll_yt, "facebook": foll_fb, "instagram": foll_ig, "twitter": foll_tw,
+            "youtube": foll_yt, "facebook": foll_fb, "instagram": foll_ig, "twitter": foll_tw, "tiktok": foll_tt,
             "total": {"value": total_val, "weekly_change": total_week, "growth_pct": total_growth},
         },
         "kpis": {
@@ -303,12 +315,13 @@ def build_overview(data, days):
             "interactions": {"value": round(inter), "prev": round(prev_inter)},
             "content": {"value": content, "prev": prev_content},
         },
-        "chart": {"dates": yt_dates, "youtube": yt_s["views"], "facebook": fb_s["views"], "instagram": ig_s["views"], "twitter": tw_s["views"]},
+        "chart": {"dates": yt_dates, "youtube": yt_s["views"], "facebook": fb_s["views"], "instagram": ig_s["views"], "twitter": tw_s["views"], "tiktok": tt_s["views"]},
         "platforms": {
             "youtube": {"followers": foll_yt["value"], "views": round(_sum(yt_p, "views")), "spark": yt_sp["views"]},
             "facebook": {"followers": foll_fb["value"], "views": round(_sum(fb_p, "views")), "spark": fb_sp["views"]},
             "instagram": {"followers": foll_ig["value"], "views": round(_sum(ig_p, "views")), "spark": ig_sp["views"]},
             "twitter": {"followers": foll_tw["value"], "views": round(_sum(tw_p, "views")), "spark": tw_sp["views"]},
+            "tiktok": {"followers": foll_tt["value"], "views": round(_sum(tt_p, "views")), "spark": tt_sp["views"]},
         },
         "top_content": top_content,
         "bottom_content": bottom_content,
@@ -674,6 +687,84 @@ def build_twitter(data, days):
             "photos": len(photo),
             "texts": len(text),
             "virality": round(virality, 2),
+            "avg_engagement": round(avg_eng, 2),
+        },
+        "posts": posts,
+    }
+
+
+def build_tiktok(data, days):
+    start, end, p_start, p_end = _window(days)
+    tt = data.get("tiktok", [])
+    foll = data["followers"]
+    cur = _filter(tt, "date", start, end)
+
+    dates, series = _daily(tt, "date", ["views"], start, end)
+
+    video = [p for p in cur if (p.get("type") or "Video") != "Photo"]
+    photo = [p for p in cur if p.get("type") == "Photo"]
+
+    # likes vs shares: last 14 days
+    bar_start = end - timedelta(days=13)
+    bar_dates, bar_series = _daily(tt, "date", ["likes", "shares"], bar_start, end)
+
+    total_views = sum(_num(p.get("views")) for p in cur)
+    total_eng = sum(_num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("shares")) + _num(p.get("saves")) for p in cur)
+    total_shares = sum(_num(p.get("shares")) for p in cur)
+    total_saves = sum(_num(p.get("saves")) for p in cur)
+    total_wa = sum(_num(p.get("whatsapp_shares")) for p in cur)
+    avg_eng = (total_eng / total_views * 100) if total_views else 0
+    virality = (total_shares / total_views * 100) if total_views else 0
+    save_rate = (total_saves / total_views * 100) if total_views else 0
+    wa_share_pct = (total_wa / total_shares * 100) if total_shares else 0
+
+    posts = []
+    for p in cur:
+        views = _num(p.get("views"))
+        likes = _int(p.get("likes"))
+        comments = _int(p.get("comments"))
+        shares = _int(p.get("shares"))
+        saves = _int(p.get("saves"))
+        eng = ((likes + comments + shares + saves) / views * 100) if views else 0
+        posts.append({
+            "title": p.get("title", ""),
+            "date": (_parse_date(p.get("date")) or "").__str__() if p.get("date") else "",
+            "type": "Photo" if p.get("type") == "Photo" else "Video",
+            "views": _int(views),
+            "likes": likes,
+            "comments": comments,
+            "shares": shares,
+            "engagement": round(eng, 1),
+            "url": p.get("permalink", ""),
+            # extra depth for the drill-down card
+            "saves": saves,
+            "whatsapp_shares": _int(p.get("whatsapp_shares")),
+            "downloads": _int(p.get("downloads")),
+            "duration_sec": _int(p.get("duration_sec")),
+            "is_pinned": _int(p.get("is_pinned")),
+            "total_engagement": _int(p.get("total_engagement")),
+        })
+    posts.sort(key=lambda x: x["views"], reverse=True)
+
+    return {
+        "range": days,
+        "last_date": _last_data_date(data),
+        "followers": _follower_metric(foll, "tt_followers", "tt_followers_change"),
+        "kpis": {
+            "views": _delta_pair(tt, "date", "views", days),
+            "likes": _delta_pair(tt, "date", "likes", days),
+            "shares": _delta_pair(tt, "date", "shares", days),
+        },
+        "chart": {"dates": dates, "views": series["views"]},
+        "donut": {"video": len(video), "photo": len(photo)},
+        "bars": {"dates": bar_dates, "likes": bar_series["likes"], "shares": bar_series["shares"]},
+        "summary": {
+            "total": len(cur),
+            "videos": len(video),
+            "photos": len(photo),
+            "virality": round(virality, 2),
+            "save_rate": round(save_rate, 2),
+            "wa_share_pct": round(wa_share_pct, 1),
             "avg_engagement": round(avg_eng, 2),
         },
         "posts": posts,
