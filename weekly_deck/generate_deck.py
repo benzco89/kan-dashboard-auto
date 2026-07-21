@@ -608,13 +608,21 @@ def compute_window(today=None):
 
 
 def font_faces():
+    """@font-face list for the weights present on disk. The licensed Light(300)
+    weight is absent (not on the VPS either), so we map 300 -> Regular(400)
+    EXPLICITLY: an @font-face for weight 300 pointing at the Regular OTF, rather
+    than relying on the browser's implicit nearest-weight fallback. 300 is not
+    used in the slide markup, so this is purely defensive."""
     weights = [('Light', 300), ('Regular', 400), ('Semibold', 600),
                ('Bold', 700), ('Black', 900)]
-    faces = []
+    faces, present = [], {}
     for label, w in weights:
         path = os.path.join(FONTS_DIR, f"SimplerPro_HLAR-{label}.otf")
         if os.path.exists(path):
             faces.append(dict(weight=w, uri=_file_uri(path)))
+            present[w] = _file_uri(path)
+    if 300 not in present and 400 in present:  # explicit Light -> Regular
+        faces.append(dict(weight=300, uri=present[400]))
     return faces
 
 
@@ -623,13 +631,36 @@ def _file_uri(path):
     return Path(path).resolve().as_uri()
 
 
+def load_mark():
+    """Inline the Kan square mark as a reusable path (no <defs>/id/<style>, so
+    embedding it on several slides can't collide). Orange (#f30) for the light
+    slides. Returns {viewbox, d, fill} or None -> template uses the typographic
+    fallback."""
+    import re
+    p = os.path.join(ASSETS_DIR, "kan-news-mark-orange.svg")
+    if not os.path.exists(p):
+        return None
+    try:
+        svg = open(p, encoding='utf-8').read()
+        vb = re.search(r'viewBox="([^"]+)"', svg)
+        d = re.search(r'\sd="([^"]+)"', svg)
+        if not (vb and d):
+            return None
+        return dict(viewbox=vb.group(1), d=d.group(1), fill="#f30")
+    except Exception as e:
+        print(f"   ⚠️ could not load brand mark: {e}")
+        return None
+
+
 def logo_data_uri():
+    # A full pre-composed lockup PNG, if one is ever dropped in, wins over the
+    # SVG-mark + wordmark lockup. None is the normal case today.
     for name in ("kan-news-full-black-a.png", "kan-news-full-black.png"):
         p = os.path.join(ASSETS_DIR, name)
         if os.path.exists(p):
             with open(p, 'rb') as f:
                 return "data:image/png;base64," + base64.b64encode(f.read()).decode()
-    return None  # template falls back to a typographic wordmark
+    return None
 
 
 def build_context(gc, use_gemini, thumbs_enabled):
@@ -697,6 +728,7 @@ def _assemble(plat_ctx, metrics, follows, daily_insights, window, use_gemini):
     return dict(
         font_faces=font_faces(),
         logo_black=logo_data_uri(),
+        mark=load_mark(),
         week=dict(range_str=fmt_date_range(window['d1'], window['d2']),
                   range_short=f"{window['d1']:%d/%m}–{window['d2']:%d/%m}"),
         hero=dict(total_fmt=fmt_num(total_this), total_main=tmain, total_suffix=tsuf,
