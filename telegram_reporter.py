@@ -514,8 +514,9 @@ def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagr
         ),
     ]
     
-    # Try primary model first, fallback to secondary if it fails
-    models_to_try = ["gemini-3.1-pro-preview", "gemini-2.5-pro"]
+    # ה-preview ראשון כל עוד הוא חי (איכות), אבל מודלי preview נכבים בלי
+    # אזהרה (3-pro-preview מת במרץ) - לכן שני GA כרשת ביטחון אחריו
+    models_to_try = ["gemini-3.1-pro-preview", "gemini-3.5-flash", "gemini-2.5-pro"]
     
     for model_name in models_to_try:
         try:
