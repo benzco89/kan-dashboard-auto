@@ -1244,7 +1244,11 @@ ANOMALY_SPECS = (
     ('likes', '❤️', 'לייקים'),
     ('engagement', '⚡', 'מעורבות'),
 )
-ANOMALY_MIN = 2.5   # at least 2.5x a normal post that week
+ANOMALY_MIN = 3.0   # at least 3x a normal post's rate that week
+# A badge's job is to point the eye at a row. Past ~4 per slide it stops
+# pointing and becomes a second engagement column, so the deck shows only
+# the strongest few - a display cap, not a change to what qualifies.
+ANOMALY_MAX_PER_SLIDE = 4
 
 
 def _typical_rates(platform):
@@ -1297,6 +1301,18 @@ def _anomaly_of(item, med_rates):
     return best
 
 
+def _cap_anomalies(rows, platform_key):
+    """Keep only the strongest few badges on a slide. Says so out loud when it
+    hides one, so the editor knows the deck is holding something back."""
+    flagged = [r for r in rows if r['anomaly']]
+    if len(flagged) <= ANOMALY_MAX_PER_SLIDE:
+        return
+    flagged.sort(key=lambda r: r['anomaly']['ratio'], reverse=True)
+    for r in flagged[ANOMALY_MAX_PER_SLIDE:]:
+        r['anomaly'] = None
+    print(f"   {platform_key}: {len(flagged)} qualified, showing top {ANOMALY_MAX_PER_SLIDE}")
+
+
 def content_to_context(content, thumbstyle='portrait'):
     """deck_content.json -> template context. Pure/deterministic: no network,
     no sheets, no Gemini. Images are inlined from the thumbs cache here."""
@@ -1318,6 +1334,7 @@ def content_to_context(content, thumbstyle='portrait'):
                              eng_str=f"{float(it.get('engagement', 0) or 0):.1f}%",
                              highlight=(n <= 3), anomaly=_anomaly_of(it, meds),
                              thumb=thumb_data_uri(it.get('thumb'))))
+        _cap_anomalies(rows, p.get('key', ''))
 
         top3 = []
         for n, it in enumerate(p.get('top', [])[:3]):
