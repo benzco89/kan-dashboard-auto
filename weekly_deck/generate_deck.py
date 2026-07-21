@@ -1,23 +1,27 @@
 """
-Weekly Deck Generator - סיכום סושיאל שבועי כמצגת 16:9 ל-PDF ולטלגרם.
+Weekly Deck Generator - סיכום סושיאל שבועי כמצגת 16:9 ל-PDF.
 
-רץ כל יום ראשון: אוסף את נתוני 5 הפלטפורמות (יוטיוב / טיקטוק / אינסטגרם /
-פייסבוק / X) מגוגל שיטס לחלון של 7 הימים האחרונים, בונה קונטקסט נקי, מרנדר
-תבנית Jinja2 ל-HTML שטוח (עמוד לכל שקופית, 1920x1080), וממיר ל-PDF עם
-Playwright. עם --send שולח את ה-PDF לערוץ הטלגרם.
+הזרימה מפוצלת לשלושה שלבים, כדי שהשכבה העריכתית תהיה בידיים אנושיות:
 
-    python weekly_deck/generate_deck.py            # ייצור מנתונים אמיתיים (creds מ-env)
-    python weekly_deck/generate_deck.py --mock     # נתוני דמה, בלי creds/רשת
+    extract  ->  weekly_deck/out/deck_content.json  (+ out/thumbs/*.jpg)
+                 ^ עורכים את הקובץ הזה ביד (טקסט ומספרים בלבד)
+    render   ->  weekly_deck/out/deck.html + deck.pdf (+ צילומי QA)
 
-הפלט: weekly_deck/out/deck.html + deck.pdf (+ צילומי QA). אין שליחה לטלגרם —
-ההפצה תיקבע בהמשך אחרי סקירת המצגת. אינו כותב לשום גיליון ואינו נוגע בקולקטורים.
-התבנית והעיצוב קבועים (weekly_deck/design/weekly-social-light.dc.html); הקובץ
-הזה מזין אותם בנתונים בלבד.
+    python weekly_deck/generate_deck.py --extract   # שיטס + תמונות + חישובים
+    python weekly_deck/generate_deck.py --render    # רק רינדור מה-JSON (אופליין)
+    python weekly_deck/generate_deck.py             # extract ואז render
+    python weekly_deck/generate_deck.py --mock      # נתוני דמה, בלי creds/רשת
+
+ברירת המחדל אינה קוראת ל-Gemini כלל: כל המספרים והטקסטים נגזרים דטרמיניסטית
+ומיועדים לעריכה ידנית ב-deck_content.json. עם --gemini אפשר לבקש ניסוח אוטומטי.
+אינו כותב לשום גיליון ואינו נוגע בקולקטורים. העיצוב קבוע
+(weekly_deck/design/weekly-social-light.dc.html); הקוד מזין אותו בנתונים בלבד.
 """
 
 import os
 import sys
 import io
+import re
 import json
 import base64
 import argparse
@@ -50,6 +54,9 @@ sys.path.insert(0, os.path.dirname(HERE))
 FONTS_DIR = os.path.join(HERE, "design", "fonts")
 ASSETS_DIR = os.path.join(HERE, "design", "assets")
 OUT_DIR = os.path.join(HERE, "out")
+THUMBS_DIR = os.path.join(OUT_DIR, "thumbs")
+CONTENT_PATH = os.path.join(OUT_DIR, "deck_content.json")
+REPORTERS_MAP_PATH = os.path.join(HERE, "reporters_map.json")
 TEMPLATE = "template.html.j2"
 
 HEB_MONTHS = ['', 'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי',
@@ -76,8 +83,6 @@ def icon_svg(key, size):
     return f'<svg width="{size}" height="{size}" viewBox="0 0 24 24"{fill}>{_ICON_INNER[key]}</svg>'
 
 
-# Per-platform metadata. `order` is only the tie-break; slides are sorted by
-# real weekly views. Column names track the sheet schemas.
 PLATFORMS = {
     'youtube':   dict(name='יוטיוב', sheet='נתוני יוטיוב', date_col='published_at',
                       title_col='title', id_col='video_id', follower_col='yt_subscribers',
@@ -96,6 +101,9 @@ PLATFORMS = {
                       colors=dict(accent='#111', bar='#111', tint='17,17,17')),
 }
 PLATFORM_ORDER = ['youtube', 'tiktok', 'instagram', 'facebook', 'x']
+# X highlight cards are text-forward: no cheap thumbnail source and the media is
+# usually irrelevant, so the design shows the tweet instead of a grey box.
+NO_THUMBS = {'x'}
 
 
 # ---------------------------------------------------------------- formatting
@@ -118,6 +126,7 @@ def fmt_num(x):
 
 def split_suffix(s):
     """'24.8M' -> ('24.8','M'); '+34%' -> ('+34','%'); '512' -> ('512','')."""
+    s = str(s or "")
     i = len(s)
     while i > 0 and not (s[i-1].isdigit() or s[i-1] == '.'):
         i -= 1
@@ -152,6 +161,22 @@ def clean_title(s, cap=100):
     return s[:cap] if len(s) > cap else s
 
 
+def compute_window(today=None):
+    """Last COMPLETE Israeli week: Sunday..Saturday (Asia/Jerusalem). Running on
+    Tue 2026-07-21 -> 2026-07-12..2026-07-18; prior week (for deltas) =
+    2026-07-05..2026-07-11. Running on a Sunday -> the just-finished Sun..Sat."""
+    today = today or datetime.now(IL_TZ)
+    days_since_sunday = (today.weekday() + 1) % 7   # Python: Mon=0..Sun=6
+    this_week_sunday = today - timedelta(days=days_since_sunday)
+    we = this_week_sunday - timedelta(days=1)        # last complete Saturday
+    ws = we - timedelta(days=6)                      # its Sunday
+    lwe = ws - timedelta(days=1)                     # prior Saturday
+    lws = lwe - timedelta(days=6)                    # prior Sunday
+    fmt = lambda d: d.strftime('%Y-%m-%d')
+    return dict(this=(fmt(ws), fmt(we)), last=(fmt(lws), fmt(lwe)),
+                d1=ws, d2=we)
+
+
 # ---------------------------------------------------------------- sheets
 
 def get_client():
@@ -183,6 +208,9 @@ def to_num(series):
 # ---------------------------------------------------------------- thumbnails
 
 RENDERABLE = {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
+_EXT = {'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif'}
+_MIME = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+         '.webp': 'image/webp', '.gif': 'image/gif'}
 
 
 def _to_renderable(content, ct):
@@ -204,7 +232,8 @@ def _to_renderable(content, ct):
         return None, None
 
 
-def _download(url, headers=None, timeout=15):
+def _download_bytes(url, headers=None, timeout=15):
+    """Fetch an image -> (bytes, content_type) in a browser-renderable format."""
     import requests
     try:
         r = requests.get(url, headers=headers, timeout=timeout)
@@ -213,14 +242,40 @@ def _download(url, headers=None, timeout=15):
             if len(r.content) <= 4_000_000:
                 content, ct = _to_renderable(r.content, ct)
                 if content:
-                    return "data:%s;base64,%s" % (ct, base64.b64encode(content).decode())
+                    return content, ct
     except Exception as e:
         print(f"      thumb download failed ({url[:60]}...): {e}")
     return None
 
 
+def save_thumb(platform, item_id, payload):
+    """Write a fetched thumbnail into out/thumbs/. Returns the bare filename
+    (deck_content.json references thumbnails by name only — never base64)."""
+    if not payload:
+        return None
+    content, ct = payload
+    safe = re.sub(r'[^A-Za-z0-9_-]', '_', str(item_id))[:60] or 'item'
+    fname = f"{platform}_{safe}{_EXT.get(ct, '.jpg')}"
+    os.makedirs(THUMBS_DIR, exist_ok=True)
+    with open(os.path.join(THUMBS_DIR, fname), 'wb') as f:
+        f.write(content)
+    return fname
+
+
+def thumb_data_uri(fname):
+    """Read a cached thumbnail back as a data URI (render time, offline)."""
+    if not fname:
+        return None
+    path = os.path.join(THUMBS_DIR, os.path.basename(fname))
+    if not os.path.exists(path):
+        return None
+    mime = _MIME.get(os.path.splitext(path)[1].lower(), 'image/jpeg')
+    with open(path, 'rb') as f:
+        return f"data:{mime};base64," + base64.b64encode(f.read()).decode()
+
+
 def thumb_youtube(vid):
-    return _download(f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg")
+    return _download_bytes(f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg")
 
 
 def thumb_fb(pid, token):
@@ -232,7 +287,7 @@ def thumb_fb(pid, token):
                              params={'fields': 'full_picture', 'access_token': token},
                              timeout=15, max_retries=2)
         url = data.get('full_picture')
-        return _download(url) if url else None
+        return _download_bytes(url) if url else None
     except Exception as e:
         print(f"      fb thumb failed: {e}")
         return None
@@ -247,7 +302,7 @@ def thumb_ig(mid, token):
                              params={'fields': 'media_url,thumbnail_url', 'access_token': token},
                              timeout=15, max_retries=2)
         url = data.get('thumbnail_url') or data.get('media_url')
-        return _download(url) if url else None
+        return _download_bytes(url) if url else None
     except Exception as e:
         print(f"      ig thumb failed: {e}")
         return None
@@ -257,8 +312,8 @@ TIKTOK_SEC_UID = ("MS4wLjABAAAA3p5tyX2Z3cacCWU34-nHbK-dpVBO5Y6"
                   "IGvTj9xufL60rC6ItchtdzkEe-0frXJZX")
 
 
-def tiktok_cover_map(wanted_ids, token, max_pages=5):
-    """Map aweme_id -> cover data URI for the wanted top-3 ids (TikHub)."""
+def tiktok_cover_map(wanted_ids, token, max_pages=8):
+    """Map aweme_id -> (bytes, ct) cover via TikHub."""
     covers = {}
     if not token or not wanted_ids:
         return covers
@@ -297,9 +352,9 @@ def tiktok_cover_map(wanted_ids, token, max_pages=5):
                 url = next((u for u in all_urls if '.jpeg' in u or '.jpg' in u),
                            all_urls[0] if all_urls else None)
                 if url:
-                    du = _download(url)
-                    if du:
-                        covers[aid] = du
+                    got = _download_bytes(url)
+                    if got:
+                        covers[aid] = got
                 wanted.discard(aid)
         if not payload.get("has_more"):
             break
@@ -307,105 +362,10 @@ def tiktok_cover_map(wanted_ids, token, max_pages=5):
     return covers
 
 
-def _x_media_url(tweet):
-    """First renderable media preview URL on a tweet. GetXAPI's Media schema is
-    {type, url, expanded_url, video_url} - `url` is the photo / video preview."""
-    for m in (tweet.get("media") or []):
-        for k in ("url", "media_url_https", "preview_image_url", "expanded_url"):
-            u = m.get(k)
-            if isinstance(u, str) and u.startswith("http"):
-                return u
-    return None
-
-
-def x_thumb_map(wanted_ids, token, max_pages=None):
-    """Map tweet_id -> media data URI. משיכה ישירה פר-ציוץ דרך
-    GET /twitter/tweet/detail?id= (פיד ה-user/tweets מחזיר media ריק ולא
-    מגיע מספיק עמוק לשבוע שלם; 10 קריאות ישירות = סנט אחד)."""
-    covers = {}
-    if not token or not wanted_ids:
-        return covers
-    try:
-        from utils import http_get_json
-    except Exception:
-        return covers
-    headers = {"Authorization": f"Bearer {token}"}
-    misses = 0
-    for tid in [str(x) for x in wanted_ids]:
-        try:
-            res = http_get_json("https://api.getxapi.com/twitter/tweet/detail",
-                                headers=headers, params={"id": tid},
-                                timeout=15, max_retries=2)
-        except Exception as e:
-            print(f"      x thumb detail failed for {tid}: {e}")
-            misses += 1
-            continue
-        data = res.get("data") or res  # מעטפת {status,msg,data}
-        url = _x_media_url(data)
-        if url:
-            du = _download(url)
-            if du:
-                covers[tid] = du
-                continue
-        misses += 1
-    print(f"      x thumbs: {len(covers)} fetched, {misses} without usable media")
-    return covers
-
-
-# ---------------------------------------------------------------- Gemini helpers
-
-def _gemini_text(prompt):
-    """One Gemini text call, model fallback list. None on any failure."""
-    api_key = os.environ.get('GEMINI_API_KEY')
-    if not api_key:
-        return None
-    try:
-        from google import genai
-    except Exception as e:
-        print(f"   google-genai unavailable: {e}")
-        return None
-    client = genai.Client(api_key=api_key)
-    for model in ["gemini-3.5-flash", "gemini-2.5-pro"]:
-        try:
-            resp = client.models.generate_content(model=model, contents=prompt)
-            t = (resp.text or "").strip()
-            if t:
-                return t
-        except Exception as e:
-            print(f"   Gemini {model} failed: {e}")
-    return None
-
-
-def _parse_json(text):
-    """Parse a JSON array/object, tolerating ``` fences and surrounding prose."""
-    if not text:
-        return None
-    t = text.strip()
-    if t.startswith("```"):
-        t = t.strip("`")
-        nl = t.find("\n")
-        if nl != -1 and t[:nl].strip().lower() in ("json", ""):
-            t = t[nl + 1:]
-    try:
-        return json.loads(t)
-    except Exception:
-        pass
-    for op, cl in (("[", "]"), ("{", "}")):
-        i, j = t.find(op), t.rfind(cl)
-        if i != -1 and j > i:
-            try:
-                return json.loads(t[i:j + 1])
-            except Exception:
-                continue
-    return None
-
-
 # ---------------------------------------------------------------- reporters
 
-import re as _re_mod
-
 # 2-3 Hebrew words, apostrophes/geresh/hyphen allowed inside a word.
-_NAME_RE = _re_mod.compile(r"^[֐-׿]+(?:[ ׳״'\"׳״\-][֐-׿]+){1,2}$")
+_NAME_RE = re.compile(r"^[֐-׿]+(?:[ ׳״'\"\-][֐-׿]+){1,2}$")
 
 
 def _looks_like_name(s):
@@ -419,62 +379,35 @@ def _looks_like_name(s):
 
 def reporter_fallback(title):
     """Deterministic reporter credit: trailing '(שם כתב)' that looks like a
-    person, else a bare @handle. '' when nothing credible."""
+    person, else a bare @handle. '' when nothing credible. Never invents."""
     title = str(title or "")
-    m = _re_mod.search(r"\(([^)]{2,30})\)\s*$", title)
+    m = re.search(r"\(([^)]{2,30})\)\s*$", title)
     if m and _looks_like_name(m.group(1)):
         return m.group(1).strip()
-    h = _re_mod.search(r"@([A-Za-z0-9_]{2,30})", title)
+    h = re.search(r"@([A-Za-z0-9_]{2,30})", title)
     if h:
         return "@" + h.group(1)
     return ""
 
 
-def _reporters_gemini(items):
-    """items: list of (key, row). Returns {(key,id): reporter|None} or None."""
-    payload = [{"platform": key, "id": r['_id'], "title": r['title']} for key, r in items]
-    prompt = (
-        "אתה מזהה את שם הכתב/ת שזוכה בקרדיט בכל כותרת של כאן חדשות.\n"
-        "כללים: החזר שם אדם רק אם הוא מיוחס במפורש (בסוגריים בסוף, @שם משתמש, או שם מפורש). "
-        "\"צילום: X\" הוא צלם ולא כתב — החזר null אלא אם מצוין גם כתב. "
-        "לעולם אל תמציא שם. כשלא בטוח — null.\n"
-        "החזר JSON תקין בלבד: רשימה של אובייקטים {platform, id, reporter}, reporter הוא מחרוזת או null.\n\n"
-        + json.dumps(payload, ensure_ascii=False)
-    )
-    arr = _parse_json(_gemini_text(prompt))
-    if not isinstance(arr, list):
-        return None
-    out = {}
-    for o in arr:
-        if isinstance(o, dict) and 'platform' in o and 'id' in o:
-            rep = o.get('reporter')
-            if isinstance(rep, str) and rep.strip() and rep.strip().lower() not in ('null', 'none'):
-                out[(str(o['platform']), str(o['id']))] = rep.strip()
-            else:
-                out[(str(o['platform']), str(o['id']))] = None
-    return out
+def load_reporters_map():
+    """{"@handle": "שם בעברית"} — repo-tracked, hand-maintained."""
+    try:
+        with open(REPORTERS_MAP_PATH, encoding='utf-8') as f:
+            data = json.load(f)
+        return {str(k): str(v) for k, v in data.items()
+                if v and not str(k).startswith('_')}
+    except Exception:
+        return {}
 
 
-def assign_reporters(plat_ctx, use_gemini):
-    """Fill row['reporter'] (and the matching top-3 card) for every top-10 item.
-    Gemini batch (one call) primary; deterministic regex fallback on failure."""
-    items = [(c['key'], r) for c in plat_ctx for r in c.get('top10', [])]
-    if not items:
-        return "none"
-    mode = "fallback"
-    result = _reporters_gemini(items) if use_gemini else None
-    if result is not None:
-        mode = "gemini"
-        for key, r in items:
-            r['reporter'] = result.get((key, str(r['_id']))) or ""
-    else:
-        for key, r in items:
-            r['reporter'] = reporter_fallback(r['title'])
-    for c in plat_ctx:
-        by_id = {str(r['_id']): r['reporter'] for r in c.get('top10', [])}
-        for card in c.get('top3', []):
-            card['reporter'] = by_id.get(str(card['_id']), "")
-    return mode
+def resolve_reporter(title, rmap):
+    """Extract, then map a known @handle to a Hebrew name. An unmapped handle is
+    left visible as-is so it can be spotted and added to reporters_map.json."""
+    rep = reporter_fallback(title)
+    if rep.startswith('@'):
+        return rmap.get(rep, rep)
+    return rep
 
 
 # ---------------------------------------------------------------- per platform
@@ -495,26 +428,13 @@ def engagement_series(key, df):
     return (inter / views * 100).fillna(0)
 
 
-def mark_anomalies(rows):
-    """Flag ranks 4+ whose engagement clearly beats the week's median — a row
-    that punches above its view rank. Calibrated floor, not per-row noise."""
-    if len(rows) < 4:
-        return
-    engs = sorted(r['eng'] for r in rows)
-    n = len(engs)
-    med = engs[n // 2] if n % 2 else (engs[n // 2 - 1] + engs[n // 2]) / 2
-    for i, r in enumerate(rows):
-        r['anomaly'] = bool(i >= 3 and med > 0 and r['eng'] >= 1.4 * med)
-
-
 def _cand(label, value, suffix, text):
     return dict(label=label, value=str(value), suffix=suffix, text=text)
 
 
 def fun_fact_candidates(key, df):
-    """4-6 deterministic candidate facts per platform (value copied verbatim by
-    the LLM curator). candidates[0] is the platform's default (== the old fixed
-    fun-fact) so a failed/invalid curation degrades to prior behavior."""
+    """4-6 deterministic candidate facts per platform. candidates[0] is the
+    default `chosen`; the editor can switch `chosen` or rewrite any text."""
     c = []
     try:
         v = to_num(df['views'])
@@ -523,7 +443,6 @@ def fun_fact_candidates(key, df):
         eng = engagement_series(key, df)
         med = float(v.median()) if n else 0.0
 
-        # --- platform-specific PRIMARY (candidates[0] = default) ---
         if key == 'youtube':
             if 'video_type' in df.columns and vsum > 0:
                 sv = float(to_num(df[df['video_type'] == 'Shorts']['views']).sum())
@@ -565,7 +484,6 @@ def fun_fact_candidates(key, df):
             if 'quotes' in df.columns:
                 c.append(_cand('quotes', fmt_num(to_num(df['quotes']).sum()), '', 'ציטוטים (quote tweets) של כאן השבוע'))
 
-        # --- generic extras (give the curator week-to-week variety) ---
         if n >= 3 and med > 0 and float(v.max()) / med >= 1.5:
             r = float(v.max()) / med
             c.append(_cand('overperformer', f"{r:.1f}", '×', f"הפריט המוביל השבוע עשה פי {r:.1f} מחציון הצפיות בפלטפורמה"))
@@ -577,63 +495,18 @@ def fun_fact_candidates(key, df):
     return c
 
 
-def curate_fun_facts(plat_ctx, use_gemini):
-    """One Gemini call picks the most newsworthy candidate per platform and
-    phrases it; the headline number is validated against the candidate's own
-    values (LLM never does arithmetic). Invalid/failed -> keep the default."""
-    if not use_gemini:
-        return
-    payload = []
-    for c in plat_ctx:
-        cands = c.get('fun_fact_candidates') or []
-        if cands:
-            payload.append({"platform": c['key'],
-                            "candidates": [{"label": x['label'], "number": x['value'], "suffix": x['suffix'], "hint": x['text']} for x in cands]})
-    if not payload:
-        return
-    prompt = (
-        "אתה עורך של כאן חדשות. לכל פלטפורמה קיבלת מספר עובדות-מועמדות עם מספר קבוע.\n"
-        "בחר לכל פלטפורמה את העובדה הכי מעניינת/עיתונאית, ונסח משפט אחד קצר בעברית סביבה.\n"
-        "העתק את המספר מילה-במילה מה-number של המועמד שבחרת. אל תמציא מספרים ואל תשנה ספרות.\n"
-        "החזר JSON תקין בלבד: רשימה של {platform, chosen_label, headline_number, sentence}.\n\n"
-        + json.dumps(payload, ensure_ascii=False)
-    )
-    arr = _parse_json(_gemini_text(prompt))
-    if not isinstance(arr, list):
-        return
-    chosen = {str(o.get('platform')): o for o in arr if isinstance(o, dict)}
-    for c in plat_ctx:
-        cands = c.get('fun_fact_candidates') or []
-        o = chosen.get(c['key'])
-        if not cands or not o:
-            continue
-        num = str(o.get('headline_number', '')).strip()
-        lbl = o.get('chosen_label')
-        match = next((x for x in cands if x['label'] == lbl and x['value'] == num), None) \
-            or next((x for x in cands if x['value'] == num), None)
-        sent = o.get('sentence')
-        if match and isinstance(sent, str) and sent.strip():
-            c['fun_fact'] = dict(value=match['value'], suffix=match['suffix'], text=clean_title(sent, 120))
-
-
-def process_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token, getxapi_token=''):
-    """Return (ctx, metrics) for one platform. Filters to this/last week."""
-    import pandas as pd
+def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token, rmap):
+    """Plain-data content for one platform (no markup, no base64). Thumbnails are
+    written to out/thumbs/ and referenced by filename."""
     meta = PLATFORMS[key]
     dc, tc, idc = meta['date_col'], meta['title_col'], meta['id_col']
     (ws, we), (lws, lwe) = window['this'], window['last']
 
-    ctx = dict(key=key, name=meta['name'], colors=meta['colors'],
-               icon=icon_svg(key, 56), icon_big=icon_svg(key, 120),
-               has_data=False, has_anomaly=False, top3=[], top10=[], fun_fact=None,
-               weekly_views_fmt="0")
-
-    metrics = dict(key=key, name=meta['name'], accent=meta['colors']['accent'],
-                   this_views=0, last_views=0, delta=None, top_item=None, med_eng=0.0)
+    out = dict(key=key, name=meta['name'], weekly_views=0, delta_pct=None,
+               followers=None, fun_fact=dict(chosen=None, candidates=[]), top=[])
 
     if df_all is None or df_all.empty or dc not in df_all.columns or 'views' not in df_all.columns:
-        ctx['delta'] = build_delta(None)
-        return ctx, metrics
+        return out
 
     d = df_all.copy()
     d['_date'] = d[dc].astype(str).str.slice(0, 10)
@@ -644,86 +517,50 @@ def process_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
 
     this_views = float(this_df['views'].sum())
     last_views = float(last_df['views'].sum())
-    metrics['this_views'] = this_views
-    metrics['last_views'] = last_views
-
-    delta_pct = ((this_views - last_views) / last_views * 100) if last_views > 0 else None
-    metrics['delta'] = delta_pct
-    dl = build_delta(delta_pct)
-    ctx.update(delta_str=dl['str_signed'], delta_arrow=dl['arrow'],
-               delta_color=dl['color'], has_delta=dl['has_delta'])
-    ctx['weekly_views_fmt'] = fmt_num(this_views)
+    out['weekly_views'] = int(this_views)
+    out['delta_pct'] = round((this_views - last_views) / last_views * 100, 1) if last_views > 0 else None
 
     if this_df.empty:
-        return ctx, metrics
+        return out
 
-    ctx['has_data'] = True
     this_df = this_df.copy()
     this_df['_eng'] = engagement_series(key, this_df)
     this_df = this_df.sort_values('views', ascending=False)
 
-    rows = []
-    for i, (_, r) in enumerate(this_df.head(10).iterrows(), start=1):
-        rows.append(dict(rank=i, title=clean_title(r.get(tc, '')),
-                         reporter="",  # filled later by assign_reporters()
-                         views=float(r['views']), views_fmt=fmt_num(r['views']),
-                         eng=float(r['_eng']), eng_str=f"{float(r['_eng']):.1f}%",
-                         highlight=(i <= 3), anomaly=False, thumb=None,
-                         _id=str(r.get(idc, ''))))
-    mark_anomalies(rows)
-    ctx['top10'] = rows
-    ctx['has_anomaly'] = any(x['anomaly'] for x in rows)
+    items = []
+    for _, r in this_df.head(10).iterrows():
+        title = clean_title(r.get(tc, ''))
+        items.append(dict(id=str(r.get(idc, '')), title=title,
+                          reporter=resolve_reporter(title, rmap),
+                          views=int(r['views']), engagement=round(float(r['_eng']), 1),
+                          thumb=None))
 
-    med = sorted(x['eng'] for x in rows)
-    metrics['med_eng'] = med[len(med) // 2] if med else 0.0
-
-    # top-3 highlight cards
-    medals = ['🥇', '🥈', '🥉']
-    top3 = []
-    for i, r in enumerate(rows[:3]):
-        top3.append(dict(medal=medals[i], title=clean_title(r['title'], 90),
-                         views_fmt=r['views_fmt'], reporter=r['reporter'],
-                         thumb=None, _id=r['_id']))
-    ctx['top3'] = top3
-
-    # biggest single item (for the learnings slide)
-    if rows:
-        top = rows[0]
-        metrics['top_item'] = dict(title=top['title'], views=top['views'],
-                                   views_fmt=top['views_fmt'], accent=meta['colors']['accent'],
-                                   name=meta['name'])
+    # thumbnails for all top-10 (X excluded by design)
+    if thumbs_enabled and key not in NO_THUMBS:
+        ids = [i['id'] for i in items]
+        payloads = {}
+        if key == 'youtube':
+            payloads = {i: thumb_youtube(i) for i in ids}
+        elif key == 'facebook':
+            payloads = {i: thumb_fb(i, fb_token) for i in ids}
+        elif key == 'instagram':
+            payloads = {i: thumb_ig(i, fb_token) for i in ids}
+        elif key == 'tiktok':
+            payloads = tiktok_cover_map(ids, tikhub_token)
+        got = 0
+        for it in items:
+            fname = save_thumb(key, it['id'], payloads.get(it['id']))
+            it['thumb'] = fname
+            got += 1 if fname else 0
+        print(f"      {key}: {got}/{len(items)} thumbnails")
 
     cands = fun_fact_candidates(key, this_df)
-    ctx['fun_fact_candidates'] = cands
-    ctx['fun_fact'] = dict(value=cands[0]['value'], suffix=cands[0]['suffix'],
-                           text=cands[0]['text']) if cands else None
+    out['fun_fact'] = dict(chosen=(cands[0]['label'] if cands else None), candidates=cands)
+    out['top'] = items
+    return out
 
-    # thumbnails for ALL top-10 rows (+ the top-3 cards), per platform
-    if thumbs_enabled:
-        ids = [r['_id'] for r in rows]
-        tmap = {}
-        if key == 'youtube':
-            tmap = {i: thumb_youtube(i) for i in ids}
-        elif key == 'facebook':
-            tmap = {i: thumb_fb(i, fb_token) for i in ids}
-        elif key == 'instagram':
-            tmap = {i: thumb_ig(i, fb_token) for i in ids}
-        elif key == 'tiktok':
-            tmap = tiktok_cover_map(ids, tikhub_token, max_pages=8)
-        elif key == 'x':
-            tmap = x_thumb_map(ids, getxapi_token, max_pages=15)
-        for r in rows:
-            r['thumb'] = tmap.get(r['_id'])
-        for c in top3:
-            c['thumb'] = tmap.get(c['_id'])
-
-    return ctx, metrics
-
-
-# ---------------------------------------------------------------- followers
 
 def followers_map(gc):
-    """Latest follower count per platform key from the wide followers sheet."""
     out = {}
     if gc is None:
         return out
@@ -743,156 +580,188 @@ def followers_map(gc):
 
 # ---------------------------------------------------------------- learnings
 
-def build_learnings(metrics_list, daily_insights, use_gemini):
-    """1 primary + 2 secondary insights. Stats are always real/computed;
-    Gemini only rewrites the Hebrew prose (never invents numbers)."""
-    have = [m for m in metrics_list if m['this_views'] > 0]
+def default_learnings(platforms):
+    """Deterministic starting point for the 'מה למדנו' slide — 3 cards the
+    editor is expected to rewrite/extend (3-4 supported) in deck_content.json."""
+    have = [p for p in platforms if p['weekly_views'] > 0]
+    cards = []
+    if not have:
+        return [dict(icon='📊', title='שבוע ללא נתונים', number='', color='#111',
+                     sentence='לא נאספו נתונים לשבוע זה.')]
 
-    # seed 1: biggest positive mover (fallback: top platform by views)
-    movers = [m for m in have if m['delta'] is not None]
-    primary_m = None
-    if movers:
-        primary_m = max(movers, key=lambda m: m['delta'])
-        if primary_m['delta'] <= 0:
-            primary_m = None
-    if primary_m is None and have:
-        primary_m = max(have, key=lambda m: m['this_views'])
-
-    if primary_m and primary_m.get('delta') is not None and primary_m['delta'] > 0:
-        d = build_delta(primary_m['delta'])
-        primary = dict(emoji='🚀', stat=d['str_signed'], stat_color=GREEN,
-                       headline=f"{primary_m['name']} בצמיחה החדה ביותר השבוע",
-                       body=f"{primary_m['name']} עלה ב{d['str_abs']} בצפיות מול השבוע שעבר — שם כדאי למקד את המאמץ בשבוע הבא.")
-    elif primary_m:
-        primary = dict(emoji='🏆', stat=fmt_num(primary_m['this_views']), stat_color='#111',
-                       headline=f"{primary_m['name']} מוביל את הצפיות השבוע",
-                       body=f"{primary_m['name']} ריכז את מרב הצפיות מכל הפלטפורמות השבוע.")
+    movers = [p for p in have if p.get('delta_pct') is not None]
+    up = [p for p in movers if p['delta_pct'] > 0]
+    if up:
+        best = max(up, key=lambda p: p['delta_pct'])
+        d = build_delta(best['delta_pct'])
+        cards.append(dict(icon='🚀', number=d['str_signed'], color=GREEN,
+                          title=f"{best['name']} בצמיחה החדה ביותר השבוע",
+                          sentence=f"{best['name']} עלה ב{d['str_abs']} בצפיות מול השבוע שעבר — שם כדאי למקד את המאמץ."))
     else:
-        primary = dict(emoji='📊', stat='', stat_color='#111',
-                       headline='שבוע ללא נתונים', body='לא נאספו נתונים לשבוע זה.')
+        top = max(have, key=lambda p: p['weekly_views'])
+        cards.append(dict(icon='🏆', number=fmt_num(top['weekly_views']), color='#111',
+                          title=f"{top['name']} מוביל את הצפיות השבוע",
+                          sentence=f"{top['name']} ריכז את מרב הצפיות מכל הפלטפורמות."))
 
-    secondary = []
-    # seed 2: biggest single item of the week
-    tops = [m['top_item'] for m in have if m.get('top_item')]
-    if tops:
-        big = max(tops, key=lambda t: t['views'])
-        secondary.append(dict(emoji='⚡', stat=big['views_fmt'], stat_color=big['accent'],
-                              headline=clean_title(big['title'], 70),
-                              sub=f"הפריט הכי נצפה השבוע · {big['name']}"))
+    best_item, best_p = None, None
+    for p in have:
+        if p['top'] and (best_item is None or p['top'][0]['views'] > best_item['views']):
+            best_item, best_p = p['top'][0], p
+    if best_item:
+        cards.append(dict(icon='⚡', number=fmt_num(best_item['views']),
+                          color=PLATFORMS[best_p['key']]['colors']['accent'],
+                          title=clean_title(best_item['title'], 70),
+                          sentence=f"הפריט הכי נצפה השבוע · {best_p['name']}"))
 
-    # seed 3: a declining platform, else the best-engagement platform
-    declining = [m for m in have if m['delta'] is not None and m['delta'] < 0]
-    if declining:
-        worst = min(declining, key=lambda m: m['delta'])
-        d = build_delta(worst['delta'])
-        secondary.append(dict(emoji='📉', stat=d['str_signed'], stat_color=RED,
-                              headline=f"{worst['name']} במגמת ירידה",
-                              sub="הפלטפורמה היחידה עם צפיות יורדות — שווה בדיקה"))
+    down = [p for p in movers if p['delta_pct'] < 0]
+    if down:
+        worst = min(down, key=lambda p: p['delta_pct'])
+        d = build_delta(worst['delta_pct'])
+        cards.append(dict(icon='📉', number=d['str_signed'], color=RED,
+                          title=f"{worst['name']} במגמת ירידה",
+                          sentence='הפלטפורמה היחידה עם צפיות יורדות — שווה בדיקה.'))
     else:
-        eng_ranked = [m for m in have if m.get('med_eng', 0) > 0]
-        if eng_ranked:
-            best = max(eng_ranked, key=lambda m: m['med_eng'])
-            secondary.append(dict(emoji='💬', stat=f"{best['med_eng']:.1f}%", stat_color=best['accent'],
-                                  headline=f"{best['name']} עם המעורבות החזקה ביותר",
-                                  sub="חציון המעורבות הגבוה ביותר מבין הפלטפורמות"))
+        engs = [(p, max((i['engagement'] for i in p['top']), default=0)) for p in have]
+        engs = [e for e in engs if e[1] > 0]
+        if engs:
+            p, e = max(engs, key=lambda t: t[1])
+            cards.append(dict(icon='💬', number=f"{e:.1f}%",
+                              color=PLATFORMS[p['key']]['colors']['accent'],
+                              title=f"{p['name']} עם המעורבות החזקה ביותר",
+                              sentence='שיא המעורבות על פריט בודד מבין הפלטפורמות.'))
+    return cards[:4]
 
-    while len(secondary) < 2:
-        secondary.append(dict(emoji='📈', stat='', stat_color='#111',
-                              headline='עוד שבוע של סושיאל', sub=''))
-    secondary = secondary[:2]
 
+# ---------------------------------------------------------------- extract
+
+def build_deck_content(gc, thumbs_enabled, use_gemini=False):
+    window = compute_window()
+    fb_token = os.environ.get('FACEBOOK_TOKEN', '')
+    tikhub_token = os.environ.get('TIKHUB_TOKEN', '')
+    rmap = load_reporters_map()
+
+    plats = []
+    for key in PLATFORM_ORDER:
+        df = load_sheet(gc, PLATFORMS[key]['sheet']) if gc else None
+        plats.append(extract_platform(key, df, window, thumbs_enabled,
+                                      fb_token, tikhub_token, rmap))
+
+    follows = followers_map(gc)
+    for p in plats:
+        p['followers'] = follows.get(p['key'])
+
+    return assemble_content(plats, window, use_gemini)
+
+
+def assemble_content(plats, window, use_gemini=False):
+    total_this = sum(p['weekly_views'] for p in plats)
+    hero_delta = None
+    # hero delta from the per-platform deltas' implied prior totals
+    prior = 0.0
+    known = False
+    for p in plats:
+        if p.get('delta_pct') is not None and p['delta_pct'] != -100:
+            prior += p['weekly_views'] / (1 + p['delta_pct'] / 100.0)
+            known = True
+        else:
+            prior += p['weekly_views']
+    if known and prior > 0:
+        hero_delta = round((total_this - prior) / prior * 100, 1)
+
+    reporters, seen = [], set()
+    for p in sorted(plats, key=lambda x: -x['weekly_views']):
+        for it in p['top']:
+            nm = (it.get('reporter') or '').strip()
+            if nm and not nm.startswith('@') and nm not in seen:
+                seen.add(nm)
+                reporters.append(nm)
+
+    content = {
+        "_readme": ("קובץ עריכה. כל הטקסטים והמספרים כאן ניתנים לשינוי ידני ואז "
+                    "מריצים --render בלבד. thumb = שם קובץ בתוך out/thumbs/. "
+                    "fun_fact.chosen = label של אחד מ-candidates."),
+        "window": {"start": window['this'][0], "end": window['this'][1],
+                   "range_str": fmt_date_range(window['d1'], window['d2']),
+                   "range_short": f"{window['d1']:%d/%m}–{window['d2']:%d/%m}"},
+        "hero": {"total_views": int(total_this), "delta_pct": hero_delta},
+        "platforms": plats,
+        "learnings": default_learnings(plats),
+        "story_of_the_week": None,
+        "closing": {"reporters": reporters[:12],
+                    "note": "מבוסס על דשבורד הסושיאל של כאן"},
+    }
     if use_gemini:
         try:
-            polished = _gemini_polish(primary, secondary, daily_insights, metrics_list)
-            if polished:
-                primary, secondary = polished
+            gemini_polish_content(content)
         except Exception as e:
-            print(f"   ⚠️ Gemini polish failed, using computed insights: {e}")
-
-    # split the primary stat into number + suffix for the big type treatment
-    pm, ps = split_suffix(primary.get('stat', '') or '')
-    primary['stat_main'], primary['stat_suffix'] = pm, ps
-    return dict(primary=primary, secondary=secondary)
+            print(f"   ⚠️ Gemini polish failed, keeping computed text: {e}")
+    return content
 
 
-def _gemini_polish(primary, secondary, daily_insights, metrics_list):
-    """Ask Gemini to rewrite headline/body text only. Stats stay fixed."""
+def save_content(content):
+    os.makedirs(OUT_DIR, exist_ok=True)
+    with open(CONTENT_PATH, 'w', encoding='utf-8') as f:
+        json.dump(content, f, ensure_ascii=False, indent=2)
+    size = os.path.getsize(CONTENT_PATH)
+    print(f"   ✅ wrote {CONTENT_PATH} ({size:,} bytes)")
+    if size > 40_000:
+        print(f"   ⚠️ deck_content.json is larger than the 40KB target ({size:,})")
+    return CONTENT_PATH
+
+
+def load_content():
+    if not os.path.exists(CONTENT_PATH):
+        raise SystemExit(f"❌ {CONTENT_PATH} not found — run with --extract first.")
+    with open(CONTENT_PATH, encoding='utf-8') as f:
+        return json.load(f)
+
+
+# ---------------------------------------------------------------- optional Gemini
+
+def gemini_polish_content(content):
+    """OPT-IN ONLY (--gemini). Rewrites learning prose; never touches numbers."""
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
-        return None
+        print("   (no GEMINI_API_KEY — skipping polish)")
+        return
     from google import genai
     client = genai.Client(api_key=api_key)
-
-    seeds = [
-        {"slot": "primary", "stat": primary['stat'], "headline": primary['headline'], "text": primary['body']},
-        {"slot": "secondary1", "stat": secondary[0]['stat'], "headline": secondary[0]['headline'], "text": secondary[0]['sub']},
-        {"slot": "secondary2", "stat": secondary[1]['stat'], "headline": secondary[1]['headline'], "text": secondary[1]['sub']},
-    ]
-    numbers = "; ".join(f"{m['name']}: {fmt_num(m['this_views'])} צפיות" for m in metrics_list if m['this_views'] > 0)
-    insights_txt = "\n".join(f"- {v}" for _, v in daily_insights[:14]) if daily_insights else "אין"
-
-    prompt = f"""אתה עורך תוכן של כאן חדשות. קיבלת 3 תובנות שבועיות עם מספרים קבועים.
-שכתב אך ורק את הכותרת (headline, עד 6 מילים) והטקסט (text, משפט אחד) של כל תובנה — בעברית, ענייני, מבוסס נתונים.
-אל תמציא מספרים חדשים ואל תשנה את שדה ה-stat. החזר JSON תקין בלבד: מערך של 3 אובייקטים עם השדות slot, headline, text.
-
-מספרי השבוע: {numbers}
-
-תובנות יומיות מהשבוע:
-{insights_txt}
-
-התובנות לשכתוב:
-{json.dumps(seeds, ensure_ascii=False)}
-"""
-    text = ""
+    seeds = [{"i": i, "title": c['title'], "sentence": c['sentence'], "number": c.get('number', '')}
+             for i, c in enumerate(content['learnings'])]
+    prompt = ("אתה עורך של כאן חדשות. שכתב כותרת ומשפט לכל תובנה, בעברית, קצר וענייני. "
+              "אל תשנה ואל תמציא מספרים. החזר JSON: רשימה של {i, title, sentence}.\n\n"
+              + json.dumps(seeds, ensure_ascii=False))
+    text = None
     for model in ["gemini-3.5-flash", "gemini-2.5-pro"]:
         try:
-            resp = client.models.generate_content(model=model, contents=prompt)
-            text = (resp.text or "").strip()
+            r = client.models.generate_content(model=model, contents=prompt)
+            text = (r.text or "").strip()
             if text:
                 break
         except Exception as e:
-            print(f"   Gemini model {model} failed: {e}")
+            print(f"   Gemini {model} failed: {e}")
     if not text:
-        return None
+        return
     if text.startswith("```"):
         text = text.strip("`")
-        text = text[text.find("["):text.rfind("]") + 1]
-    arr = json.loads(text)
-    by_slot = {o.get('slot'): o for o in arr}
-    if 'primary' in by_slot:
-        primary['headline'] = clean_title(by_slot['primary'].get('headline', primary['headline']), 60)
-        primary['body'] = clean_title(by_slot['primary'].get('text', primary['body']), 200)
-    for i, slot in enumerate(('secondary1', 'secondary2')):
-        if slot in by_slot:
-            secondary[i]['headline'] = clean_title(by_slot[slot].get('headline', secondary[i]['headline']), 60)
-            secondary[i]['sub'] = clean_title(by_slot[slot].get('text', secondary[i]['sub']), 140)
-    return primary, secondary
+        i, j = text.find('['), text.rfind(']')
+        text = text[i:j + 1] if i != -1 and j > i else text
+    try:
+        arr = json.loads(text)
+    except Exception:
+        return
+    for o in arr:
+        if isinstance(o, dict) and isinstance(o.get('i'), int) and 0 <= o['i'] < len(content['learnings']):
+            card = content['learnings'][o['i']]
+            card['title'] = clean_title(o.get('title', card['title']), 70)
+            card['sentence'] = clean_title(o.get('sentence', card['sentence']), 160)
 
 
-# ---------------------------------------------------------------- assembly
-
-def compute_window(today=None):
-    """Last COMPLETE Israeli week: Sunday..Saturday (Asia/Jerusalem). Running on
-    Tue 2026-07-21 -> 2026-07-12..2026-07-18; prior week (for deltas) =
-    2026-07-05..2026-07-11. Running on a Sunday -> the just-finished Sun..Sat."""
-    today = today or datetime.now(IL_TZ)
-    days_since_sunday = (today.weekday() + 1) % 7   # Python: Mon=0..Sun=6
-    this_week_sunday = today - timedelta(days=days_since_sunday)
-    we = this_week_sunday - timedelta(days=1)        # last complete Saturday
-    ws = we - timedelta(days=6)                      # its Sunday
-    lwe = ws - timedelta(days=1)                     # prior Saturday
-    lws = lwe - timedelta(days=6)                    # prior Sunday
-    fmt = lambda d: d.strftime('%Y-%m-%d')
-    return dict(this=(fmt(ws), fmt(we)), last=(fmt(lws), fmt(lwe)),
-                d1=ws, d2=we)
-
+# ---------------------------------------------------------------- render context
 
 def font_faces():
     """@font-face list for the weights present on disk. The licensed Light(300)
-    weight is absent (not on the VPS either), so we map 300 -> Regular(400)
-    EXPLICITLY: an @font-face for weight 300 pointing at the Regular OTF, rather
-    than relying on the browser's implicit nearest-weight fallback. 300 is not
-    used in the slide markup, so this is purely defensive."""
+    weight is absent, so we map 300 -> Regular(400) EXPLICITLY."""
     weights = [('Light', 300), ('Regular', 400), ('Semibold', 600),
                ('Bold', 700), ('Black', 900)]
     faces, present = [], {}
@@ -901,7 +770,7 @@ def font_faces():
         if os.path.exists(path):
             faces.append(dict(weight=w, uri=_file_uri(path)))
             present[w] = _file_uri(path)
-    if 300 not in present and 400 in present:  # explicit Light -> Regular
+    if 300 not in present and 400 in present:
         faces.append(dict(weight=300, uri=present[400]))
     return faces
 
@@ -912,11 +781,8 @@ def _file_uri(path):
 
 
 def load_mark():
-    """Inline the Kan square mark as a reusable path (no <defs>/id/<style>, so
-    embedding it on several slides can't collide). Orange (#f30) for the light
-    slides. Returns {viewbox, d, fill} or None -> template uses the typographic
-    fallback."""
-    import re
+    """Kan square mark as a reusable path (no defs/id/style -> safe to inline
+    several times). Orange for the light slides."""
     p = os.path.join(ASSETS_DIR, "kan-news-mark-orange.svg")
     if not os.path.exists(p):
         return None
@@ -933,8 +799,6 @@ def load_mark():
 
 
 def logo_data_uri():
-    # A full pre-composed lockup PNG, if one is ever dropped in, wins over the
-    # SVG-mark + wordmark lockup. None is the normal case today.
     for name in ("kan-news-full-black-a.png", "kan-news-full-black.png"):
         p = os.path.join(ASSETS_DIR, name)
         if os.path.exists(p):
@@ -943,112 +807,120 @@ def logo_data_uri():
     return None
 
 
-def build_context(gc, use_gemini, thumbs_enabled):
-    window = compute_window()
-    fb_token = os.environ.get('FACEBOOK_TOKEN', '')
-    tikhub_token = os.environ.get('TIKHUB_TOKEN', '')
-    getxapi_token = os.environ.get('GETXAPI_KEY', '')
-
-    plat_ctx, metrics = [], []
-    for key in PLATFORM_ORDER:
-        df = load_sheet(gc, PLATFORMS[key]['sheet']) if gc else None
-        c, m = process_platform(key, df, window, thumbs_enabled, fb_token,
-                                tikhub_token, getxapi_token)
-        plat_ctx.append(c)
-        metrics.append(m)
-
-    mode = assign_reporters(plat_ctx, use_gemini)
-    print(f"   reporters: {mode}")
-    curate_fun_facts(plat_ctx, use_gemini)
-
-    follows = followers_map(gc)
-    daily_insights = _daily_insights(gc, window)
-    return _assemble(plat_ctx, metrics, follows, daily_insights, window, use_gemini)
+def _mark_anomalies(rows):
+    """Ranks 4+ whose engagement clearly beats the week's median."""
+    if len(rows) < 4:
+        return
+    engs = sorted(r['eng'] for r in rows)
+    n = len(engs)
+    med = engs[n // 2] if n % 2 else (engs[n // 2 - 1] + engs[n // 2]) / 2
+    for i, r in enumerate(rows):
+        r['anomaly'] = bool(i >= 3 and med > 0 and r['eng'] >= 1.4 * med)
 
 
-def _daily_insights(gc, window):
-    if gc is None:
-        return []
-    import pandas as pd
-    df = load_sheet(gc, "תובנות יומיות")
-    if df.empty or 'date' not in df.columns:
-        return []
-    ws, we = window['this']
-    df = df[(df['date'].astype(str) >= ws) & (df['date'].astype(str) <= we)].sort_values('date')
-    return [(r['date'], r.get('insights', '')) for _, r in df.iterrows() if str(r.get('insights', '')).strip()]
-
-
-def _assemble(plat_ctx, metrics, follows, daily_insights, window, use_gemini):
-    by_key = {c['key']: c for c in plat_ctx}
-    m_by_key = {m['key']: m for m in metrics}
-
-    # dynamic order: by real weekly views, empty platforms last
-    ordered = sorted(PLATFORM_ORDER, key=lambda k: (-m_by_key[k]['this_views'], PLATFORM_ORDER.index(k)))
+def content_to_context(content, thumbstyle='portrait'):
+    """deck_content.json -> template context. Pure/deterministic: no network,
+    no sheets, no Gemini. Images are inlined from the thumbs cache here."""
+    window = content['window']
+    plats_raw = {p['key']: p for p in content['platforms']}
+    ordered = sorted(content['platforms'], key=lambda p: (-p.get('weekly_views', 0),
+                                                          PLATFORM_ORDER.index(p['key'])))
+    medals = ['🥇', '🥈', '🥉']
     platforms = []
-    for i, key in enumerate(ordered, start=1):
-        c = by_key[key]
-        c['rank_label'] = f"פלטפורמה {i} מתוך 5 · לפי צפיות"
-        platforms.append(c)
+    for i, p in enumerate(ordered, start=1):
+        key = p['key']
+        meta = PLATFORMS[key]
+        dl = build_delta(p.get('delta_pct'))
+        rows = []
+        for n, it in enumerate(p.get('top', []), start=1):
+            rows.append(dict(rank=n, title=it.get('title', ''), reporter=it.get('reporter', '') or '',
+                             views_fmt=fmt_num(it.get('views', 0)),
+                             eng=float(it.get('engagement', 0) or 0),
+                             eng_str=f"{float(it.get('engagement', 0) or 0):.1f}%",
+                             highlight=(n <= 3), anomaly=False,
+                             thumb=thumb_data_uri(it.get('thumb'))))
+        _mark_anomalies(rows)
 
-    total_this = sum(m['this_views'] for m in metrics)
-    total_last = sum(m['last_views'] for m in metrics)
-    hero_delta = build_delta(((total_this - total_last) / total_last * 100) if total_last > 0 else None)
-    tmain, tsuf = split_suffix(fmt_num(total_this))
+        top3 = []
+        for n, it in enumerate(p.get('top', [])[:3]):
+            top3.append(dict(medal=medals[n], title=clean_title(it.get('title', ''), 110),
+                             views_fmt=fmt_num(it.get('views', 0)),
+                             reporter=it.get('reporter', '') or '',
+                             thumb=thumb_data_uri(it.get('thumb'))))
 
-    max_views = max((m_by_key[k]['this_views'] for k in ordered), default=0)
+        ff = p.get('fun_fact') or {}
+        cands = ff.get('candidates') or []
+        chosen = next((c for c in cands if c.get('label') == ff.get('chosen')), None) or (cands[0] if cands else None)
+
+        platforms.append(dict(
+            key=key, name=p.get('name', meta['name']), colors=meta['colors'],
+            icon=icon_svg(key, 56), icon_big=icon_svg(key, 120),
+            rank_label=f"פלטפורמה {i} מתוך {len(ordered)} · לפי צפיות",
+            weekly_views_fmt=fmt_num(p.get('weekly_views', 0)),
+            delta_str=dl['str_signed'], delta_color=dl['color'], has_delta=dl['has_delta'],
+            has_data=bool(p.get('top')),
+            text_cards=(key in NO_THUMBS),
+            top3=top3, top10=rows,
+            has_anomaly=any(r['anomaly'] for r in rows),
+            fun_fact=(dict(value=chosen['value'], suffix=chosen.get('suffix', ''),
+                           text=chosen.get('text', '')) if chosen else None)))
+
+    hero = content.get('hero', {})
+    hd = build_delta(hero.get('delta_pct'))
+    tmain, tsuf = split_suffix(fmt_num(hero.get('total_views', 0)))
+
+    max_views = max((p.get('weekly_views', 0) for p in ordered), default=0)
     overview_rows = []
-    for key in ordered:
-        c, m = by_key[key], m_by_key[key]
-        dl = build_delta(m['delta'])
+    for p in ordered:
+        meta = PLATFORMS[p['key']]
+        dl = build_delta(p.get('delta_pct'))
         overview_rows.append(dict(
-            name=c['name'], icon=icon_svg(key, 42),
-            followers_fmt=fmt_num(follows[key]) if key in follows else "",
-            bar_color=c['colors']['bar'],
-            bar_pct=int(round(m['this_views'] / max_views * 100)) if max_views > 0 else 0,
-            views_fmt=fmt_num(m['this_views']),
+            name=p.get('name', meta['name']), icon=icon_svg(p['key'], 42),
+            followers_fmt=fmt_num(p['followers']) if p.get('followers') else "",
+            bar_color=meta['colors']['bar'],
+            bar_pct=int(round(p.get('weekly_views', 0) / max_views * 100)) if max_views > 0 else 0,
+            views_fmt=fmt_num(p.get('weekly_views', 0)),
             has_delta=dl['has_delta'], delta_arrow=dl['arrow'],
             delta_str=dl['str_abs'], delta_color=dl['color']))
 
-    learnings = build_learnings(metrics, daily_insights, use_gemini)
+    learnings = []
+    for c in content.get('learnings', []):
+        num_main, num_suf = split_suffix(c.get('number', ''))
+        learnings.append(dict(icon=c.get('icon', ''), title=c.get('title', ''),
+                              sentence=c.get('sentence', ''),
+                              number=c.get('number', ''), number_main=num_main,
+                              number_suffix=num_suf, color=c.get('color', '#111')))
 
-    # closing credits: unique reporter names (skip @handles), in rank order
-    reporters, seen = [], set()
-    for key in ordered:
-        for r in by_key[key].get('top10', []):
-            nm = (r.get('reporter') or '').strip()
-            if nm and not nm.startswith('@') and nm not in seen:
-                seen.add(nm)
-                reporters.append(nm)
-    reporters = reporters[:12]
+    story = content.get('story_of_the_week')
+    if story:
+        story = dict(title=story.get('title', ''), sentence=story.get('sentence', ''),
+                     platforms=[dict(name=s.get('name', ''), views_fmt=fmt_num(s.get('views', 0)))
+                                for s in story.get('platforms', [])])
 
     return dict(
-        font_faces=font_faces(),
-        logo_black=logo_data_uri(),
-        mark=load_mark(),
-        week=dict(range_str=fmt_date_range(window['d1'], window['d2']),
-                  range_short=f"{window['d1']:%d/%m}–{window['d2']:%d/%m}"),
-        hero=dict(total_fmt=fmt_num(total_this), total_main=tmain, total_suffix=tsuf,
-                  has_delta=hero_delta['has_delta'], delta_str=hero_delta['str_signed'],
-                  delta_arrow=hero_delta['arrow'], delta_color=hero_delta['color']),
-        overview_rows=overview_rows,
-        platforms=platforms,
-        learnings=learnings,
-        reporters=reporters,  # extracted credits; empty -> closing block omitted
+        font_faces=font_faces(), logo_black=logo_data_uri(), mark=load_mark(),
+        thumbstyle=thumbstyle,
+        week=dict(range_str=window.get('range_str', ''), range_short=window.get('range_short', '')),
+        hero=dict(total_fmt=fmt_num(hero.get('total_views', 0)), total_main=tmain,
+                  total_suffix=tsuf, has_delta=hd['has_delta'], delta_str=hd['str_signed'],
+                  delta_arrow=hd['arrow'], delta_color=hd['color']),
+        overview_rows=overview_rows, platforms=platforms,
+        learnings=learnings, story=story,
+        reporters=content.get('closing', {}).get('reporters', []),
+        closing_note=content.get('closing', {}).get('note', ''),
     )
 
 
 # ---------------------------------------------------------------- mock
 
-def build_mock_context():
-    """Realistic hardcoded data run through the real pipeline (no creds/net)."""
+def build_mock_content():
+    """Realistic hardcoded data through the real extract path (no creds/net)."""
     import pandas as pd
     window = compute_window()
-    ws, we = window['this']
-    d1, d2 = window['d1'], window['d2']
-    # spread dates across the window
+    d1 = window['d1']
     days = [(d1 + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(7)]
 
-    def rows(specs, extra_cols):
+    def rows(specs):
         out = []
         for i, (title, views, likes, comments, shares, eng, extra) in enumerate(specs):
             r = dict(title=title, caption=title, text=title, views=views, likes=likes,
@@ -1069,8 +941,7 @@ def build_mock_context():
         ("הטור השבועי של הפרשן הצבאי (רון בן ישי)", 310_000, 3000, 250, 90, 3.9, dict(video_id="e", video_type="Regular")),
         ("כתבת תחקיר: מאחורי הקלעים של העסקה", 275_000, 5000, 350, 150, 6.2, dict(video_id="f", video_type="Regular")),
         ("מזג האוויר: גל החום נמשך", 240_000, 1500, 120, 40, 2.7, dict(video_id="g", video_type="Shorts")),
-    ], None)
-
+    ])
     tk = rows([
         ("הרגע שהחייל חזר הביתה בהפתעה", 2_100_000, 190000, 4200, 22000, 14.2, dict(video_id="t1", whatsapp_shares=15000, saves=8000, type="Video")),
         ("כתב שטח מסביר ב-40 שניות", 1_300_000, 90000, 2100, 11000, 11.8, dict(video_id="t2", whatsapp_shares=7000, saves=4000, type="Video")),
@@ -1082,8 +953,7 @@ def build_mock_context():
         ("ראיון רחוב על ההסכם המדיני", 300_000, 18000, 500, 1600, 6.9, dict(video_id="t8", whatsapp_shares=900, saves=700, type="Video")),
         ("המזג אוויר בסטייל של טיקטוק", 245_000, 12000, 300, 1100, 5.4, dict(video_id="t9", whatsapp_shares=600, saves=500, type="Video")),
         ("הצצה לחדר הבקרה בשידור חי", 190_000, 9000, 250, 800, 6.1, dict(video_id="t10", whatsapp_shares=450, saves=350, type="Video")),
-    ], None)
-
+    ])
     ig = rows([
         ("רילס: תיעוד ההצפה בצפון (נעה לנדאו)", 1_100_000, 88000, 1200, 9000, 12.9, dict(media_id="i1", type="Reel", saved=14000, reach=1_300_000)),
         ("קרוסלה: חמש נקודות על ההסכם (שירית אביטן)", 720_000, 44000, 800, 3200, 9.6, dict(media_id="i2", type="Carousel", saved=9000, reach=820_000)),
@@ -1095,8 +965,7 @@ def build_mock_context():
         ("שאלות ותשובות עם הכתבת", 240_000, 15000, 900, 1400, 8.0, dict(media_id="i8", type="Photo", saved=2100, reach=280_000)),
         ("רילס מזג האוויר של סוף השבוע", 205_000, 9000, 200, 700, 4.8, dict(media_id="i9", type="Reel", saved=1500, reach=240_000)),
         ("גלריית התמונות של השבוע", 170_000, 7000, 150, 500, 3.6, dict(media_id="i10", type="Carousel", saved=1100, reach=200_000)),
-    ], None)
-
+    ])
     fb = rows([
         ("שידור חי: מסיבת העיתונאים המלאה", 640_000, 12000, 3000, 2400, 5.1, dict(post_id="f1", type="Videos", reach=1_200_000)),
         ("הכתבה שעוררה את מרב התגובות", 410_000, 9000, 4200, 1800, 6.8, dict(post_id="f2", type="Links", reach=780_000)),
@@ -1108,12 +977,11 @@ def build_mock_context():
         ("סקר: מה חושב הציבור", 160_000, 7000, 1900, 1300, 8.3, dict(post_id="f8", type="Images", reach=300_000)),
         ("תזכורת: שידור מיוחד הערב", 135_000, 2000, 300, 200, 2.9, dict(post_id="f9", type="Links", reach=250_000)),
         ("מזג האוויר לסוף השבוע", 110_000, 1500, 200, 120, 2.1, dict(post_id="f10", type="Images", reach=210_000)),
-    ], None)
-
+    ])
     x = rows([
-        ("הציוץ שסיכם את מסיבת העיתונאים", 380_000, 4200, 300, 1600, 4.4, dict(tweet_id="x1", retweets=1600, replies=300, quotes=200, type="Text")),
-        ("שרשור: כל מה שקרה היום בכנסת", 240_000, 3000, 400, 1100, 5.7, dict(tweet_id="x2", retweets=1100, replies=400, quotes=150, type="Text")),
-        ("עדכון בזק מהשטח בזמן אמת", 190_000, 2200, 250, 800, 3.9, dict(tweet_id="x3", retweets=800, replies=250, quotes=90, type="Text")),
+        ("הציוץ שסיכם את מסיבת העיתונאים: \"אין הסכם בלי שחרור כל החטופים\"", 380_000, 4200, 300, 1600, 4.4, dict(tweet_id="x1", retweets=1600, replies=300, quotes=200, type="Text")),
+        ("שרשור: כל מה שקרה היום בכנסת — 12 הצבעות, קואליציה מתפצלת", 240_000, 3000, 400, 1100, 5.7, dict(tweet_id="x2", retweets=1100, replies=400, quotes=150, type="Text")),
+        ("עדכון בזק מהשטח בזמן אמת: כוחות ההצלה בדרך לאזור", 190_000, 2200, 250, 800, 3.9, dict(tweet_id="x3", retweets=800, replies=250, quotes=90, type="Text")),
         ("ציטוט היום מהמליאה", 150_000, 2600, 600, 900, 6.2, dict(tweet_id="x4", retweets=900, replies=600, quotes=120, type="Text")),
         ("מבזק: תוצאות ההצבעה", 130_000, 1800, 200, 600, 4.8, dict(tweet_id="x5", retweets=600, replies=200, quotes=70, type="Text")),
         ("שרשור נתונים על יוקר המחיה", 110_000, 1200, 150, 400, 3.3, dict(tweet_id="x6", retweets=400, replies=150, quotes=50, type="Text")),
@@ -1121,63 +989,58 @@ def build_mock_context():
         ("תמונת השבוע עם הקשר", 80_000, 900, 120, 300, 2.7, dict(tweet_id="x8", retweets=300, replies=120, quotes=40, type="Photo")),
         ("עדכון תחבורה ומזג אוויר", 68_000, 600, 80, 180, 1.9, dict(tweet_id="x9", retweets=180, replies=80, quotes=20, type="Text")),
         ("סיכום היום בשלושה ציוצים", 55_000, 800, 200, 250, 3.4, dict(tweet_id="x10", retweets=250, replies=200, quotes=30, type="Text")),
-    ], None)
-
+    ])
     sheets = dict(youtube=yt, tiktok=tk, instagram=ig, facebook=fb, x=x)
+    rmap = load_reporters_map()
 
-    # a tiny inline SVG "thumbnail" for the #1 card of each platform, to
-    # exercise the <img> branch alongside the placeholder branch.
-    def mock_thumb(label, color):
-        svg = (f"<svg xmlns='http://www.w3.org/2000/svg' width='320' height='172'>"
-               f"<rect width='320' height='172' fill='{color}'/>"
-               f"<text x='160' y='96' font-size='22' fill='white' text-anchor='middle' "
-               f"font-family='sans-serif'>{label}</text></svg>")
-        return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+    plats = [extract_platform(k, sheets[k], window, False, '', '', rmap) for k in PLATFORM_ORDER]
 
-    plat_ctx, metrics = [], []
-    for key in PLATFORM_ORDER:
-        c, m = process_platform(key, sheets[key], window, False, '', '')
-        # inject a mock thumb on every row + card so the table-row-thumb UI can
-        # be judged visually (real runs download these per platform)
-        accent = PLATFORMS[key]['colors']['accent']
-        for r in c.get('top10', []):
-            r['thumb'] = mock_thumb(c['name'], accent)
-        for card in c.get('top3', []):
-            card['thumb'] = mock_thumb(c['name'], accent)
-        plat_ctx.append(c)
-        metrics.append(m)
-
-    # bump last-week to make deltas non-trivial (real mode gets this from the
-    # sheet's prior-window rows; here we synthesize it and sync the slide header)
-    prev = dict(youtube=0.82, tiktok=0.66, instagram=0.93, facebook=1.05, x=0.89)
-    ctx_by_key = {c['key']: c for c in plat_ctx}
-    for m in metrics:
-        m['last_views'] = m['this_views'] * prev.get(m['key'], 0.9)
-        m['delta'] = ((m['this_views'] - m['last_views']) / m['last_views'] * 100) if m['last_views'] else None
-        dl = build_delta(m['delta'])
-        c = ctx_by_key[m['key']]
-        c.update(delta_str=dl['str_signed'], delta_arrow=dl['arrow'],
-                 delta_color=dl['color'], has_delta=dl['has_delta'])
-
-    # reporter extraction (fallback/regex path — no creds in mock) + fun-fact
-    # defaults (curation needs Gemini, off in mock)
-    mode = assign_reporters(plat_ctx, use_gemini=False)
-    print(f"   reporters (mock): {mode}")
-    curate_fun_facts(plat_ctx, use_gemini=False)
-
+    # synthesize prior-week deltas + followers (real runs read these from sheets)
+    prev = dict(youtube=22.0, tiktok=52.0, instagram=8.0, facebook=-5.0, x=12.0)
     follows = dict(youtube=412000, tiktok=286000, instagram=531000, facebook=1_200_000, x=348000)
-    daily = [(days[i], f"תובנה יומית לדוגמה מספר {i+1}") for i in range(3)]
-    return _assemble(plat_ctx, metrics, follows, daily, window, use_gemini=False)
+    for p in plats:
+        p['delta_pct'] = prev.get(p['key'])
+        p['followers'] = follows.get(p['key'])
+
+    content = assemble_content(plats, window, use_gemini=False)
+    # mock thumbnails so the thumb styles can be judged without network
+    _write_mock_thumbs(content)
+    return content
+
+
+def _write_mock_thumbs(content):
+    """Write small placeholder JPEG/PNG files so --mock exercises the real
+    thumbs-cache path. Mixed portrait/landscape to test both thumb styles."""
+    try:
+        from PIL import Image, ImageDraw
+    except Exception:
+        print("   (Pillow unavailable — mock runs without thumbnails)")
+        return
+    os.makedirs(THUMBS_DIR, exist_ok=True)
+    palette = {'youtube': (225, 25, 0), 'tiktok': (180, 83, 9),
+               'instagram': (228, 64, 95), 'facebook': (24, 119, 242), 'x': (17, 17, 17)}
+    for p in content['platforms']:
+        if p['key'] in NO_THUMBS:
+            continue
+        for n, it in enumerate(p['top']):
+            # alternate portrait (9:16) and landscape (16:9) to mimic real mixes
+            size = (450, 800) if n % 2 == 0 else (800, 450)
+            img = Image.new('RGB', size, palette.get(p['key'], (120, 120, 120)))
+            d = ImageDraw.Draw(img)
+            d.rectangle([12, 12, size[0] - 12, size[1] - 12], outline=(255, 255, 255), width=6)
+            d.text((28, 28), f"{p['name']}\n#{n+1}\n{size[0]}x{size[1]}", fill=(255, 255, 255))
+            fname = f"{p['key']}_{re.sub(r'[^A-Za-z0-9_-]', '_', it['id'])[:60]}.jpg"
+            img.save(os.path.join(THUMBS_DIR, fname), format='JPEG', quality=80)
+            it['thumb'] = fname
 
 
 # ---------------------------------------------------------------- render
 
 def render(context):
     from jinja2 import Environment, FileSystemLoader, select_autoescape
+    from markupsafe import Markup
     env = Environment(loader=FileSystemLoader(HERE),
                       autoescape=select_autoescape(['html', 'xml']))
-    # icons/svg are trusted markup we build ourselves -> mark safe
-    from markupsafe import Markup
     for c in context['platforms']:
         c['icon'] = Markup(c['icon'])
         c['icon_big'] = Markup(c['icon_big'])
@@ -1192,7 +1055,7 @@ def render(context):
     return html_path
 
 
-def to_pdf(html_path):
+def to_pdf(html_path, qa_all=False):
     from playwright.sync_api import sync_playwright
     pdf_path = os.path.join(OUT_DIR, "deck.pdf")
     with sync_playwright() as pw:
@@ -1206,9 +1069,9 @@ def to_pdf(html_path):
         page.wait_for_timeout(600)
         page.pdf(path=pdf_path, width='1920px', height='1080px',
                  print_background=True, scale=1)
-        # QA screenshots of the first two slides
         sections = page.query_selector_all('section.slide')
-        for i in range(min(2, len(sections))):
+        n = len(sections) if qa_all else min(2, len(sections))
+        for i in range(n):
             sections[i].screenshot(path=os.path.join(OUT_DIR, f"slide_{i+1}.png"))
         browser.close()
     print(f"   ✅ wrote {pdf_path}")
@@ -1219,28 +1082,40 @@ def to_pdf(html_path):
 
 def main():
     ap = argparse.ArgumentParser(description="Weekly social summary deck generator")
-    ap.add_argument('--mock', action='store_true', help="render with mock data (no creds/network)")
+    ap.add_argument('--extract', action='store_true', help="fetch data + thumbnails, write deck_content.json")
+    ap.add_argument('--render', action='store_true', help="render deck_content.json to HTML/PDF (offline)")
+    ap.add_argument('--mock', action='store_true', help="mock data (no creds/network)")
+    ap.add_argument('--thumbstyle', choices=['portrait', 'blur'], default='portrait',
+                    help="how highlight thumbnails are framed (default: portrait)")
     ap.add_argument('--no-thumbs', action='store_true', help="skip thumbnail downloads")
-    ap.add_argument('--no-gemini', action='store_true', help="skip Gemini, use computed insights")
+    ap.add_argument('--gemini', action='store_true', help="opt in to Gemini prose polish during extract")
+    ap.add_argument('--qa-all', action='store_true', help="screenshot every slide, not just the first two")
     args = ap.parse_args()
+
+    do_extract = args.extract or not args.render
+    do_render = args.render or not args.extract
 
     print(f"\n{'='*60}\n📊 Weekly Deck Generator — {datetime.now(IL_TZ):%Y-%m-%d %H:%M}\n{'='*60}\n")
 
-    if args.mock:
-        print("🧪 MOCK mode — no creds, no network.")
-        context = build_mock_context()
-    else:
-        print("📥 Loading data from Google Sheets...")
-        gc = get_client()
-        context = build_context(gc, use_gemini=not args.no_gemini,
-                                thumbs_enabled=not args.no_thumbs)
+    if do_extract:
+        if args.mock:
+            print("🧪 MOCK extract — no creds, no network.")
+            content = build_mock_content()
+        else:
+            print("📥 Extracting from Google Sheets...")
+            content = build_deck_content(get_client(), thumbs_enabled=not args.no_thumbs,
+                                         use_gemini=args.gemini)
+        save_content(content)
+        print("   ✏️  edit weekly_deck/out/deck_content.json, then re-run with --render")
 
-    print("🎨 Rendering template...")
-    html_path = render(context)
-    print("🖨️  Rendering PDF (Playwright)...")
-    pdf_path = to_pdf(html_path)
-
-    print(f"\n✅ Done. Open {pdf_path} to review the filled deck.")
+    if do_render:
+        print(f"🎨 Rendering (thumbstyle={args.thumbstyle})...")
+        content = load_content()
+        context = content_to_context(content, thumbstyle=args.thumbstyle)
+        html_path = render(context)
+        print("🖨️  Rendering PDF (Playwright)...")
+        pdf = to_pdf(html_path, qa_all=args.qa_all)
+        print(f"\n✅ Done. Open {pdf} to review the deck.")
 
 
 if __name__ == "__main__":
