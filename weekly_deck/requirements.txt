@@ -2,3 +2,4 @@
 # (gspread / pandas / google-genai / requests come from the root requirements.)
 jinja2>=3.1
 playwright>=1.40
+pillow-heif

@@ -182,6 +182,28 @@ def to_num(series):
 
 # ---------------------------------------------------------------- thumbnails
 
+RENDERABLE = {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
+
+
+def _to_renderable(content, ct):
+    """דפדפן לא מרנדר heic/avif (ה-CDN של טיקטוק מגיש heic גם בכתובות .jpeg,
+    לפי ה-content-type בפועל). ממירים ל-JPEG; אם אין ממיר - עדיף placeholder
+    מעוצב מתמונה שבורה, אז מחזירים None."""
+    if ct in RENDERABLE:
+        return content, ct
+    try:
+        from pillow_heif import register_heif_opener
+        register_heif_opener()
+        from PIL import Image
+        img = Image.open(io.BytesIO(content)).convert('RGB')
+        buf = io.BytesIO()
+        img.save(buf, format='JPEG', quality=85)
+        return buf.getvalue(), 'image/jpeg'
+    except Exception as e:
+        print(f"      cannot convert {ct} to jpeg: {e}")
+        return None, None
+
+
 def _download(url, headers=None, timeout=15):
     import requests
     try:
@@ -189,7 +211,9 @@ def _download(url, headers=None, timeout=15):
         if r.ok and r.content and r.headers.get('content-type', '').startswith('image'):
             ct = r.headers.get('content-type', 'image/jpeg').split(';')[0]
             if len(r.content) <= 4_000_000:
-                return "data:%s;base64,%s" % (ct, base64.b64encode(r.content).decode())
+                content, ct = _to_renderable(r.content, ct)
+                if content:
+                    return "data:%s;base64,%s" % (ct, base64.b64encode(content).decode())
     except Exception as e:
         print(f"      thumb download failed ({url[:60]}...): {e}")
     return None
