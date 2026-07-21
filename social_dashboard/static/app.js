@@ -48,6 +48,11 @@
     var s = fmt(n), m = s.match(/^([\d.]+)([KM])$/);
     return m ? m[1] + '<span class="unit">' + m[2] + "</span>" : s;
   }
+  // מספר מלא עם מפרידי אלפים (812,455 ולא 800K) - לשימוש בחלון הפירוט, שבו
+  // הנקודה היא לראות את המספר האמיתי. dir=ltr כדי שהמספר לא יישבר ב-RTL.
+  function fmtFull(n) {
+    return '<span dir="ltr">' + (Math.round(Number(n) || 0)).toLocaleString("en-US") + "</span>";
+  }
   function fmtDate(iso) {
     if (!iso) return "";
     var p = iso.split("-");
@@ -351,7 +356,7 @@
   // expose helpers
   window.KanSocial = app;
   window.KS = {
-    fmt: fmt, fmtHtml: fmtHtml, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc, mdInline: mdInline,
+    fmt: fmt, fmtHtml: fmtHtml, fmtFull: fmtFull, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc, mdInline: mdInline,
     fillIcon: fillIcon, strokeIcon: strokeIcon, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
     openModal: openModal, closeModal: closeModal, kmCell: kmCell, kmSection: kmSection, kmCmp: kmCmp,
     kmAnalysis: kmAnalysis, aiDot: aiDot,
