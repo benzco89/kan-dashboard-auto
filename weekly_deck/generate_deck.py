@@ -155,8 +155,17 @@ def fmt_date_range(d1, d2):
             f"{d2.day} ב{HEB_MONTHS[d2.month]} {d2.year}")
 
 
+# RTL captions wrap handles in bidi controls ("‪@itamar.margalit‬"),
+# which silently break handle matching. Stripped everywhere text is parsed.
+_BIDI_RE = re.compile('[​-‏‪-‮⁦-⁩؜]')
+
+
+def _strip_bidi(text):
+    return _BIDI_RE.sub('', str(text or ''))
+
+
 def clean_title(s, cap=100):
-    s = str(s or "").replace("\n", " ").replace("\r", " ").strip()
+    s = _strip_bidi(s).replace("\n", " ").replace("\r", " ").strip()
     s = " ".join(s.split())
     return s[:cap] if len(s) > cap else s
 
@@ -429,9 +438,10 @@ def reporter_fallback(text):
     if named:
         return named[-1]
 
-    for hm in re.finditer(r"@([A-Za-z0-9_]{2,30})", text):
-        if not _is_brand(hm.group(1)):
-            return "@" + hm.group(1)
+    for hm in re.finditer(r"@([A-Za-z0-9._]{2,30})", text):
+        handle = hm.group(1).rstrip('._')      # not the sentence's full stop
+        if len(handle) >= 2 and not _is_brand(handle):
+            return "@" + handle
     return ""
 
 
@@ -445,7 +455,7 @@ def headline_of(text, reporter="", cap=80):
     """The leading headline of a caption — what the table and cards show.
     Deliberately does NOT cut at ':' — in Kan headlines the colon is part of the
     headline ('פרסום ראשון: ...')."""
-    lines = [l for l in str(text or "").replace("\r", "\n").split("\n") if l.strip()]
+    lines = [l for l in _strip_bidi(text).replace("\r", "\n").split("\n") if l.strip()]
     s = lines[0] if lines else ""
     for ch in _HEADLINE_CUT_CHARS:
         i = s.find(ch)
@@ -614,7 +624,7 @@ def _resolve_detailed(text, rmap):
     """-> dict(name, source, others). `source` records HOW the credit was found
     so low-confidence guesses can be reviewed; `others` holds any additional
     trailing name (Kan usually lists reporter first, then photographer)."""
-    text = _strip_media_tail(text)
+    text = _strip_bidi(_strip_media_tail(text))
     blank = dict(name="", source="", others=[])
 
     role = _role_suffix_name(text)
