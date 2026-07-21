@@ -53,6 +53,7 @@ jobs:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}
+          GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python weekly_deck/generate_deck.py
 
