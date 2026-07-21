@@ -94,10 +94,16 @@ deterministically: a trailing `(שם כתב)` that looks like a 2–3-word Hebre
 or a bare `@handle`. A `צילום:` photographer is never treated as a reporter, and
 nothing is ever invented — unknowns stay empty for you to fill in.
 
-`reporters_map.json` (repo-tracked) maps `{"@handle": "שם בעברית"}` and is
-applied during extract. An **unmapped handle is left visible as `@handle`** in
-deck_content.json, so it is easy to spot and add to the map. Extracted names
-(not handles) fill the closing credits block.
+`reporters_map.json` (repo-tracked, **user-editable and meant to grow** — just
+add a line) maps `{"@handle": "שם בעברית"}` and is applied during extract. It
+ships seeded with the confirmed Kan handles. Matching is **case-insensitive**
+and works whether or not the caption wrote the leading `@` (`@ItayBlumental`,
+`@itayblumental` and a bare `ItayBlumental` all resolve). Bare handles are only
+matched against confirmed map entries — never guessed from arbitrary words.
+
+An **unmapped handle is left visible as `@handle`** in deck_content.json, so it
+is easy to spot and add to the map. Extracted names (not handles) fill the
+closing credits block.
 
 ## Thumbnails
 

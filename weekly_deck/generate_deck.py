@@ -391,23 +391,38 @@ def reporter_fallback(title):
 
 
 def load_reporters_map():
-    """{"@handle": "שם בעברית"} — repo-tracked, hand-maintained."""
+    """{"@handle": "שם בעברית"} — repo-tracked, hand-maintained, meant to grow.
+    Normalized to lowercase without the leading @, so lookups are
+    case-insensitive and work whether or not the caption wrote the @."""
     try:
         with open(REPORTERS_MAP_PATH, encoding='utf-8') as f:
             data = json.load(f)
-        return {str(k): str(v) for k, v in data.items()
-                if v and not str(k).startswith('_')}
     except Exception:
         return {}
+    out = {}
+    for k, v in data.items():
+        k = str(k).strip()
+        if v and not k.startswith('_'):
+            out[k.lstrip('@').lower()] = str(v)
+    return out
 
 
 def resolve_reporter(title, rmap):
-    """Extract, then map a known @handle to a Hebrew name. An unmapped handle is
-    left visible as-is so it can be spotted and added to reporters_map.json."""
+    """Extract a credit, then resolve a known handle to a Hebrew name.
+    An unmapped @handle is left visible as-is so it can be spotted and added to
+    reporters_map.json. Bare (un-@'d) handles are only matched against confirmed
+    map entries — never guessed from arbitrary words."""
+    title = str(title or "")
     rep = reporter_fallback(title)
     if rep.startswith('@'):
-        return rmap.get(rep, rep)
-    return rep
+        return rmap.get(rep[1:].lower(), rep)
+    if rep:
+        return rep
+    for handle, name in rmap.items():
+        if re.search(r'(?<![A-Za-z0-9_@])' + re.escape(handle) + r'(?![A-Za-z0-9_])',
+                     title, re.IGNORECASE):
+            return name
+    return ""
 
 
 # ---------------------------------------------------------------- per platform
