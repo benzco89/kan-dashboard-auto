@@ -7,23 +7,61 @@ days across YouTube / TikTok / Instagram / Facebook / X.
 Delivery is intentionally **not** wired up yet — the generator only produces
 files under `out/`. Distribution is decided after the deck is reviewed.
 
-## Run
+## The extract → edit → render loop
+
+The run is split so the **editorial layer is human-authored**. Nothing calls an
+LLM by default: every string and number in the deck comes from a text file you
+can fix by hand.
 
 ```bash
 pip install -r requirements.txt                 # repo root deps
-pip install -r weekly_deck/requirements.txt     # jinja2 + playwright
+pip install -r weekly_deck/requirements.txt     # jinja2 + playwright + pillow-heif
 playwright install chromium
 
-# realistic mock data — no creds, no network (main QA gate):
-python weekly_deck/generate_deck.py --mock
+# 1. EXTRACT — sheets + thumbnails + all the arithmetic
+python weekly_deck/generate_deck.py --extract
+#    -> out/deck_content.json   (the editable file, ~20KB, Hebrew readable)
+#    -> out/thumbs/<platform>_<id>.jpg
 
-# real data (needs GCP_SERVICE_ACCOUNT, FACEBOOK_TOKEN, TIKHUB_TOKEN, GEMINI_API_KEY):
-python weekly_deck/generate_deck.py
+# 2. EDIT  out/deck_content.json  by hand — titles, reporters, learnings,
+#    fun_fact.chosen, story_of_the_week, closing credits. It is plain UTF-8
+#    JSON with no base64 in it.
+
+# 3. RENDER — offline, instant, deterministic. Re-run this after every edit.
+python weekly_deck/generate_deck.py --render
 ```
 
-Outputs: `out/deck.html`, `out/deck.pdf`, and `out/slide_1.png` / `out/slide_2.png`
-QA screenshots. Flags: `--no-thumbs` (skip thumbnail downloads), `--no-gemini`
-(use the deterministic computed insights instead of Gemini).
+`--extract` and `--render` with no flag at all = both, in order. `--mock` runs
+the whole loop on hardcoded data with no creds and no network (the QA gate).
+
+Outputs: `out/deck.html`, `out/deck.pdf`, `out/slide_1.png` / `slide_2.png`
+(`--qa-all` screenshots every slide).
+
+Flags: `--thumbstyle portrait|blur` (see below) · `--no-thumbs` (skip downloads)
+· `--gemini` (opt in to an LLM rewrite of the learnings prose during extract —
+**off by default**, and it still never touches numbers).
+
+### What lives in deck_content.json
+
+```jsonc
+{
+  "window":  { "start", "end", "range_str", "range_short" },
+  "hero":    { "total_views", "delta_pct" },
+  "platforms": [{
+     "key", "name", "weekly_views", "delta_pct", "followers",
+     "fun_fact": { "chosen": "<label>", "candidates": [{ "label","value","suffix","text" }] },
+     "top": [{ "id","title","reporter","views","engagement","thumb" }]   // thumb = filename in out/thumbs/, or null
+  }],
+  "learnings": [{ "icon","number","color","title","sentence" }],          // 3-4 cards
+  "story_of_the_week": { "title","sentence","platforms":[{"name","views"}] } | null,
+  "closing": { "reporters": [...], "note" }
+}
+```
+
+Everything is derived at render time: platform order (by `weekly_views`), the
+`חריג` badges (engagement vs the week's median), number formatting, and the
+thumbnails (read from `out/thumbs/` and inlined as data URIs). So editing
+`weekly_views` reorders the deck; editing `engagement` re-flags anomalies.
 
 ## Window
 
@@ -37,11 +75,13 @@ prior Sun–Sat is the baseline for week-over-week deltas. Running Tue 2026-07-2
 - **Cover** — hero = sum of weekly views across platforms, delta vs the prior week.
 - **Overview** — platforms ranked by weekly views; bar width = share of the top platform.
 - **Per-platform slides** (dynamic order by views) — top-3 highlight cards + a
-  top-10 table (each row can carry a small leading thumbnail), `חריג` badges on
-  rows whose engagement beats the week's median for their view rank, and an
-  LLM-curated `נתון מעניין` (see below).
-- **מה למדנו** — 3 insights; stats are always computed, Gemini only rewrites the
-  Hebrew prose (deterministic fallback on any Gemini failure).
+  top-10 table (square leading thumbnails), `חריג` badges on rows whose
+  engagement beats the week's median for their view rank, and a `נתון מעניין`
+  picked from the platform's candidate list (`fun_fact.chosen`).
+- **מה למדנו** — 3–4 learning cards `{icon, number, color, title, sentence}`
+  plus an optional wider **story of the week** block that names one story and
+  shows its per-platform numbers. Authored in `deck_content.json`; the code only
+  seeds deterministic defaults.
 - **Closing** — sign-off, week dates, and the week's credited reporters.
 
 Platforms with no rows in the window keep their slide but show an honest empty
@@ -49,29 +89,41 @@ state (no fabricated numbers).
 
 ## Reporter credits (כתב/ת column)
 
-The sheets carry no author field, so reporters are extracted from captions: one
-Gemini batch call over all top-10 items across the 5 platforms returns a
-credited person per item (a `צילום:` photographer is NOT a reporter → null;
-never invented). On Gemini failure a deterministic fallback runs: a trailing
-`(שם כתב)` that looks like a 2–3-word Hebrew name, or a bare `@handle`.
-Extracted names (not @handles) also fill the closing credits block.
+The sheets carry no author field, so `--extract` pre-fills `reporter`
+deterministically: a trailing `(שם כתב)` that looks like a 2–3-word Hebrew name,
+or a bare `@handle`. A `צילום:` photographer is never treated as a reporter, and
+nothing is ever invented — unknowns stay empty for you to fill in.
 
-## Weekly-varying "נתון מעניין"
-
-Each platform computes 4–6 candidate facts deterministically (value + label +
-default sentence). One Gemini call picks the most newsworthy candidate per
-platform and phrases it, but must copy the headline number **verbatim** from the
-chosen candidate — validated in code (the number must equal one of that
-candidate's values), else it falls back to the platform default (candidate[0],
-== the previous fixed fact). The model never touches arithmetic, so the deck
-varies week to week with the numbers still trustworthy.
+`reporters_map.json` (repo-tracked) maps `{"@handle": "שם בעברית"}` and is
+applied during extract. An **unmapped handle is left visible as `@handle`** in
+deck_content.json, so it is easy to spot and add to the map. Extracted names
+(not handles) fill the closing credits block.
 
 ## Thumbnails
 
-Top-10 rows on all 5 platforms: YouTube (`i.ytimg.com`, free), Facebook/
-Instagram (Graph v24), TikTok (TikHub covers, heic→jpeg converted), **X
-(GetXAPI** `/twitter/user/tweets`, `GETXAPI_KEY`). Each downloaded to a data URI
-(heic-safe), graceful placeholder on failure. ~50 fetches/run.
+`--extract` downloads top-10 thumbnails per platform into `out/thumbs/` as
+files; `--render` inlines them as data URIs. Sources: YouTube (`i.ytimg.com`,
+free), Facebook / Instagram (Graph v24), TikTok (TikHub covers, heic→jpeg
+converted). Failures degrade to a styled placeholder.
+
+**X has no thumbnails by design** — the media is usually irrelevant, so the X
+highlight cards are text-forward instead (the tweet is the hero, no grey box).
+
+### `--thumbstyle`
+
+Content is mixed *per item* (a YouTube top-3 can hold one Short and two
+landscape videos), so both variants are per-item agnostic:
+
+- **`portrait`** (default) — the highlight slot is a true 4:5 portrait
+  (272×340), `object-fit:cover` anchored `center top` so faces and on-screen
+  headlines survive. Cards are narrower, so the slide is rebalanced: cards sit
+  beside a wide `נתון מעניין` panel and the top-10 table runs full width below.
+- **`blur`** — keeps the original wide 16:9 slot, but the image is `contain`ed
+  at full frame over a blurred, scaled-up, darkened copy of itself. **Nothing is
+  ever cropped.**
+
+Table row thumbnails are square (1:1, 26px) in both variants — squares degrade
+gracefully for any source ratio at that size.
 
 ## Fonts (licensed — never committed)
 
