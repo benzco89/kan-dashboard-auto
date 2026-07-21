@@ -45,6 +45,8 @@ FB_API_VERSION = "v24.0"
 FOLLOWERS_SHEET = "מעקב עוקבים"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# הסקריפט יושב בתת-תיקייה; ה-utils של הריפו (http_get_json) יושב בשורש
+sys.path.insert(0, os.path.dirname(HERE))
 FONTS_DIR = os.path.join(HERE, "design", "fonts")
 ASSETS_DIR = os.path.join(HERE, "design", "assets")
 OUT_DIR = os.path.join(HERE, "out")
