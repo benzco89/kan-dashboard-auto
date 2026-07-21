@@ -317,7 +317,7 @@ def _x_media_url(tweet):
     return None
 
 
-def x_thumb_map(wanted_ids, token, max_pages=15):
+def x_thumb_map(wanted_ids, token, max_pages=25):
     """Map tweet_id -> media data URI via GetXAPI (same contract as
     twitter_collector.get_tweets: tweets[] + has_more + next_cursor)."""
     import re as _re
@@ -361,10 +361,17 @@ def x_thumb_map(wanted_ids, token, max_pages=15):
                     du = _download(url)
                     if du:
                         covers[tid] = du
+                else:
+                    # אבחון: הציוץ נמצא אבל בלי URL מדיה - מדפיסים את המבנה
+                    media = t.get("media")
+                    print(f"      x thumb: matched {tid} but no media url; "
+                          f"media={type(media).__name__} "
+                          f"keys={sorted((media or [{}])[0].keys()) if isinstance(media, list) and media else media}")
                 wanted.discard(tid)
         if not data.get("has_more") or not data.get("next_cursor"):
             break
         cursor = data["next_cursor"]
+    print(f"      x thumbs: {len(covers)} fetched, {len(wanted)} tweet ids never seen in feed")
     return covers
 
 
