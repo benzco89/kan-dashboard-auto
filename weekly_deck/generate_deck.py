@@ -822,6 +822,34 @@ def logo_data_uri():
     return None
 
 
+# Short Hebrew labels for the secondary candidate list in the fun-fact panel.
+# Keyed on the candidate `label` in deck_content.json, so the JSON needs no
+# re-extract when this list changes.
+CAND_LABEL_HE = {
+    'shorts_share': 'נתח Shorts',
+    'reels_share': 'נתח Reels',
+    'reply_share': 'נתח תגובות',
+    'whatsapp': 'שיתופים לוואטסאפ',
+    'likes_total': 'לייקים',
+    'comments_total': 'תגובות',
+    'comments': 'תגובות',
+    'shares': 'שיתופים',
+    'saves': 'שמירות',
+    'reach': 'חשיפה',
+    'retweets': 'ריטוויטים',
+    'quotes': 'ציטוטים',
+    'overperformer': 'המוביל מול החציון',
+    'eng_leader': 'שיא מעורבות',
+}
+
+
+def _cand_label(c):
+    lbl = CAND_LABEL_HE.get(c.get('label'))
+    if lbl:
+        return lbl
+    return " ".join(str(c.get('text', '')).split()[:3]) or str(c.get('label', ''))
+
+
 def _mark_anomalies(rows):
     """Ranks 4+ whose engagement clearly beats the week's median."""
     if len(rows) < 4:
@@ -866,6 +894,10 @@ def content_to_context(content, thumbstyle='portrait'):
         ff = p.get('fun_fact') or {}
         cands = ff.get('candidates') or []
         chosen = next((c for c in cands if c.get('label') == ff.get('chosen')), None) or (cands[0] if cands else None)
+        # the runners-up fill the panel with real per-platform numbers instead
+        # of whitespace; the chosen fact stays the hero
+        more = [dict(label=_cand_label(c), value=c.get('value', ''), suffix=c.get('suffix', ''))
+                for c in cands if c is not chosen][:3]
 
         platforms.append(dict(
             key=key, name=p.get('name', meta['name']), colors=meta['colors'],
@@ -878,7 +910,8 @@ def content_to_context(content, thumbstyle='portrait'):
             top3=top3, top10=rows,
             has_anomaly=any(r['anomaly'] for r in rows),
             fun_fact=(dict(value=chosen['value'], suffix=chosen.get('suffix', ''),
-                           text=chosen.get('text', '')) if chosen else None)))
+                           text=chosen.get('text', '')) if chosen else None),
+            fun_fact_more=more))
 
     hero = content.get('hero', {})
     hd = build_delta(hero.get('delta_pct'))
