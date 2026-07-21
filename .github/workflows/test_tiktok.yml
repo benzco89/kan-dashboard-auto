@@ -33,3 +33,13 @@ jobs:
           TIKTOK_USERNAME: kan_news
           TIKTOK_DAYS_BACK: ${{ inputs.days_back }}
         run: python tiktok_collector.py
+
+      # מעקב עוקבים עם כל הטוקנים (כדי שלא נמחק yt/fb/ig) + TikHub לעוקבי טיקטוק
+      - name: Run Followers Tracker
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}
+          TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}
+        run: python followers_tracker.py
