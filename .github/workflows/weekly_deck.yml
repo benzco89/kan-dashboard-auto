@@ -1,0 +1,65 @@
+name: Weekly Deck (manual)
+
+# Manual-only for now: fills the approved 16:9 design with real weekly data and
+# uploads the rendered HTML+PDF as an artifact for review. No scheduling and no
+# Telegram delivery — distribution is decided later, after the deck is reviewed.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build weekly deck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r weekly_deck/requirements.txt
+
+      - name: Install Playwright Chromium
+        run: playwright install --with-deps chromium
+
+      # Licensed SimplerPro fonts live only on the VPS. A restricted deploy key
+      # (repo secret FONTS_SSH_KEY) is forced to a single command that streams a
+      # tar of the fonts dir — it cannot open a shell or read anything else. The
+      # host key is pinned (no TOFU). Extracts into weekly_deck/design/fonts/.
+      - name: Fetch brand fonts from VPS
+        env:
+          FONTS_SSH_KEY: ${{ secrets.FONTS_SSH_KEY }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$FONTS_SSH_KEY" > "$HOME/.ssh/fonts_key"
+          chmod 600 "$HOME/.ssh/fonts_key"
+          printf '%s\n' '46.224.228.163 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGh738wuwq++648i2+/OaM9m74Inl2wDteXhBXHltUzv' > "$HOME/.ssh/known_hosts_fonts"
+          ssh -i "$HOME/.ssh/fonts_key" \
+              -o IdentitiesOnly=yes \
+              -o UserKnownHostsFile="$HOME/.ssh/known_hosts_fonts" \
+              -o StrictHostKeyChecking=yes \
+              root@46.224.228.163 fetch | tar -x -C weekly_deck/design/
+          echo "Fonts fetched:"; ls -la weekly_deck/design/fonts/
+
+      - name: Generate deck
+        env:
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python weekly_deck/generate_deck.py
+
+      - name: Upload deck artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-deck
+          path: weekly_deck/out/
+          if-no-files-found: warn
