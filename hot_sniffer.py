@@ -18,6 +18,7 @@ Hot Sniffer - זיהוי תוך-יומי של פוסט שמתפוצץ עכשיו
 הפוסט מיד מהמילים של עצמו, ופרפרזה של מודל רק מוסיפה שכבת עיוות אפשרית.
 
 Env: FACEBOOK_TOKEN, GCP_SERVICE_ACCOUNT, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID.
+     TIKHUB_TOKEN - אופציונלי: בלעדיו טיקטוק פשוט מדולג (best-effort כמו בפייפליין).
      DRY_RUN=1 - מצב בדיקה: מדפיס את ההודעה בלי לשלוח ובלי לרשום דה-דופ.
      TEST_MULT - דריסת מכפיל הסף לבדיקות (למשל 0.1 כדי לאלץ התראות).
 """
@@ -50,13 +51,21 @@ PAGE_ID = os.environ.get('FACEBOOK_PAGE_ID') or "220634478361516"
 API_VERSION = "v25.0"
 BASE = f"https://graph.facebook.com/{API_VERSION}"
 
+TIKHUB_TOKEN = os.environ.get('TIKHUB_TOKEN')
+TIKTOK_USERNAME = os.environ.get('TIKTOK_USERNAME', 'kan_news')
+# secUid יציב לחשבון; קבוע כדי לחסוך קריאת פרופיל בכל ריצה (דריסה ב-env)
+TIKTOK_SEC_UID = os.environ.get(
+    'TIKTOK_SEC_UID',
+    'MS4wLjABAAAA3p5tyX2Z3cacCWU34-nHbK-dpVBO5Y6IGvTj9xufL60rC6ItchtdzkEe-0frXJZX')
+
 SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
 STATE_SHEET = "hot_alerts"
 STATE_HEADER = ['post_id', 'platform', 'alerted_at', 'triggers', 'permalink']
 
 IL_TZ = pytz.timezone('Asia/Jerusalem')
 
-HOT_COMMENTS = {'instagram': 600, 'facebook': 1000}  # = 2x רצפת comment_analyzer
+# = 2x רצפת comment_analyzer לכל פלטפורמה (טיקטוק: רצפה 200, כויל 2026-07-21)
+HOT_COMMENTS = {'instagram': 600, 'facebook': 1000, 'tiktok': 400}
 BASELINE_MULT = float(os.environ.get('TEST_MULT') or 1.5)  # "חם" = פי-1.5 מ-p90
 BASELINE_DAYS = 7
 YOUNG_HOURS = 24
@@ -98,7 +107,8 @@ def get_baselines(sh):
     """p90 של 7 ימים לכל פלטפורמה, מהגיליונות שהפייפליין כבר מתחזק (קריאה בלבד)."""
     cutoff = (datetime.now(IL_TZ) - timedelta(days=BASELINE_DAYS)).strftime('%Y-%m-%d')
     out = {}
-    for plat, sheet in (('instagram', 'נתוני אינסטגרם'), ('facebook', 'נתוני פייסבוק')):
+    for plat, sheet in (('instagram', 'נתוני אינסטגרם'), ('facebook', 'נתוני פייסבוק'),
+                        ('tiktok', 'נתוני טיקטוק')):
         rows = [r for r in sh.worksheet(sheet).get_all_records()
                 if str(r.get('date', ''))[:10] >= cutoff]
         out[plat] = {
@@ -197,6 +207,42 @@ def fetch_young_facebook():
     return posts
 
 
+def fetch_young_tiktok():
+    """סרטונים אחרונים + ספירות חיות מ-TikHub - קריאה אחת (עמוד ראשון, 20 סרטונים).
+    בלי טוקן - מדלגים בשקט; כשל API לא מפיל את שאר הפלטפורמות (נתפס ב-main)."""
+    if not TIKHUB_TOKEN:
+        print("⚠️ Missing TIKHUB_TOKEN - skipping TikTok")
+        return []
+
+    res = http_get_json(
+        "https://api.tikhub.io/api/v1/tiktok/app/v3/fetch_user_post_videos",
+        headers={"Authorization": f"Bearer {TIKHUB_TOKEN}"},
+        params={'sec_user_id': TIKTOK_SEC_UID, 'max_cursor': 0, 'count': 20, 'sort_type': 0},
+    )
+    cutoff = datetime.now(IL_TZ) - timedelta(hours=YOUNG_HOURS)
+    posts = []
+    for v in ((res.get('data') or {}).get('aweme_list') or []):
+        ts = v.get('create_time')
+        if not ts:
+            continue
+        posted = datetime.fromtimestamp(int(ts), tz=pytz.utc).astimezone(IL_TZ)
+        if posted < cutoff:
+            continue
+        s = v.get('statistics') or {}
+        vid = str(v.get('aweme_id', ''))
+        posts.append({
+            'id': vid, 'platform': 'tiktok',
+            'title': (v.get('desc') or '').replace('\n', ' ')[:200],
+            'posted': posted,
+            'permalink': f"https://www.tiktok.com/@{TIKTOK_USERNAME}/video/{vid}",
+            'views': s.get('play_count', 0) or 0,
+            'likes': s.get('digg_count', 0) or 0,
+            'comments': s.get('comment_count', 0) or 0,
+            'shares': s.get('share_count', 0) or 0,
+        })
+    return posts
+
+
 def check_triggers(post, baseline):
     """אילו ספים הפוסט חצה. מחזיר רשימת תיאורים להתראה (ריק = לא חם)."""
     trig = []
@@ -234,6 +280,10 @@ def main():
     print(f"📋 {len(alerted_ids)} posts already alerted\n")
 
     young = fetch_young_instagram() + fetch_young_facebook()
+    try:
+        young += fetch_young_tiktok()
+    except Exception as e:  # ספק לא-רשמי, best-effort - לא מפיל את IG/FB
+        print(f"⚠️ TikTok fetch failed (skipping): {e}")
     print(f"🔎 {len(young)} posts younger than {YOUNG_HOURS}h")
 
     hot = []
@@ -248,7 +298,7 @@ def main():
         print("ℹ️ Nothing exploding right now.")
         return
 
-    plat_he = {'instagram': '📸 אינסטגרם', 'facebook': '📘 פייסבוק'}
+    plat_he = {'instagram': '📸 אינסטגרם', 'facebook': '📘 פייסבוק', 'tiktok': '🎵 טיקטוק'}
     blocks = []
     state_rows = []
     for post, triggers in hot:

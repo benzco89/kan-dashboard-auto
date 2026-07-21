@@ -107,6 +107,7 @@ jobs:
         env:
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python comment_analyzer.py

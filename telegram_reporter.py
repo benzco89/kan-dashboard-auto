@@ -37,6 +37,22 @@ def get_sheet_client():
     return gspread.authorize(creds)
 
 
+def _clean_title(t, limit=150):
+    """כותרת בטוחה לפרומפט: בלי סוגריים מרובעים/עגולים שמפרקים את קישורי
+    ה-Markdown שהדוח בונה ([כותרת](LINK)), ובלי קפשנים באורך קילומטר."""
+    t = str(t or '').replace('[', '').replace(']', '').replace('(', '').replace(')', '').strip()
+    return t[:limit] + ('…' if len(t) > limit else '')
+
+
+def _daily_baseline(df, date_col, value_col, today_str, days=7):
+    """ממוצע יומי של מטריקה בשבוע האחרון - בסיס להשוואה עבור ה-AI."""
+    if df.empty or date_col not in df.columns or value_col not in df.columns:
+        return 0
+    cutoff = (datetime.strptime(today_str, '%Y-%m-%d') - timedelta(days=days)).strftime('%Y-%m-%d')
+    recent = df[(df[date_col].astype(str) >= cutoff) & (df[date_col].astype(str) < today_str)]
+    return int(recent[value_col].sum() / days) if not recent.empty else 0
+
+
 def get_youtube_data():
     """שליפת נתוני יוטיוב מהגיליון"""
     try:
@@ -91,6 +107,24 @@ def get_instagram_data():
         return pd.DataFrame()
 
 
+def get_tiktok_data():
+    """שליפת נתוני טיקטוק מהגיליון"""
+    try:
+        gc = get_sheet_client()
+        sh = gc.open_by_url(SPREADSHEET_URL)
+        worksheet = sh.worksheet('נתוני טיקטוק')
+        df = pd.DataFrame(worksheet.get_all_records())
+        if not df.empty:
+            for col in ('views', 'views_delta', 'likes', 'comments', 'shares',
+                        'whatsapp_shares', 'saves', 'engagement_rate'):
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        return df
+    except Exception as e:
+        print(f"Error fetching TikTok data: {e}")
+        return pd.DataFrame()
+
+
 def get_followers_data():
     """שליפת נתוני עוקבים מהגיליון"""
     try:
@@ -131,7 +165,7 @@ def summarize_youtube(df, yesterday_date):
             like_rate = round(row.get('like_rate', 0), 1)
             # פורמט מורחב לניתוח AI
             video_url = row.get('video_url', '')
-            top_new += f"• {row['title']} | {row.get('video_type', 'רגיל')} | {int(row['views']):,} צפיות | {likes:,} לייקים ({like_rate}%) | {comments} תגובות | LINK: {video_url}\n"
+            top_new += f"• {_clean_title(row['title'])} | {row.get('video_type', 'רגיל')} | {int(row['views']):,} צפיות | {likes:,} לייקים ({like_rate}%) | {comments} תגובות | LINK: {video_url}\n"
     
     # סרטונים ישנים עם דלתא גבוהה
     top_delta = ""
@@ -150,7 +184,7 @@ def summarize_youtube(df, yesterday_date):
             old_videos = old_videos[old_videos['views_delta'] >= 5000].sort_values('views_delta', ascending=False)
             for _, row in old_videos.head(3).iterrows():
                 video_url = row.get('video_url', '')
-                top_delta += f"• {row['title']} | מ-{row['published_at']} | +{int(row['views_delta']):,} צפיות חדשות | LINK: {video_url}\n"
+                top_delta += f"• {_clean_title(row['title'])} | מ-{row['published_at']} | +{int(row['views_delta']):,} צפיות חדשות | LINK: {video_url}\n"
     
     return f"""סרטונים חדשים: {new_count}
 סה"כ צפיות חדשות: {total_views_new:,}
@@ -190,7 +224,7 @@ def summarize_facebook(df, yesterday_date):
     if not new_yesterday.empty:
         new_yesterday = new_yesterday.sort_values('reach', ascending=False)
         for _, row in new_yesterday.head(5).iterrows():
-            title = (row.get('title', '') or '')
+            title = _clean_title(row.get('title', ''))
             likes = int(row.get('likes', 0))
             comments = int(row.get('comments', 0))
             shares = int(row.get('shares', 0))
@@ -235,7 +269,7 @@ def summarize_instagram(df, yesterday_date):
     if not new_yesterday.empty:
         new_yesterday = new_yesterday.sort_values('views', ascending=False)
         for _, row in new_yesterday.head(5).iterrows():
-            caption = (row.get('caption', '') or '')
+            caption = _clean_title(row.get('caption', ''))
             likes = int(row.get('likes', 0))
             comments = int(row.get('comments', 0))
             saved = int(row.get('saved', 0))
@@ -262,6 +296,65 @@ def summarize_instagram(df, yesterday_date):
 {top_posts if top_posts else "אין פוסטים חדשים"}"""
 
 
+def summarize_tiktok(df, yesterday_date):
+    """יצירת סיכום טיקטוק לפרומפט - כולל מטריקות מעורבות לניתוח AI"""
+    if df.empty:
+        return "אין נתונים"
+
+    new_yesterday = df[df['date'] == yesterday_date].copy()
+    new_count = len(new_yesterday)
+    total_views = int(new_yesterday['views'].sum()) if not new_yesterday.empty else 0
+    total_likes = int(new_yesterday['likes'].sum()) if 'likes' in new_yesterday.columns and not new_yesterday.empty else 0
+    total_comments = int(new_yesterday['comments'].sum()) if 'comments' in new_yesterday.columns and not new_yesterday.empty else 0
+    total_shares = int(new_yesterday['shares'].sum()) if 'shares' in new_yesterday.columns and not new_yesterday.empty else 0
+    total_wa = int(new_yesterday['whatsapp_shares'].sum()) if 'whatsapp_shares' in new_yesterday.columns and not new_yesterday.empty else 0
+    total_saves = int(new_yesterday['saves'].sum()) if 'saves' in new_yesterday.columns and not new_yesterday.empty else 0
+
+    avg_engagement = 0
+    if 'engagement_rate' in new_yesterday.columns and not new_yesterday.empty:
+        avg_engagement = round(new_yesterday['engagement_rate'].mean(), 2)
+
+    # טופ 5 לפי views - עם מטריקות מעורבות לניתוח
+    top_posts = ""
+    if not new_yesterday.empty:
+        new_yesterday = new_yesterday.sort_values('views', ascending=False)
+        for _, row in new_yesterday.head(5).iterrows():
+            title = _clean_title(row.get('title', ''))
+            likes = int(row.get('likes', 0))
+            comments = int(row.get('comments', 0))
+            shares = int(row.get('shares', 0))
+            wa = int(row.get('whatsapp_shares', 0))
+            saves = int(row.get('saves', 0))
+            eng_rate = round(row.get('engagement_rate', 0), 1)
+            permalink = row.get('permalink', '')
+            top_posts += f"• {title} | {int(row['views']):,} views | לייקים: {likes:,} | תגובות: {comments} | שיתופים: {shares} (מתוכם {wa} לוואטסאפ) | שמירות: {saves} | מעורבות: {eng_rate}% | LINK: {permalink}\n"
+
+    # סרטונים ישנים (2-7 ימים, חלון האיסוף) שממשיכים לצבור צפיות.
+    # רצפה 25K: סרטון טיקטוק ממוצע אצלנו עושה ~130K כוללות, כך שדלתא יומית
+    # של 25K+ על סרטון ישן היא באמת המשך-הדהוד ולא שאריות אלגוריתם.
+    top_delta = ""
+    if 'views_delta' in df.columns:
+        old_videos = df[df['date'] < yesterday_date].copy()
+        if 'pulled_at' in old_videos.columns:
+            old_videos = old_videos[old_videos['pulled_at'].astype(str).str[:10] >= yesterday_date]
+        if not old_videos.empty:
+            old_videos = old_videos[old_videos['views_delta'] >= 25000].sort_values('views_delta', ascending=False)
+            for _, row in old_videos.head(3).iterrows():
+                permalink = row.get('permalink', '')
+                top_delta += f"• {row.get('title', '')} | מ-{row['date']} | +{int(row['views_delta']):,} צפיות חדשות | LINK: {permalink}\n"
+
+    return f"""סרטונים חדשים: {new_count}
+סה"כ צפיות: {total_views:,}
+מעורבות: {total_likes:,} לייקים | {total_comments:,} תגובות | {total_shares:,} שיתופים (מתוכם {total_wa:,} לוואטסאפ) | {total_saves:,} שמירות
+ממוצע engagement rate: {avg_engagement}%
+
+טופ סרטונים (כולל מעורבות):
+{top_posts if top_posts else "אין סרטונים חדשים"}
+
+סרטונים ישנים שממשיכים לצבור צפיות (25,000+ ביום; אם ריק - אל תזכיר סרטונים ישנים בכלל):
+{top_delta if top_delta else "אין - אף סרטון ישן לא צבר צפיות משמעותיות אתמול"}"""
+
+
 def get_followers_summary(df):
     """יצירת סיכום עוקבים"""
     if df.empty:
@@ -273,12 +366,14 @@ def get_followers_summary(df):
     yt = latest.get('yt_subscribers', 0)
     fb = latest.get('fb_followers', 0)
     ig = latest.get('ig_followers', 0)
-    
-    return f"YouTube: {int(yt):,} | Facebook: {int(fb):,} | Instagram: {int(ig):,}"
+    tt = latest.get('tt_followers', 0) or 0
+
+    return f"YouTube: {int(yt):,} | Facebook: {int(fb):,} | Instagram: {int(ig):,} | TikTok: {int(tt):,}"
 
 
-def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagram_summary, 
-                                       followers_summary, yesterday_date, report_time):
+def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagram_summary,
+                                       tiktok_summary, followers_summary, baseline_summary,
+                                       yesterday_date, report_time):
     """ניתוח מאוחד של כל הפלטפורמות עם Gemini"""
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key: 
@@ -307,8 +402,16 @@ def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagr
 📷 Instagram:
 {instagram_summary}
 
+🎵 TikTok:
+{tiktok_summary}
+
 📊 עוקבים:
 {followers_summary}
+
+=== 📐 בסיס להשוואה - ממוצע יומי בשבוע האחרון ===
+{baseline_summary}
+כשאתה שופט אם יום/פוסט "הצליח" - השווה למספרים האלה, לא לתחושת בטן.
+יום שעקף את הממוצע השבועי משמעותית = יום חזק; יום מתחתיו = חלש, וזה בסדר לומר.
 
 === 📝 מבנה הדוח ===
 
@@ -342,6 +445,14 @@ def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagr
 - מוביל 2: [שם](LINK) | סוג | views
 - מוביל 3: [שם](LINK) | סוג | views
 💡 תובנה במשפט אחד (אפשר להזכיר שמירות/תגובות חריגות אם יש)
+
+🎵 TikTok
+━━━━━━━━━━━━━━━━━
+- כמה סרטונים | צפיות כולל
+- מוביל 1: [שם](LINK) | views
+- מוביל 2: [שם](LINK) | views
+- מוביל 3: [שם](LINK) | views
+💡 תובנה במשפט אחד (שיתופים לוואטסאפ הם מדד ייחודי לטיקטוק - אם יש סרטון עם הרבה שיתופי וואטסאפ, זה סימן שהסיפור "עובר בקבוצות" - שווה לציין)
 
 🔥 3 תובנות חוצות פלטפורמות
 ━━━━━━━━━━━━━━━━━
@@ -553,24 +664,39 @@ def generate_unified_report():
     instagram_df = get_instagram_data()
     print(f"   Found {len(instagram_df)} posts")
     
+    print("🎵 Fetching TikTok data...")
+    tiktok_df = get_tiktok_data()
+    print(f"   Found {len(tiktok_df)} videos")
+
     print("📊 Fetching followers data...")
     followers_df = get_followers_data()
     print(f"   Found {len(followers_df)} rows")
-    
+
     # יצירת סיכומים
     print("\n📝 Creating summaries...")
     youtube_summary = summarize_youtube(youtube_df, yesterday)
     facebook_summary = summarize_facebook(facebook_df, yesterday)
     instagram_summary = summarize_instagram(instagram_df, yesterday)
+    tiktok_summary = summarize_tiktok(tiktok_df, yesterday)
     followers_summary = get_followers_summary(followers_df)
-    
+
+    today = now.strftime('%Y-%m-%d')
+    baseline_summary = (
+        f"YouTube: {_daily_baseline(youtube_df, 'published_at', 'views', today):,} צפיות/יום | "
+        f"Facebook: {_daily_baseline(facebook_df, 'date', 'reach', today):,} reach/יום | "
+        f"Instagram: {_daily_baseline(instagram_df, 'date', 'views', today):,} צפיות/יום | "
+        f"TikTok: {_daily_baseline(tiktok_df, 'date', 'views', today):,} צפיות/יום"
+    )
+
     # ניתוח עם Gemini
     print("\n🤖 Analyzing with Gemini...")
     report = analyze_all_platforms_with_gemini(
-        youtube_summary, 
-        facebook_summary, 
+        youtube_summary,
+        facebook_summary,
         instagram_summary,
+        tiktok_summary,
         followers_summary,
+        baseline_summary,
         yesterday,
         report_time
     )

@@ -9,6 +9,9 @@ Comment Analyzer - ניתוח Gemini של תגובות לפוסטים "מדוב�
 כלל הבחירה, לכל פלטפורמה בנפרד (כויל מול נתוני אמת 2026-07-13):
   אינסטגרם: רצפה 300 תגובות (~p80; חציון 95, p90 500) -> ~2 פוסטים ביום.
   פייסבוק:  רצפה 500 תגובות (~p76; חציון 151, p90 1087) -> ~4 פוסטים ביום.
+  טיקטוק:   רצפה 200 תגובות (~p81; חציון 50, p90 383, כויל 2026-07-21 על חודש
+            backfill) -> ~סרטון ביום. תגובות דרך TikHub, בלי replies (עולה
+            קריאה נפרדת לכל תגובה ולא מצדיק את העלות).
   גיל מינימלי 24 שעות - שרשור מתייצב אחרי יום-יומיים; ניתוח מוקדם תופס
   חצי שיחה. חריג "חם עכשיו": פוסט צעיר מ-24ש נכנס אם עבר פי-2 מהרצפה -
   שיחה בסדר גודל כזה תוך שעות שווה מבט מיידי.
@@ -45,6 +48,7 @@ except Exception:
 # --- Config ---
 ACCESS_TOKEN = os.environ.get('FACEBOOK_TOKEN')
 YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY')
+TIKHUB_TOKEN = os.environ.get('TIKHUB_TOKEN')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 API_VERSION = "v25.0"
 BASE = f"https://graph.facebook.com/{API_VERSION}"
@@ -89,6 +93,17 @@ PLATFORMS = [
         'type_col': 'video_type', 'url_col': 'video_url',
         'floor': 200,
         'text_field': None,        # לא Graph API - יש פוצ'ר ייעודי
+    },
+    {
+        'key': 'tiktok',
+        'label': 'טיקטוק',
+        'sheet': 'נתוני טיקטוק',
+        'id_col': 'video_id',
+        'caption_col': 'title',
+        'date_col': 'date', 'time_col': 'time',
+        'type_col': 'type', 'url_col': 'permalink',
+        'floor': 200,
+        'text_field': None,        # לא Graph API - פוצ'ר ייעודי דרך TikHub
     },
 ]
 
@@ -239,6 +254,36 @@ def fetch_youtube_comments(video_id):
     return comments
 
 
+def fetch_tiktok_comments(video_id):
+    """שרשור תגובות טיקטוק דרך TikHub (pay-per-call, ~10 תגובות לקריאה).
+    בלי replies - כל שרשור תשובות הוא קריאה נפרדת בתשלום ולא מצדיק את עצמו;
+    ה-digg_count של תגובות-האם מספיק לדירוג בפרומפט."""
+    comments = []
+    cursor = 0
+    for _ in range(60):  # תקרת עמודים = תקרת עלות (~6 סנט לסרטון מנותח)
+        res = http_get_json(
+            "https://api.tikhub.io/api/v1/tiktok/web/fetch_post_comment",
+            headers={"Authorization": f"Bearer {TIKHUB_TOKEN}"},
+            params={'aweme_id': video_id, 'cursor': cursor, 'count': 50},
+            timeout=20, max_retries=2)
+        data = res.get('data') or {}
+        batch = data.get('comments') or []
+        if not batch:
+            if res.get('detail'):
+                print(f"⚠️ TikTok comments error for {video_id}: {str(res['detail'])[:120]}")
+            break
+        for c in batch:
+            comments.append({
+                'text': c.get('text', '') or '',
+                'like_count': c.get('digg_count', 0) or 0,
+                'replies': [],
+            })
+        if len(comments) >= MAX_COMMENTS_PULLED or not data.get('has_more'):
+            break
+        cursor = data.get('cursor', 0)
+    return comments
+
+
 # שני מדדים נפרדים, כל אחד עם ציר מוגדר (גלגול שלישי של ההגדרה - ההיסטוריה
 # חשובה): ציר לא מוגדר נתן למודל לבחור לבד (כתבת "המעיין" יצאה 80% חיובי
 # כשהקהל זעם על הסיקור); ציר "יחס לסיקור" היה מוגדר אבל דל - רוב המגיבים
@@ -323,6 +368,9 @@ def run_platform(sh, client, plat, analyzed_ids):
     if plat['key'] == 'youtube' and not YOUTUBE_API_KEY:
         print("⚠️ youtube: YOUTUBE_API_KEY missing - skipping platform")
         return [], 0
+    if plat['key'] == 'tiktok' and not TIKHUB_TOKEN:
+        print("⚠️ tiktok: TIKHUB_TOKEN missing - skipping platform")
+        return [], 0
     rows = sh.worksheet(plat['sheet']).get_all_records()
     candidates = pick_candidates(rows, plat, analyzed_ids)
     if not candidates:
@@ -338,6 +386,8 @@ def run_platform(sh, client, plat, analyzed_ids):
         try:
             if plat['key'] == 'youtube':
                 comments = fetch_youtube_comments(item_id)
+            elif plat['key'] == 'tiktok':
+                comments = fetch_tiktok_comments(item_id)
             else:
                 comments = fetch_comments(item_id, plat['text_field'])
             if len(comments) < 20:

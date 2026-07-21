@@ -88,7 +88,7 @@
       var pin = p.is_pinned ? '<span class="tag" style="color:var(--amber);margin-inline-start:6px;">📌 נעוץ</span>' : "";
       return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" data-idx="' + idx + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
         '<span class="cell" style="' + rankStyle + '">' + rank + '</span>' +
-        '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + '</span><span class="t-date">' + KS.fmtDate(p.date) + pin + '</span></span>' +
+        '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + '</span><span class="t-date">' + KS.fmtDate(p.date) + pin + KS.aiDot(p) + '</span></span>' +
         '<span class="center"><span class="tag" style="color:' + (TYPE_COLOR[p.type] || "var(--muted)") + ';">' + (TYPE_HE[p.type] || p.type) + '</span></span>' +
         '<span class="cell strong">' + KS.fmt(p.views) + '</span>' +
         '<span class="cell">' + KS.fmt(p.likes) + '</span>' +
@@ -126,7 +126,7 @@
       KS.openModal({
         iconHtml: KS.fillIcon("tiktok", "#fff", 17), iconBg: "#000",
         type: "TikTok · " + (TYPE_HE[p.type] || p.type) + (p.is_pinned ? " · 📌 נעוץ" : ""), title: p.title || "(ללא כיתוב)", date: KS.fmtFullDate(p.date),
-        bodyHtml: hero + inter + cmp + openBtn
+        bodyHtml: hero + inter + KS.kmAnalysis(p.analysis) + cmp + openBtn
       });
     }
     function cmpFn(a, b) {

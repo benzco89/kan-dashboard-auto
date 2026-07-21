@@ -697,6 +697,7 @@ def build_tiktok(data, days):
     start, end, p_start, p_end = _window(days)
     tt = data.get("tiktok", [])
     foll = data["followers"]
+    analyses = _comment_analyses(data, "tiktok")
     cur = _filter(tt, "date", start, end)
 
     dates, series = _daily(tt, "date", ["views"], start, end)
@@ -743,6 +744,7 @@ def build_tiktok(data, days):
             "duration_sec": _int(p.get("duration_sec")),
             "is_pinned": _int(p.get("is_pinned")),
             "total_engagement": _int(p.get("total_engagement")),
+            "analysis": analyses.get(str(p.get("video_id", "")).strip()),
         })
     posts.sort(key=lambda x: x["views"], reverse=True)
 
@@ -899,7 +901,7 @@ def _viral_tokens(text, limit=40):
 def _viral_collect(data, start, end):
     """All posts in range, normalized to one shape, with token sets."""
     analyses = {p: _comment_analyses(data, p)
-                for p in ("instagram", "facebook", "youtube")}
+                for p in ("instagram", "facebook", "youtube", "tiktok")}
     specs = [
         ("instagram", data["instagram"], "media_id", "caption", "date", "permalink",
          lambda p: _num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("saved")) + _num(p.get("shares"))),
@@ -909,6 +911,8 @@ def _viral_collect(data, start, end):
          lambda p: _num(p.get("likes")) + _num(p.get("comments"))),
         ("twitter", data.get("twitter", []), "tweet_id", "text", "date", "permalink",
          lambda p: _num(p.get("likes")) + _num(p.get("retweets")) + _num(p.get("replies")) + _num(p.get("quotes"))),
+        ("tiktok", data.get("tiktok", []), "video_id", "title", "date", "permalink",
+         lambda p: _num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("shares")) + _num(p.get("saves"))),
     ]
     items = []
     for plat, rows, id_col, cap_col, date_col, url_col, inter_fn in specs:
@@ -1240,6 +1244,7 @@ _HIT = {
     "facebook":  (4.5, 10.0),
     "instagram": (3.5, 7.0),
     "twitter":   (5.0, 11.0),
+    "tiktok":    (8.0, 16.0),   # p95/median=8.0 על חודש ה-backfill (כויל 2026-07-21)
 }
 # viral spread — ABSOLUTE share-rate % (share-rate medians are near-zero and
 # noisy, so an absolute p95 bar is far more stable than a x-median ratio): (spread, strong)
@@ -1247,6 +1252,7 @@ _SPREAD = {
     "facebook":  (0.18, 0.35),
     "instagram": (0.80, 1.50),
     "twitter":   (0.14, 0.31),
+    "tiktok":    (0.90, 1.80),  # share-rate p95=0.88% על חודש ה-backfill
 }
 _SAVE_RATE = 0.13           # IG absolute save-rate % (p95) -> reference value
 _HOOK_SKIP = 55.0           # reel skip_rate % (p90 "worst hooks")
@@ -1275,6 +1281,8 @@ def _type_label(plat, raw):
         return _ig_type(raw)
     if plat == "twitter":
         return _tw_type(raw)
+    if plat == "tiktok":
+        return "Photo" if str(raw) == "Photo" else "Video"
     return ""
 
 
@@ -1293,6 +1301,10 @@ _ALERT_PLATFORMS = {
                 lambda p: (_num(p.get("likes")) + _num(p.get("retweets"))
                            + _num(p.get("replies")) + _num(p.get("quotes"))),
                 "retweets", False),
+    "tiktok": ("date", "title", "permalink",
+               lambda p: (_num(p.get("likes")) + _num(p.get("comments"))
+                          + _num(p.get("shares")) + _num(p.get("saves"))),
+               "shares", False),
 }
 
 
@@ -1405,6 +1417,7 @@ _FOLLOWER_KEYS = [
     ("facebook", "fb_followers_change"),
     ("instagram", "ig_followers_change"),
     ("twitter", "tw_followers_change"),
+    ("tiktok", "tt_followers_change"),
 ]
 
 
