@@ -375,6 +375,21 @@ _CREDIT_PREFIX_RE = re.compile(
     r"(?:כתב/ת|כתבת|כתבנו|כתב|תחקיר|דיווח)\s*:\s*([^\n,|)\]]{2,40})")
 
 
+_LATIN_FULLNAME_RE = re.compile(r"^[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+){1,2}$")
+
+
+def _looks_like_person(s):
+    """_looks_like_name, but also accepts a 2-3 word capitalised Latin name."""
+    s = (s or "").strip()
+    if not s or any(ch.isdigit() for ch in s):
+        return False
+    if ':' in s or '@' in s:
+        return False
+    if any(w in s for w in _NOT_REPORTER):
+        return False
+    return bool(_NAME_RE.match(s)) or bool(_LATIN_FULLNAME_RE.match(s))
+
+
 def _looks_like_name(s):
     s = (s or "").strip()
     if not s or any(ch.isdigit() for ch in s):
@@ -449,12 +464,32 @@ def load_reporters_map():
             data = json.load(f)
     except Exception:
         return {}
-    out = {}
+    out, derived = {}, {}
     for k, v in data.items():
         k = str(k).strip()
-        if v and not k.startswith('_'):
-            out[k.lstrip('@').lower()] = str(v)
+        if not v or k.startswith('_'):
+            continue
+        name = str(v)
+        out[k.lstrip('@').lower()] = name
+        if k.startswith('@'):
+            for dk in _derived_name_keys(k):
+                derived[dk] = name
+    for k, v in derived.items():
+        out.setdefault(k, v)          # an explicit entry always wins
     return out
+
+
+def _derived_name_keys(handle):
+    """Byline spellings implied by a handle, so one map line covers both:
+    '@ItayBlumental' -> 'itay blumental', '@moav_vardi' -> 'moav vardi'.
+    An all-lowercase run-together handle ('@gilicohen10') cannot be split
+    deterministically, so it gets no derived key — map that byline explicitly."""
+    h = re.sub(r'\d+', ' ', handle.lstrip('@'))
+    h = re.sub(r'[._-]+', ' ', h)
+    h = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', h)          # camelCase
+    h = re.sub(r'(?<=[A-Z])(?=[A-Z][a-z])', ' ', h)     # ACRONYMWord
+    words = [w for w in h.split() if w]
+    return [" ".join(words).lower()] if len(words) >= 2 else []
 
 
 # --- bare trailing credits (Facebook: "... | https://bit.ly/x Vered Pelman") ---
@@ -468,11 +503,17 @@ _HEB_STOP = {
     'בלבד', 'עוד', 'ועוד', 'המלא', 'המלאה', 'בכתבה', 'לכתבה', 'הכתבה', 'לצפייה',
     'קישור', 'בתגובות', 'כאן', 'חדשות', 'בסרטון', 'הסרטון', 'צפו', 'האזינו', 'קראו',
     'פרטים', 'נוספים', 'ראיון', 'תיעוד', 'דיווח', 'משפטי', 'ייעוץ', 'בייעוץ',
+    'מאת', 'עם', 'מפי', 'לפי',
 }
 
 
+_URL_MARK = '␟'          # stands in for a stripped link
+
+
 def _strip_urls(text):
-    s = _URL_RE.sub(' ', str(text or ''))
+    """Replace links with a sentinel so a trailing name can be tested for a
+    separator/link IMMEDIATELY before it, rather than anywhere in the caption."""
+    s = _URL_RE.sub(' ' + _URL_MARK + ' ', str(text or ''))
     return re.sub(r'\s+', ' ', s).strip()
 
 
@@ -483,6 +524,8 @@ def _trailing_latin_names(s):
     if not m:
         return []
     w = m.group(1).split()
+    if _URL_MARK in m.group(1):
+        return []
     if any(x.lower() in ('kan', 'news', 'photo', 'photos', 'editing', 'video') for x in w):
         return []
     if len(w) == 4:
@@ -492,7 +535,7 @@ def _trailing_latin_names(s):
     return []
 
 
-def _trailing_hebrew_name(s, rmap, had_separator):
+def _trailing_hebrew_name(s, rmap):
     """A bare Hebrew name at the end. Every Hebrew caption ends in Hebrew words,
     so accepting one blindly would invent a credit on almost every post. We
     accept only when the run is a person we already know (reporters_map doubles
@@ -510,10 +553,44 @@ def _trailing_hebrew_name(s, rmap, had_separator):
             cand = ' '.join(words[-n:])
             if _looks_like_name(cand) and cand.lower() in rmap:
                 return cand
-    if had_separator and len(words) >= 2:
+    # otherwise only when a separator or a link sits DIRECTLY before the name -
+    # a dash elsewhere in the caption must not unlock this rule
+    lead = s[:m.start()].rstrip()
+    if lead and lead[-1] in ('|–—·•' + _URL_MARK) and len(words) >= 2:
         cand = ' '.join(words[-2:])
         if _looks_like_name(cand) and not any(w in _HEB_STOP for w in cand.split()):
             return cand
+    return None
+
+
+# A camera/clapper emoji opens a media credit that runs to the end of the
+# caption ("📸: אבי דישי, פלאש90"). Everything from the marker on is a
+# photographer/agency, never the reporter, so it is cut before any search.
+_MEDIA_TAIL_RE = re.compile(r'[\U0001F4F8\U0001F4F7\U0001F3A5\U0001F3AC].*$', re.S)
+
+# A role phrase right after the name is the strongest byline signal Kan uses:
+# "איציק זוארץ, כתב כאן11 בדרום" / "Ketty Dor, כתבת כאן חדשות".
+_ROLE_WORDS = r'(?:כתב/ת|כתבת|כתבנו|כתבתנו|כתב|פרשנית|פרשן|עורכת|עורך)'
+_ROLE_SUFFIX_HEB_RE = re.compile(
+    r'((?:' + _HEB_W + r'\s+){1,2}' + _HEB_W + r')\s*[,،]\s*' + _ROLE_WORDS + r'\b')
+_ROLE_SUFFIX_LATIN_RE = re.compile(
+    r'((?:' + _LATIN_NAME_W + r'\s+){1,2}' + _LATIN_NAME_W + r')\s*[,،]\s*' + _ROLE_WORDS + r'\b')
+
+
+def _strip_media_tail(text):
+    return _MEDIA_TAIL_RE.sub(' ', str(text or ''))
+
+
+def _role_suffix_name(text):
+    """A name immediately followed by ', <role>' — outranks every guess."""
+    for rx in (_ROLE_SUFFIX_HEB_RE, _ROLE_SUFFIX_LATIN_RE):
+        for m in rx.finditer(text):
+            words = m.group(1).split()
+            while len(words) > 2 and words[0] in _HEB_STOP:
+                words.pop(0)                      # "מאת רן כהן" -> "רן כהן"
+            cand = " ".join(words)
+            if _looks_like_person(cand):
+                return cand
     return None
 
 
@@ -521,8 +598,12 @@ def resolve_reporter_detailed(text, rmap):
     """-> dict(name, source, others). `source` records HOW the credit was found
     so low-confidence guesses can be reviewed; `others` holds any additional
     trailing name (Kan usually lists reporter first, then photographer)."""
-    text = str(text or "")
+    text = _strip_media_tail(text)
     blank = dict(name="", source="", others=[])
+
+    role = _role_suffix_name(text)
+    if role:
+        return dict(name=rmap.get(role.lower(), role), source='role-suffix', others=[])
 
     rep = reporter_fallback(text)
     if rep:
@@ -537,7 +618,6 @@ def resolve_reporter_detailed(text, rmap):
                      text, re.IGNORECASE):
             return dict(name=name, source='map', others=[])
 
-    had_sep = bool(re.search(r'[|\n–—·•]', text)) or bool(_URL_RE.search(text))
     tail = _strip_urls(text).rstrip('.,;:!?*•·–—- \t')
 
     latin = _trailing_latin_names(tail)
@@ -546,7 +626,7 @@ def resolve_reporter_detailed(text, rmap):
         return dict(name=rmap.get(first.lower(), first),
                     source='trailing-latin', others=latin[1:])
 
-    heb = _trailing_hebrew_name(tail, rmap, had_sep)
+    heb = _trailing_hebrew_name(tail, rmap)
     if heb:
         return dict(name=rmap.get(heb.lower(), heb), source='trailing-hebrew', others=[])
 
@@ -1270,11 +1350,17 @@ def build_mock_content():
             "ממשרד הממשלתי הרלוונטי, לצד ניתוח של מה צפוי לקרות הלאה")
     # includes the Facebook shapes: a bare trailing name after a link (Latin,
     # one name and two names) and a bare Hebrew name after a separator
-    credits = ["(יותם ווקס)", "@MoavVardi", "כתב: רועי קייס", "(צילום: מוטי מילרוד)",
-               "| https://bit.ly/4vYM1NT Vered Pelman Haim Goldich",
-               "(איתי בלומנטל)", "@haimgoldich",
-               "https://bit.ly/3kQz9Lm Vered Pelman", "",
-               "| רובי המרשלג"]
+    # every credit shape we handle, including the ones that must NOT resolve
+    credits = ["(יותם ווקס)",                                    # parens
+               "איציק זוארץ, כתב כאן11 בדרום 📸: מרכז רפואי יוספטל",  # role suffix
+               "כתב: רועי קייס",                                  # credit prefix
+               "📸: Ebrahim Noroozi",                             # photo credit only -> none
+               "| https://bit.ly/4vYM1NT Vered Pelman Haim Goldich",  # two Latin names
+               "״ Itay Blumental 📸: אבי דישי",                   # Latin byline from a handle
+               "@haimgoldich",                                    # handle
+               "https://bit.ly/3kQz9Lm Dana Levi 📸: אבי דישי",    # name then photo credit
+               "",                                                # genuinely uncredited
+               "| רובי המרשלג"]                                   # known Hebrew name
 
     def rows(specs):
         out = []

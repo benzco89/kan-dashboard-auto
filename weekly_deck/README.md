@@ -103,6 +103,8 @@ The sheets carry no author field, so `--extract` pre-fills `reporter`
 deterministically **from the full caption** (the credit sits at the end, past
 the headline), in this order:
 
+0. a **role phrase right after the name** — `איציק זוארץ, כתב כאן11 בדרום` —
+   the strongest byline signal Kan uses, so it outranks everything below;
 1. an explicit `כתב:` / `כתבת:` / `תחקיר:` credit;
 2. a parenthesised 2–3-word Hebrew name (the last one wins);
 3. an `@handle`;
@@ -115,6 +117,11 @@ the headline), in this order:
    Data API call (`YOUTUBE_API_KEY`, up to 50 ids) fetches descriptions for the
    items still missing a credit. Best-effort — no key or a failed call never
    breaks the extract.
+
+A camera or clapper emoji (📸 📷 🎥 🎬) opens a **media credit that runs to the
+end of the caption** — everything from the marker on is cut before any search,
+so an agency photographer never becomes the reporter. A name *before* the marker
+still resolves normally.
 
 `צילום:` / `עריכה:` and friends are photographers and editors, never reporters
 — a role word anywhere in a trailing run disqualifies it. **Nothing is ever
@@ -138,7 +145,13 @@ are genuinely uncredited and which just need a new `reporters_map` entry.
 add a line) maps `{"@handle": "שם בעברית"}` and is applied during extract. Keys
 can also be a **full Latin name** (`"Vered Pelman": "ורד פלמן"`) or a **Hebrew
 name used as its own value** (`"רובי המרשלג": "רובי המרשלג"`) — the latter simply
-tells the extractor that this string is a person. It
+tells the extractor that this string is a person.
+
+Latin byline spellings are **derived automatically** from handle keys, so one
+line covers both: `@ItayBlumental` also matches the byline `Itay Blumental`, and
+`@moav_vardi` matches `Moav Vardi`. An all-lowercase run-together handle
+(`@gilicohen10`) cannot be split deterministically and needs its byline mapped
+explicitly. Explicit entries always beat derived ones. It
 ships seeded with the confirmed Kan handles. Matching is **case-insensitive**
 and works whether or not the caption wrote the leading `@` (`@ItayBlumental`,
 `@itayblumental` and a bare `ItayBlumental` all resolve). Bare handles are only
