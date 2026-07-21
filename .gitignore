@@ -38,6 +38,14 @@ tmpclaude-*
 # Node.js
 node_modules/
 
+# Weekly deck: licensed SimplerPro fonts (NEVER commit - fetched from VPS at CI runtime)
+weekly_deck/design/fonts/
+# Weekly deck: generated output (deck.html / deck.pdf / QA pngs)
+weekly_deck/out/
+# Weekly deck: transient SSH deploy key used to provision the CI fonts secret
+weekly_deck/.tmp_fonts_key
+weekly_deck/.tmp_fonts_key.pub
+
 # Local analysis artifacts & ad-hoc reports (kept locally, not committed).
 # These are personal working files, not part of the pipeline. To track one
 # anyway: `git add -f <file>`.
