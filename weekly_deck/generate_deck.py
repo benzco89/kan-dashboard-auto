@@ -457,22 +457,131 @@ def load_reporters_map():
     return out
 
 
-def resolve_reporter(title, rmap):
-    """Extract a credit, then resolve a known handle to a Hebrew name.
-    An unmapped @handle is left visible as-is so it can be spotted and added to
-    reporters_map.json. Bare (un-@'d) handles are only matched against confirmed
-    map entries — never guessed from arbitrary words."""
-    title = str(title or "")
-    rep = reporter_fallback(title)
-    if rep.startswith('@'):
-        return rmap.get(rep[1:].lower(), rep)
+# --- bare trailing credits (Facebook: "... | https://bit.ly/x Vered Pelman") ---
+_URL_RE = re.compile(r'(?:https?://|www\.)\S+', re.IGNORECASE)
+_LATIN_NAME_W = r"[A-Z][A-Za-z'’\-]+"
+_HEB_W = r"[֐-׿][֐-׿'\"׳״\-]*"
+# Prose words that must never be mistaken for a name in a trailing run.
+_HEB_STOP = {
+    'של', 'את', 'על', 'עם', 'אל', 'גם', 'כבר', 'לא', 'כן', 'זה', 'זו', 'הוא', 'היא',
+    'הם', 'הן', 'אחרי', 'לפני', 'בתוך', 'מתוך', 'בגלל', 'כדי', 'לאחר', 'בעקבות',
+    'בלבד', 'עוד', 'ועוד', 'המלא', 'המלאה', 'בכתבה', 'לכתבה', 'הכתבה', 'לצפייה',
+    'קישור', 'בתגובות', 'כאן', 'חדשות', 'בסרטון', 'הסרטון', 'צפו', 'האזינו', 'קראו',
+    'פרטים', 'נוספים', 'ראיון', 'תיעוד', 'דיווח', 'משפטי', 'ייעוץ', 'בייעוץ',
+}
+
+
+def _strip_urls(text):
+    s = _URL_RE.sub(' ', str(text or ''))
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def _trailing_latin_names(s):
+    """1-2 Latin person names at the very end. Latin words are structurally
+    distinctive inside a Hebrew caption, so this is low risk."""
+    m = re.search(r'((?:' + _LATIN_NAME_W + r'\s+){1,3}' + _LATIN_NAME_W + r')$', s)
+    if not m:
+        return []
+    w = m.group(1).split()
+    if any(x.lower() in ('kan', 'news', 'photo', 'photos', 'editing', 'video') for x in w):
+        return []
+    if len(w) == 4:
+        return [' '.join(w[:2]), ' '.join(w[2:])]
+    if len(w) in (2, 3):
+        return [' '.join(w[:2])]
+    return []
+
+
+def _trailing_hebrew_name(s, rmap, had_separator):
+    """A bare Hebrew name at the end. Every Hebrew caption ends in Hebrew words,
+    so accepting one blindly would invent a credit on almost every post. We
+    accept only when the run is a person we already know (reporters_map doubles
+    as a roster) or when a separator/URL clearly set it apart from the prose."""
+    m = re.search(r'((?:' + _HEB_W + r'\s+){1,3}' + _HEB_W + r')$', s)
+    if not m:
+        return None
+    words = m.group(1).split()
+    # a role word anywhere in the trailing run poisons it: "צילום מוטי מילרוד"
+    # has a clean-looking 2-word tail but is a photographer credit
+    if any(any(bad in w for bad in _NOT_REPORTER) for w in words):
+        return None
+    for n in (3, 2):
+        if len(words) >= n:
+            cand = ' '.join(words[-n:])
+            if _looks_like_name(cand) and cand.lower() in rmap:
+                return cand
+    if had_separator and len(words) >= 2:
+        cand = ' '.join(words[-2:])
+        if _looks_like_name(cand) and not any(w in _HEB_STOP for w in cand.split()):
+            return cand
+    return None
+
+
+def resolve_reporter_detailed(text, rmap):
+    """-> dict(name, source, others). `source` records HOW the credit was found
+    so low-confidence guesses can be reviewed; `others` holds any additional
+    trailing name (Kan usually lists reporter first, then photographer)."""
+    text = str(text or "")
+    blank = dict(name="", source="", others=[])
+
+    rep = reporter_fallback(text)
     if rep:
-        return rep
-    for handle, name in rmap.items():
-        if re.search(r'(?<![A-Za-z0-9_@])' + re.escape(handle) + r'(?![A-Za-z0-9_])',
-                     title, re.IGNORECASE):
-            return name
-    return ""
+        if rep.startswith('@'):
+            return dict(name=rmap.get(rep[1:].lower(), rep), source='handle', others=[])
+        src = 'credit-prefix' if _CREDIT_PREFIX_RE.search(text) else 'parens'
+        return dict(name=rep, source=src, others=[])
+
+    # a known person named anywhere (handle, Latin name or Hebrew name in the map)
+    for known, name in rmap.items():
+        if re.search(r'(?<![A-Za-z0-9_@])' + re.escape(known) + r'(?![A-Za-z0-9_])',
+                     text, re.IGNORECASE):
+            return dict(name=name, source='map', others=[])
+
+    had_sep = bool(re.search(r'[|\n–—·•]', text)) or bool(_URL_RE.search(text))
+    tail = _strip_urls(text).rstrip('.,;:!?*•·–—- \t')
+
+    latin = _trailing_latin_names(tail)
+    if latin:
+        first = latin[0]
+        return dict(name=rmap.get(first.lower(), first),
+                    source='trailing-latin', others=latin[1:])
+
+    heb = _trailing_hebrew_name(tail, rmap, had_sep)
+    if heb:
+        return dict(name=rmap.get(heb.lower(), heb), source='trailing-hebrew', others=[])
+
+    return blank
+
+
+def resolve_reporter(text, rmap):
+    """Name only — the widely used entry point."""
+    return resolve_reporter_detailed(text, rmap)['name']
+
+
+def youtube_descriptions(video_ids, api_key):
+    """Batched YouTube Data API lookup (one call per 50 ids). Kan puts the
+    reporter credit in the video DESCRIPTION, not the title. Best-effort: any
+    failure returns {} and the extract carries on."""
+    out = {}
+    ids = [str(v) for v in video_ids if v]
+    if not api_key or not ids:
+        return out
+    try:
+        from utils import http_get_json
+        for i in range(0, len(ids), 50):
+            chunk = ids[i:i + 50]
+            data = http_get_json("https://www.googleapis.com/youtube/v3/videos",
+                                 params={'part': 'snippet', 'id': ','.join(chunk),
+                                         'key': api_key},
+                                 timeout=15, max_retries=2)
+            for it in (data.get('items') or []):
+                vid = it.get('id')
+                desc = ((it.get('snippet') or {}).get('description') or '')
+                if vid and desc:
+                    out[vid] = desc
+    except Exception as e:
+        print(f"      youtube descriptions unavailable: {e}")
+    return out
 
 
 # ---------------------------------------------------------------- per platform
@@ -619,17 +728,35 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
         # the credit lives at the END of the caption, so resolve on the FULL raw
         # text and only then cut down to a headline for display
         raw = str(r.get(tc, '') or '')
-        reporter = resolve_reporter(raw, rmap)
+        res = resolve_reporter_detailed(raw, rmap)
+        reporter = res['name']
         items.append(dict(id=str(r.get(idc, '')),
                           title=headline_of(raw, reporter),
-                          caption=clean_title(raw, 200),
+                          caption=clean_title(raw, 400),
                           reporter=reporter,
+                          reporter_source=res['source'],
+                          _others=res['others'], _raw=raw,
                           views=int(r['views']),
                           likes=_row_int(r, 'likes'),
                           comments=_row_int(r, 'comments', 'replies'),
                           shares=_row_int(r, 'shares', 'retweets'),
                           engagement=round(float(r['_eng']), 1),
                           thumb=None))
+
+    # YouTube titles are short and never carry the credit — it lives in the
+    # video description. One batched API call covers the whole top-10.
+    if key == 'youtube':
+        need = [it['id'] for it in items if not it['reporter']]
+        descs = youtube_descriptions(need, os.environ.get('YOUTUBE_API_KEY', ''))
+        for it in items:
+            if not it['reporter'] and descs.get(it['id']):
+                res = resolve_reporter_detailed(descs[it['id']], rmap)
+                if res['name']:
+                    it['reporter'] = res['name']
+                    it['reporter_source'] = 'yt-description'
+                    it['_raw'] = descs[it['id']]
+        if need:
+            print(f"      youtube: {sum(1 for i in items if i['reporter'])}/{len(items)} credited after description lookup")
 
     # typical values for this week, used at render time to flag what is unusual
     out['medians'] = dict(
@@ -802,14 +929,62 @@ def assemble_content(plats, window, use_gemini=False):
     return content
 
 
+def report_reporters(content):
+    """Print a reporter report at the end of --extract, then strip the internal
+    fields. Unresolved items show the LAST 80 chars of the caption, because that
+    is where Kan puts the credit - so it is obvious which posts are genuinely
+    uncredited and which just need a new reporters_map entry."""
+    items = [(pl['key'], i + 1, it) for pl in content['platforms']
+             for i, it in enumerate(pl.get('top', []))]
+    total = len(items)
+    resolved = [t for t in items if (t[2].get('reporter') or '').strip()]
+    by_src = {}
+    for _, _, it in resolved:
+        k = it.get('reporter_source') or '?'
+        by_src[k] = by_src.get(k, 0) + 1
+
+    bar = "-" * 62
+    print("")
+    print(bar)
+    print("  REPORTER REPORT - %d/%d credited" % (len(resolved), total))
+    if by_src:
+        print("  by: " + " | ".join("%s %d" % (k, v)
+                                    for k, v in sorted(by_src.items(), key=lambda x: -x[1])))
+
+    low = [t for t in resolved
+           if t[2].get('reporter_source') in ('trailing-latin', 'trailing-hebrew')]
+    if low:
+        print("")
+        print("  ~ WORTH A GLANCE (%d) - guessed from a bare trailing name:" % len(low))
+        for k, n, it in low:
+            others = it.get('_others') or []
+            extra = ("   (also seen: %s)" % ", ".join(others)) if others else ""
+            print("    %-10s #%-3d %s%s" % (k, n, it['reporter'], extra))
+
+    missing = [t for t in items if not (t[2].get('reporter') or '').strip()]
+    if missing:
+        print("")
+        print("  x UNRESOLVED (%d) - last 80 chars of each caption:" % len(missing))
+        for k, n, it in missing:
+            raw = it.get('_raw') or it.get('caption') or ''
+            tail = " ".join(str(raw).split())[-80:]
+            print("    %-10s #%-3d ...%s" % (k, n, tail))
+    print(bar)
+    print("")
+
+    for _, _, it in items:          # internal only - never written to the JSON
+        it.pop('_others', None)
+        it.pop('_raw', None)
+
+
 def save_content(content):
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(CONTENT_PATH, 'w', encoding='utf-8') as f:
         json.dump(content, f, ensure_ascii=False, indent=2)
     size = os.path.getsize(CONTENT_PATH)
     print(f"   ✅ wrote {CONTENT_PATH} ({size:,} bytes)")
-    if size > 40_000:
-        print(f"   ⚠️ deck_content.json is larger than the 40KB target ({size:,})")
+    if size > 55_000:
+        print(f"   ⚠️ deck_content.json is larger than the 55KB target ({size:,})")
     return CONTENT_PATH
 
 
@@ -1093,9 +1268,13 @@ def build_mock_content():
     # headline extractor and the full-caption reporter search for real.
     tail = ("הכתבה המלאה עם כל הפרטים, העדויות מהשטח והתגובות שהתקבלו הבוקר "
             "ממשרד הממשלתי הרלוונטי, לצד ניתוח של מה צפוי לקרות הלאה")
+    # includes the Facebook shapes: a bare trailing name after a link (Latin,
+    # one name and two names) and a bare Hebrew name after a separator
     credits = ["(יותם ווקס)", "@MoavVardi", "כתב: רועי קייס", "(צילום: מוטי מילרוד)",
-               "", "(איתי בלומנטל)", "@haimgoldich", "(הדס גרינברג)", "",
-               "(עומרי אסנהיים)"]
+               "| https://bit.ly/4vYM1NT Vered Pelman Haim Goldich",
+               "(איתי בלומנטל)", "@haimgoldich",
+               "https://bit.ly/3kQz9Lm Vered Pelman", "",
+               "| רובי המרשלג"]
 
     def rows(specs):
         out = []
@@ -1283,6 +1462,7 @@ def main():
             print("📥 Extracting from Google Sheets...")
             content = build_deck_content(get_client(), thumbs_enabled=not args.no_thumbs,
                                          use_gemini=args.gemini)
+        report_reporters(content)
         save_content(content)
         print("   ✏️  edit weekly_deck/out/deck_content.json, then re-run with --render")
 

@@ -53,6 +53,7 @@ jobs:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         # No GEMINI_API_KEY: the editorial layer is authored by hand in
         # deck_content.json. No GETXAPI_KEY: X gets no thumbnails by design.
         # Default run = extract (sheets + thumbnails) then render.

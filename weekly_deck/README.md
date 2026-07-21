@@ -95,19 +95,50 @@ Kan captions are long and run past the headline. `--extract` stores both: the
 rendered `title` is the **headline only** — cut at the first 👇, line break or
 sentence end (never at `:`, which is part of Kan headlines like
 `פרסום ראשון: ...`), then capped ~80 chars on a word boundary — and `caption`
-keeps the first 200 chars of the original for reference while editing.
+keeps the first 400 chars of the original for reference while editing.
 
 ## Reporter credits (כתב/ת column)
 
 The sheets carry no author field, so `--extract` pre-fills `reporter`
 deterministically **from the full caption** (the credit sits at the end, past
-the headline): an explicit `כתב:` / `תחקיר:` credit, a parenthesised 2–3-word
-Hebrew name (the last one wins), or an `@handle`. `צילום:` / `עריכה:` are
-photographers and editors, never reporters, and nothing is ever invented —
-unknowns stay empty for you to fill in.
+the headline), in this order:
+
+1. an explicit `כתב:` / `כתבת:` / `תחקיר:` credit;
+2. a parenthesised 2–3-word Hebrew name (the last one wins);
+3. an `@handle`;
+4. anyone already in `reporters_map.json`, named anywhere in the caption;
+5. a **bare trailing name** after the link — Facebook's shape
+   (`… | https://bit.ly/x Vered Pelman Haim Goldich`). Latin runs are accepted
+   structurally and the FIRST name is taken (Kan lists reporter then
+   photographer); the second is reported so you can check it;
+6. YouTube only: the credit is in the video **description**, so one batched
+   Data API call (`YOUTUBE_API_KEY`, up to 50 ids) fetches descriptions for the
+   items still missing a credit. Best-effort — no key or a failed call never
+   breaks the extract.
+
+`צילום:` / `עריכה:` and friends are photographers and editors, never reporters
+— a role word anywhere in a trailing run disqualifies it. **Nothing is ever
+invented.** A bare *Hebrew* trailing name is only accepted when it is either
+already in the map or set off by a separator/URL, because every Hebrew caption
+ends in Hebrew words and accepting one blindly would fabricate a credit on
+almost every post. Everything else is left empty and listed in the report below.
+
+`reporter_source` on each item records **how** the credit was found, so guesses
+(`trailing-latin` / `trailing-hebrew`) are easy to spot while authoring.
+
+### The extract report
+
+`--extract` ends with a reporter report: the hit rate, a breakdown by source, a
+"worth a glance" list of bare-trailing-name guesses (with any second name seen),
+and an **UNRESOLVED** list showing the **last 80 chars** of each uncredited
+caption — that is where credits live, so it is obvious at a glance which posts
+are genuinely uncredited and which just need a new `reporters_map` entry.
 
 `reporters_map.json` (repo-tracked, **user-editable and meant to grow** — just
-add a line) maps `{"@handle": "שם בעברית"}` and is applied during extract. It
+add a line) maps `{"@handle": "שם בעברית"}` and is applied during extract. Keys
+can also be a **full Latin name** (`"Vered Pelman": "ורד פלמן"`) or a **Hebrew
+name used as its own value** (`"רובי המרשלג": "רובי המרשלג"`) — the latter simply
+tells the extractor that this string is a person. It
 ships seeded with the confirmed Kan handles. Matching is **case-insensitive**
 and works whether or not the caption wrote the leading `@` (`@ItayBlumental`,
 `@itayblumental` and a bare `ItayBlumental` all resolve). Bare handles are only
