@@ -105,6 +105,12 @@ An **unmapped handle is left visible as `@handle`** in deck_content.json, so it
 is easy to spot and add to the map. Extracted names (not handles) fill the
 closing credits block.
 
+**Timing:** the map is read at `--extract`, not at `--render`. Adding a handle
+after you have already extracted does **not** update the existing
+deck_content.json — `--render` will keep showing the raw `@handle`. For the
+current week, edit that `reporter` field by hand; the new map entry takes effect
+from the next extract onward.
+
 ## Thumbnails
 
 `--extract` downloads top-10 thumbnails per platform into `out/thumbs/` as
