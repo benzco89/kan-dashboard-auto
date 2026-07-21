@@ -41,6 +41,15 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 {%- endif -%}
 {% endmacro %}
 
+{#
+  Table title cell: optional small leading thumbnail (~52x30 rounded) + the
+  title, ellipsised. The thumb only appears when the row carries one; row height
+  stays governed by the thumb so all rows align.
+#}
+{% macro title_cell(row, fs, fw) -%}
+<div style="display:flex;align-items:center;gap:10px;min-width:0">{% if row.thumb %}<img src="{{ row.thumb }}" alt="" style="width:52px;height:30px;object-fit:cover;border-radius:4px;flex-shrink:0;background:#e8e8e8">{% endif %}<span style="font-size:{{ fs }};{% if fw %}font-weight:{{ fw }};{% endif %}white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.title }}</span></div>
+{%- endmacro %}
+
 {% macro platform_slide(p) %}
 <section class="slide" dir="rtl" style="background:#f4f4f4;font-family:'SimplerPro',sans-serif;color:#111;padding:60px 80px 52px;display:flex;flex-direction:column">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px"><div style="display:flex;align-items:center;gap:20px">{{ p.icon }}<div><div style="font-size:15px;font-weight:700;letter-spacing:.05em;color:#FF3300">{{ p.rank_label }}</div><h2 style="margin:2px 0 0;font-size:46px;font-weight:900;letter-spacing:-.02em">{{ p.name }}</h2></div></div>
@@ -69,11 +78,11 @@ html,body{margin:0;padding:0;background:#f4f4f4}
       {% for row in p.top10 %}
       {%- if row.highlight -%}
         {%- set alpha = {1:'0.16',2:'0.11',3:'0.07'}[row.rank] -%}
-        <div style="display:grid;grid-template-columns:44px 1fr 150px 108px 132px;gap:14px;align-items:center;padding:7px 18px;background:rgba({{ p.colors.tint }},{{ alpha }});border-right:3px solid {{ p.colors.bar }};border-radius:4px"><div class="mono" style="font-size:21px;font-weight:700">{{ row.rank }}</div><div style="font-size:18px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.title }}</div><div style="font-size:16px;color:#404040;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:19px;font-weight:700">{{ row.views_fmt }}</div><div style="text-align:left;font-size:17px;color:#404040">{{ row.eng_str }}</div></div>
+        <div style="display:grid;grid-template-columns:44px 1fr 150px 108px 132px;gap:14px;align-items:center;padding:7px 18px;background:rgba({{ p.colors.tint }},{{ alpha }});border-right:3px solid {{ p.colors.bar }};border-radius:4px"><div class="mono" style="font-size:21px;font-weight:700">{{ row.rank }}</div>{{ title_cell(row, "18px", "600") }}<div style="font-size:16px;color:#404040;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:19px;font-weight:700">{{ row.views_fmt }}</div><div style="text-align:left;font-size:17px;color:#404040">{{ row.eng_str }}</div></div>
       {%- elif row.anomaly -%}
-        <div style="display:grid;grid-template-columns:44px 1fr 150px 108px 132px;gap:14px;align-items:center;padding:6px 18px;background:rgba(255,51,0,0.07);border-right:3px solid #FF3300;border-radius:4px"><div class="mono" style="font-size:19px;color:#808080">{{ row.rank }}</div><div style="font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.title }}</div><div style="font-size:15px;color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:18px">{{ row.views_fmt }}</div><div style="text-align:left"><span style="font-weight:700;color:#FF3300">{{ row.eng_str }}</span> <span style="font-size:11px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:2px 7px;margin-right:6px">חריג</span></div></div>
+        <div style="display:grid;grid-template-columns:44px 1fr 150px 108px 132px;gap:14px;align-items:center;padding:6px 18px;background:rgba(255,51,0,0.07);border-right:3px solid #FF3300;border-radius:4px"><div class="mono" style="font-size:19px;color:#808080">{{ row.rank }}</div>{{ title_cell(row, "17px", "") }}<div style="font-size:15px;color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:18px">{{ row.views_fmt }}</div><div style="text-align:left"><span style="font-weight:700;color:#FF3300">{{ row.eng_str }}</span> <span style="font-size:11px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:2px 7px;margin-right:6px">חריג</span></div></div>
       {%- else -%}
-        <div style="display:grid;grid-template-columns:44px 1fr 150px 108px 132px;gap:14px;align-items:center;padding:6px 18px;border-bottom:1px solid #e0e0e0"><div class="mono" style="font-size:19px;color:#808080">{{ row.rank }}</div><div style="font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.title }}</div><div style="font-size:15px;color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:18px">{{ row.views_fmt }}</div><div style="text-align:left;font-size:17px;color:#404040">{{ row.eng_str }}</div></div>
+        <div style="display:grid;grid-template-columns:44px 1fr 150px 108px 132px;gap:14px;align-items:center;padding:6px 18px;border-bottom:1px solid #e0e0e0"><div class="mono" style="font-size:19px;color:#808080">{{ row.rank }}</div>{{ title_cell(row, "17px", "") }}<div style="font-size:15px;color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:18px">{{ row.views_fmt }}</div><div style="text-align:left;font-size:17px;color:#404040">{{ row.eng_str }}</div></div>
       {%- endif -%}
       {% endfor %}
     </div></div>
