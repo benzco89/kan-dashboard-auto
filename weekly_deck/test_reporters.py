@@ -102,6 +102,14 @@ CASES = [
     ("ועו״ד מטעם ארגון חננו מסייע להן בייעוץ משפטי | דנה שרון", "דנה שרון",
      "bare Hebrew name set off by a separator"),
 
+    # --- Hebrew names carried by the map ----------------------------------
+    # A byline with no parentheses, no handle and no "כתב:" only resolves because
+    # the map says the string is a person. This is what lets a name learned by
+    # hand one week be picked up automatically the next.
+    ("הכתבה המלאה על ההסכם. מזל מועלם", mapped('מזל מועלם', ''), "Hebrew name from the map"),
+    ("ראיון הבוקר עם השר. אריה גולן " + CAM + ": פלאש 90", mapped('אריה גולן', ''),
+     "mapped Hebrew name before a photo credit"),
+
     # --- and the ones that must stay empty rather than invent a credit -----
     ("ועו״ד מטעם ארגון חננו מסייע להן בייעוץ משפטי", "",
      "bare Hebrew tail with no separator — must NOT be read as a name"),
