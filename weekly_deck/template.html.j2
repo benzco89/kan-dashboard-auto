@@ -83,28 +83,17 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 </{{ "a" if c.url else "div" }}>
 {%- endmacro %}
 
-{% macro anomaly_legend(p) -%}
-{# One band under the cards: what חריג means (only when a badge is on the slide)
-   on the right, and — since a PDF gives no visual cue that a row is a link — the
-   click hint on the left. The band keeps its height either way, so the table
-   below never shifts position between slides. #}
-<div style="display:flex;align-items:center;justify-content:space-between;gap:20px;font-size:25px;color:#808080;margin-bottom:8px;height:32px">
-  <div style="display:flex;align-items:center;gap:10px;min-width:0">{% if p.has_anomaly %}<span style="font-size:20px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:2px 10px;flex-shrink:0">חריג</span> פריט שקיבל פי {{ anomaly_min }} ומעלה מהרגיל <b>ביחס לכמות הצפיות שלו</b> — בשיתופים, בתגובות, בלייקים או במעורבות{% endif %}</div>
-  {% if p.has_links %}<div style="white-space:nowrap;font-size:19px;opacity:.8;flex-shrink:0">↗ לחיצה על שורה פותחת את הפריט</div>{% endif %}
-</div>
-{%- endmacro %}
-
 {#
   Fun-fact panel: the chosen candidate is the hero (big number + sentence), and
   the runners-up from fun_fact.candidates sit underneath as a compact muted
   list — real per-platform numbers instead of empty space.
 #}
 {% macro funfact_box(p, tall) -%}
-{% if p.fun_fact %}<div style="{% if tall %}flex:1;{% else %}width:296px;flex-shrink:0;{% endif %}background:linear-gradient(180deg,rgba({{ p.colors.tint }},.10),rgba({{ p.colors.tint }},.02));border:1px solid rgba({{ p.colors.tint }},.28);border-radius:8px;padding:{% if tall %}26px 34px 22px{% else %}26px{% endif %};display:flex;flex-direction:column;overflow:hidden">
+{% if p.fun_fact %}<div style="{% if tall %}flex:1;{% else %}width:296px;flex-shrink:0;{% endif %}background:linear-gradient(180deg,rgba({{ p.colors.tint }},.10),rgba({{ p.colors.tint }},.02));border:1px solid rgba({{ p.colors.tint }},.28);border-radius:8px;padding:{% if tall %}26px 34px 22px{% else %}26px{% endif %};display:flex;flex-direction:column;{% if not tall %}justify-content:center;{% endif %}overflow:hidden">
   <div style="font-size:20px;font-weight:700;letter-spacing:.04em;color:{{ p.colors.accent }};margin-bottom:{% if tall %}12px{% else %}16px{% endif %}">נתון מעניין</div>
   <div class="mono" style="font-size:{% if tall %}78px{% else %}68px{% endif %};font-weight:700;line-height:.9;color:#111">{{ p.fun_fact.value }}<span style="font-size:{% if tall %}44px{% else %}41px{% endif %};color:{{ p.colors.accent }}">{{ p.fun_fact.suffix }}</span></div>
   <div style="font-size:{% if tall %}27px{% else %}25px{% endif %};line-height:1.4;color:#404040;margin-top:14px;text-wrap:pretty;{% if tall %}max-width:620px{% endif %}">{{ p.fun_fact.text }}</div>
-  {% if p.fun_fact_more %}<div style="margin-top:auto;padding-top:{% if tall %}18px{% else %}20px{% endif %}">
+  {% if p.fun_fact_more %}<div style="{% if tall %}margin-top:auto;{% endif %}padding-top:{% if tall %}18px{% else %}24px{% endif %}">
     {# the tall panel shares a fixed-height band with the highlight cards, so it
        carries two runners-up, not three — a third would be clipped, not read #}
     {% for m in (p.fun_fact_more[:2] if tall else p.fun_fact_more) %}<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:{% if tall %}9px{% else %}9px{% endif %} 0;border-top:1px solid rgba({{ p.colors.tint }},.24)">
@@ -172,7 +161,6 @@ html,body{margin:0;padding:0;background:#f4f4f4}
   {% elif p.text_cards %}
   {#--- X: text-forward highlight cards, no image slots ---#}
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-bottom:18px">{% for c in p.top3 %}{{ card_text(p, c) }}{% endfor %}</div>
-  {{ anomaly_legend(p) }}
   <div style="flex:1;display:flex;gap:22px;min-height:0"><div style="flex:1;display:flex;flex-direction:column;min-height:0">{{ table_block(p) }}</div>{{ funfact_box(p, false) }}</div>
 
   {% elif thumbstyle == 'portrait' %}
@@ -181,13 +169,11 @@ html,body{margin:0;padding:0;background:#f4f4f4}
     <div style="display:flex;gap:22px;flex-shrink:0">{% for c in p.top3 %}{{ card_portrait(p, c) }}{% endfor %}</div>
     {{ funfact_box(p, true) }}
   </div>
-  {{ anomaly_legend(p) }}
   <div style="flex:1;display:flex;flex-direction:column;min-height:0">{{ table_block(p) }}</div>
 
   {% else %}
   {#--- blur: original wide layout, nothing ever cropped ---#}
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-bottom:18px">{% for c in p.top3 %}{{ card_blur(p, c) }}{% endfor %}</div>
-  {{ anomaly_legend(p) }}
   <div style="flex:1;display:flex;gap:22px;min-height:0"><div style="flex:1;display:flex;flex-direction:column;min-height:0">{{ table_block(p) }}</div>{{ funfact_box(p, false) }}</div>
   {% endif %}
 </section>
@@ -219,6 +205,12 @@ html,body{margin:0;padding:0;background:#f4f4f4}
     <div style="display:flex;align-items:baseline;gap:20px"><div style="width:44px;height:8px;background:#FF3300;align-self:center"></div><h2 style="margin:0;font-size:66px;font-weight:900;letter-spacing:-.02em">השבוע במספרים</h2></div>
     <div style="text-align:left"><div class="mono" style="font-size:57px;font-weight:700;line-height:1">{{ hero.total_fmt }}</div><div style="font-size:21px;color:#808080;margin-top:2px">סה״כ צפיות{% if hero.has_delta %} · <span class="ltr" style="color:{{ hero.delta_color }};font-weight:700">{{ hero.delta_arrow }} {{ hero.delta_str }}</span> מהשבוע שעבר{% endif %}</div></div></div>
   <div style="font-size:26px;color:#808080;margin-bottom:12px">מדורג לפי נפח צפיות — אורך הבר = נתח מסך הצפיות</div>
+  {# The two things a reader needs before the platform slides. They used to
+     repeat under the cards on every one of them; once, here, is enough. #}
+  <div style="display:flex;align-items:center;gap:30px;flex-wrap:wrap;font-size:21px;color:#808080;margin-bottom:20px">
+    <span style="display:inline-flex;align-items:center;gap:9px"><span style="font-size:16px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:2px 10px">חריג</span> פריט שקיבל פי {{ anomaly_min }} ומעלה מהרגיל <b>ביחס לכמות הצפיות שלו</b></span>
+    <span>↗ לחיצה על שורה בטבלה פותחת את הפריט המקורי</span>
+  </div>
   <div style="display:grid;grid-template-columns:250px 1fr 130px 120px;gap:26px;padding:0 2px 14px;border-bottom:1px solid #e0e0e0;font-size:18px;font-weight:700;color:#808080;letter-spacing:.03em"><div>פלטפורמה</div><div>נתח מסך הצפיות</div><div>צפיות השבוע</div><div style="text-align:left">מגמה</div></div>
   <div style="flex:1;display:flex;flex-direction:column;justify-content:space-around;padding:10px 0">
     {% for r in overview_rows %}<div style="display:grid;grid-template-columns:250px 1fr 130px 120px;gap:26px;align-items:center">

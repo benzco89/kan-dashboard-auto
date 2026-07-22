@@ -1402,6 +1402,7 @@ def report_reporters(content):
         print("  -> paste-ready block written to %s" % TODO_PATH)
         write_reporters_todo(missing, sugg)
     print("")
+    check_editorial_numbers(content)
     report_long_headlines(content)
     print("")
     report_programs(content)
@@ -1469,6 +1470,93 @@ def reporter_suggestions(items, floor=0.35):
             hits.sort(reverse=True, key=lambda h: h[0])
             out[(k, n)] = hits[:3]
     return out
+
+
+# A number in the editorial text is a claim about the data, but it is typed by
+# hand and the data moves under it — a re-extract shifted "-14%" to -13% and
+# "17.5 מיליון" to 17.6M without touching a word. Only quantities carrying a
+# magnitude (%, K/M, מיליון/אלף) are checked; a bare number is usually prose
+# ("ארבע פלטפורמות", "פי 3.5") and is left alone.
+_CLAIM_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(%|M|K|מיליון|מיליוני|אלף|אלפי)")
+
+
+def _computed_values(content):
+    """Every quantity the deck itself computes, as plain floats."""
+    vals = set()
+    total = 0
+    for p in content.get('platforms', []):
+        v = float(p.get('weekly_views') or 0)
+        total += v
+        vals.add(v)
+        if p.get('delta_pct') is not None:
+            vals.add(abs(float(p['delta_pct'])))
+        for key in ('likes', 'comments', 'shares'):
+            s = sum(float(it.get(key) or 0) for it in p.get('top', []))
+            if s:
+                vals.add(s)
+        # the fun-fact candidates are computed over the WHOLE week, not the
+        # top-10, and are exactly the kind of figure a card quotes
+        for c in (p.get('fun_fact') or {}).get('candidates', []):
+            try:
+                vals.add(float(str(c.get('value', '')).replace(',', '')
+                               .replace('M', 'e6').replace('K', 'e3')))
+            except ValueError:
+                pass
+        # last week's total, because "up from X" is a natural thing to write
+        if p.get('delta_pct') not in (None, -100):
+            vals.add(v / (1 + float(p['delta_pct']) / 100.0))
+        for it in p.get('top', []):
+            vals.add(float(it.get('views') or 0))
+        # per-item engagement is deliberately NOT here: dozens of values spread
+        # over 0-30% would absorb almost any percentage in the prose and the
+        # check would pass everything. Measured: it swallowed a stale "-14%".
+    vals.add(total)
+    for p in content.get('platforms', []):        # share of the week's views
+        if total:
+            vals.add(float(p.get('weekly_views') or 0) / total * 100)
+    hero = content.get('hero') or {}
+    if hero.get('delta_pct') is not None:
+        vals.add(abs(float(hero['delta_pct'])))
+    return {v for v in vals if v}
+
+
+def check_editorial_numbers(content):
+    """Warn about hand-written numbers that no longer match anything the deck
+    computes. Deliberately a warning, not a correction: the sentence around the
+    number is editorial, and only a human knows whether the number or the
+    sentence is the thing to change."""
+    vals = _computed_values(content)
+    texts = []
+    for c in content.get('learnings', []):
+        for f in ('number', 'title', 'sentence'):
+            if c.get(f):
+                texts.append(("מה קרה השבוע", c[f]))
+    story = content.get('story_of_the_week') or {}
+    for f in ('title', 'sentence'):
+        if story.get(f):
+            texts.append(("הסיפור של השבוע", story[f]))
+
+    MULT = {'%': 1, 'M': 1e6, 'K': 1e3, 'מיליון': 1e6, 'מיליוני': 1e6,
+            'אלף': 1e3, 'אלפי': 1e3}
+    bad = []
+    for where, text in texts:
+        for m in _CLAIM_RE.finditer(_strip_bidi(text)):
+            raw = m.group(1).replace(',', '')
+            try:
+                n = float(raw) * MULT[m.group(2)]
+            except (ValueError, KeyError):
+                continue
+            # compare at the precision the text was written to, so "17.5 מיליון"
+            # is judged against 17.6M as written and not silently rounded to fit
+            dec = len(raw.split('.')[1]) if '.' in raw else 0
+            step = MULT[m.group(2)] / (10 ** dec)
+            if not any(abs(v - n) < step * 0.5 + 1e-9 for v in vals):
+                bad.append((where, m.group(0), text))
+    if bad:
+        print("  ⚠️  EDITORIAL NUMBERS THAT NO LONGER MATCH THE DATA (%d):" % len(bad))
+        for where, num, text in bad:
+            print("    %-18s %-10s  %s" % (where, num, clean_title(text, 70)))
+    return bad
 
 
 def report_long_headlines(content):
@@ -1677,7 +1765,7 @@ CAND_LABEL_HE = {
     'reach': 'חשיפה',
     'retweets': 'ריטוויטים',
     'quotes': 'ציטוטים',
-    'overperformer': 'המוביל מול פוסט רגיל',
+    'overperformer': 'מול פוסט רגיל',
     'eng_leader': 'שיא מעורבות',
 }
 
@@ -2173,6 +2261,7 @@ def main():
         filled, vetoed = apply_reporter_overrides(content)
         if filled or vetoed:
             print(f"   ✍️  reporters_overrides: {filled} credited, {vetoed} marked uncredited")
+        check_editorial_numbers(content)
         context = content_to_context(content, thumbstyle=args.thumbstyle)
         html_path = render(context)
         print("🖨️  Rendering PDF (Playwright)...")
