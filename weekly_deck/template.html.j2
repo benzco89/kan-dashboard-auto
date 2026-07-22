@@ -19,6 +19,12 @@
 html,body{margin:0;padding:0;background:#f4f4f4}
 .slide{width:1920px;height:1080px;overflow:hidden;position:relative;page-break-after:always;break-after:page}
 .slide:last-child{page-break-after:auto;break-after:auto}
+/* Every number lives inside dir="rtl" Hebrew. A trailing '%' binds to the digits
+   on its own, but a LEADING '+'/'−'/'×' and a separate ▲/▼ do not: bidi treats
+   them as neutrals, the RTL context swallows them and they surface on the wrong
+   side of the number ("112%+" instead of "+112%"). Isolating each numeric run as
+   LTR is the fix — it also keeps the run from reordering the Hebrew around it. */
+.ltr,.mono{direction:ltr;unicode-bidi:isolate}
 .mono{font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace}
 </style>
 </head>
@@ -43,17 +49,17 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 {# Table title cell: square (1:1) leading thumb degrades gracefully for any
    source aspect ratio at this size. #}
 {% macro title_cell(row, fs, fw) -%}
-<div style="display:flex;align-items:center;gap:10px;min-width:0">{% if row.thumb %}<img src="{{ row.thumb }}" alt="" style="width:26px;height:26px;object-fit:cover;object-position:center top;border-radius:5px;flex-shrink:0;background:#e8e8e8">{% endif %}<span style="font-size:{{ fs }};{% if fw %}font-weight:{{ fw }};{% endif %}white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.title }}</span></div>
+<div style="display:flex;align-items:center;gap:10px;min-width:0">{% if row.thumb %}<img src="{{ row.thumb }}" alt="" style="width:34px;height:34px;object-fit:cover;object-position:center top;border-radius:6px;flex-shrink:0;background:#e8e8e8">{% endif %}<span style="font-size:{{ fs }};{% if fw %}font-weight:{{ fw }};{% endif %}white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.title }}</span></div>
 {%- endmacro %}
 
 {# --- highlight card variants ------------------------------------------- #}
 
 {# portrait: 4:5 slot, cover + top-anchored so faces/headlines survive #}
 {% macro card_portrait(p, c) -%}
-<div style="width:272px;flex-shrink:0;background:#fff;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;display:flex;flex-direction:column">
-  <div style="position:relative;width:100%;height:340px;background:#e8e8e8">{% if c.thumb %}<img src="{{ c.thumb }}" alt="" style="width:100%;height:100%;object-fit:cover;object-position:center top;display:block">{% else %}<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#eee,#e2e2e2)"><div style="opacity:.35">{{ p.icon_big }}</div></div>{% endif %}<div style="position:absolute;top:12px;right:12px;font-size:32px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))">{{ c.medal }}</div></div>
-  <div style="padding:10px 14px 12px;display:flex;flex-direction:column;gap:5px;flex:1"><div style="font-size:17px;font-weight:700;line-height:1.25;text-wrap:pretty;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ c.title }}</div>
-    <div style="margin-top:auto;display:flex;align-items:baseline;justify-content:space-between;gap:8px"><div style="display:flex;align-items:baseline;gap:5px"><span class="mono" style="font-size:26px;font-weight:700;color:{{ p.colors.accent }}">{{ c.views_fmt }}</span><span style="font-size:13px;color:#808080">צפיות</span></div>{% if c.reporter %}<div style="font-size:13px;color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">{{ c.reporter }}</div>{% endif %}</div></div>
+<div style="width:240px;height:100%;flex-shrink:0;background:#fff;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;display:flex;flex-direction:column">
+  <div style="position:relative;width:100%;height:268px;flex-shrink:0;background:#e8e8e8">{% if c.thumb %}<img src="{{ c.thumb }}" alt="" style="width:100%;height:100%;object-fit:cover;object-position:center top;display:block">{% else %}<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#eee,#e2e2e2)"><div style="opacity:.35">{{ p.icon_big }}</div></div>{% endif %}<div style="position:absolute;top:12px;right:12px;font-size:39px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))">{{ c.medal }}</div></div>
+  <div style="padding:10px 14px 12px;display:flex;flex-direction:column;gap:5px;flex:1"><div style="font-size:22px;font-weight:700;line-height:1.25;text-wrap:pretty;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ c.title }}</div>
+    <div style="margin-top:auto;display:flex;align-items:baseline;justify-content:space-between;gap:8px"><div style="display:flex;align-items:baseline;gap:5px"><span class="mono" style="font-size:32px;font-weight:700;color:{{ p.colors.accent }}">{{ c.views_fmt }}</span><span style="font-size:17px;color:#808080">צפיות</span></div>{% if c.reporter %}<div style="font-size:17px;color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">{{ c.reporter }}</div>{% endif %}</div></div>
 </div>
 {%- endmacro %}
 
@@ -61,9 +67,9 @@ html,body{margin:0;padding:0;background:#f4f4f4}
    scaled-up, darkened copy of itself #}
 {% macro card_blur(p, c) -%}
 <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;position:relative;display:flex;flex-direction:column">
-  <div style="position:relative;width:100%;height:172px;background:#e8e8e8;overflow:hidden">{% if c.thumb %}<div style="position:absolute;inset:0;background-image:url('{{ c.thumb }}');background-size:cover;background-position:center;filter:blur(30px) brightness(.62);transform:scale(1.25)"></div><img src="{{ c.thumb }}" alt="" style="position:relative;width:100%;height:100%;object-fit:contain;display:block">{% else %}<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#eee,#e2e2e2)"><div style="opacity:.35">{{ p.icon_big }}</div></div>{% endif %}<div style="position:absolute;top:14px;right:14px;font-size:36px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))">{{ c.medal }}</div></div>
-  <div style="padding:14px 22px 16px;display:flex;flex-direction:column;gap:8px;flex:1"><div style="font-size:20px;font-weight:700;line-height:1.2;text-wrap:pretty">{{ c.title }}</div>
-    <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:baseline;gap:7px"><span class="mono" style="font-size:32px;font-weight:700;color:{{ p.colors.accent }}">{{ c.views_fmt }}</span><span style="font-size:15px;color:#808080">צפיות</span></div>{% if c.reporter %}<div style="font-size:15px;color:#808080;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#FF3300"></span>{{ c.reporter }}</div>{% endif %}</div></div>
+  <div style="position:relative;width:100%;height:172px;background:#e8e8e8;overflow:hidden">{% if c.thumb %}<div style="position:absolute;inset:0;background-image:url('{{ c.thumb }}');background-size:cover;background-position:center;filter:blur(30px) brightness(.62);transform:scale(1.25)"></div><img src="{{ c.thumb }}" alt="" style="position:relative;width:100%;height:100%;object-fit:contain;display:block">{% else %}<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#eee,#e2e2e2)"><div style="opacity:.35">{{ p.icon_big }}</div></div>{% endif %}<div style="position:absolute;top:14px;right:14px;font-size:44px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))">{{ c.medal }}</div></div>
+  <div style="padding:14px 22px 16px;display:flex;flex-direction:column;gap:8px;flex:1"><div style="font-size:26px;font-weight:700;line-height:1.2;text-wrap:pretty">{{ c.title }}</div>
+    <div style="margin-top:auto;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:baseline;gap:7px"><span class="mono" style="font-size:39px;font-weight:700;color:{{ p.colors.accent }}">{{ c.views_fmt }}</span><span style="font-size:20px;color:#808080">צפיות</span></div>{% if c.reporter %}<div style="font-size:20px;color:#808080;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#FF3300"></span>{{ c.reporter }}</div>{% endif %}</div></div>
 </div>
 {%- endmacro %}
 
@@ -71,14 +77,14 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 {% macro card_text(p, c) -%}
 <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;position:relative;overflow:hidden;display:flex;flex-direction:column;min-height:262px;padding:26px 30px 22px">
   <div style="position:absolute;top:0;right:0;width:4px;height:100%;background:{{ p.colors.accent }}"></div>
-  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px"><div style="font-size:30px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))">{{ c.medal }}</div><div class="mono" style="font-size:44px;line-height:.7;color:{{ p.colors.accent }};opacity:.25">&rdquo;</div></div>
-  <div style="font-size:25px;font-weight:700;line-height:1.32;text-wrap:pretty;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden">{{ c.title }}</div>
-  <div style="margin-top:auto;padding-top:18px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #ececec"><div style="display:flex;align-items:baseline;gap:7px"><span class="mono" style="font-size:32px;font-weight:700;color:{{ p.colors.accent }}">{{ c.views_fmt }}</span><span style="font-size:15px;color:#808080">צפיות</span></div>{% if c.reporter %}<div style="font-size:15px;color:#808080;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#FF3300"></span>{{ c.reporter }}</div>{% endif %}</div>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px"><div style="font-size:37px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))">{{ c.medal }}</div><div class="mono" style="font-size:54px;line-height:.7;color:{{ p.colors.accent }};opacity:.25">&rdquo;</div></div>
+  <div style="font-size:30px;font-weight:700;line-height:1.32;text-wrap:pretty;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden">{{ c.title }}</div>
+  <div style="margin-top:auto;padding-top:18px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #ececec"><div style="display:flex;align-items:baseline;gap:7px"><span class="mono" style="font-size:39px;font-weight:700;color:{{ p.colors.accent }}">{{ c.views_fmt }}</span><span style="font-size:20px;color:#808080">צפיות</span></div>{% if c.reporter %}<div style="font-size:20px;color:#808080;display:flex;align-items:center;gap:7px"><span style="width:6px;height:6px;border-radius:50%;background:#FF3300"></span>{{ c.reporter }}</div>{% endif %}</div>
 </div>
 {%- endmacro %}
 
 {% macro anomaly_legend(p) -%}
-{% if p.has_anomaly %}<div style="display:flex;align-items:center;gap:10px;font-size:15px;color:#808080;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:2px 8px">חריג</span> פריט שקיבל פי 2.5 ומעלה מהרגיל <b>ביחס לכמות הצפיות שלו</b> — בשיתופים, בתגובות, בלייקים או במעורבות</div>{% else %}<div style="margin-bottom:8px;height:23px"></div>{% endif %}
+{% if p.has_anomaly %}<div style="display:flex;align-items:center;gap:10px;font-size:25px;color:#808080;margin-bottom:8px"><span style="font-size:20px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:2px 10px">חריג</span> פריט שקיבל פי {{ anomaly_min }} ומעלה מהרגיל <b>ביחס לכמות הצפיות שלו</b> — בשיתופים, בתגובות, בלייקים או במעורבות</div>{% else %}<div style="margin-bottom:8px;height:28px"></div>{% endif %}
 {%- endmacro %}
 
 {#
@@ -87,45 +93,47 @@ html,body{margin:0;padding:0;background:#f4f4f4}
   list — real per-platform numbers instead of empty space.
 #}
 {% macro funfact_box(p, tall) -%}
-{% if p.fun_fact %}<div style="{% if tall %}flex:1;{% else %}width:296px;flex-shrink:0;{% endif %}background:linear-gradient(180deg,rgba({{ p.colors.tint }},.10),rgba({{ p.colors.tint }},.02));border:1px solid rgba({{ p.colors.tint }},.28);border-radius:8px;padding:{% if tall %}34px 40px 30px{% else %}26px{% endif %};display:flex;flex-direction:column">
-  <div style="font-size:15px;font-weight:700;letter-spacing:.04em;color:{{ p.colors.accent }};margin-bottom:{% if tall %}18px{% else %}16px{% endif %}">נתון מעניין</div>
-  <div class="mono" style="font-size:{% if tall %}92px{% else %}62px{% endif %};font-weight:700;line-height:.9;color:#111">{{ p.fun_fact.value }}<span style="font-size:{% if tall %}48px{% else %}34px{% endif %};color:{{ p.colors.accent }}">{{ p.fun_fact.suffix }}</span></div>
-  <div style="font-size:{% if tall %}25px{% else %}19px{% endif %};line-height:1.4;color:#404040;margin-top:14px;text-wrap:pretty;{% if tall %}max-width:620px{% endif %}">{{ p.fun_fact.text }}</div>
-  {% if p.fun_fact_more %}<div style="margin-top:auto;padding-top:{% if tall %}26px{% else %}20px{% endif %}">
-    {% for m in p.fun_fact_more %}<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:{% if tall %}12px{% else %}9px{% endif %} 0;border-top:1px solid rgba({{ p.colors.tint }},.24)">
-      <span style="font-size:{% if tall %}18px{% else %}15px{% endif %};color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.label }}</span>
-      <span class="mono" style="font-size:{% if tall %}24px{% else %}19px{% endif %};font-weight:700;color:#404040;white-space:nowrap">{{ m.value }}<span style="font-size:{% if tall %}16px{% else %}13px{% endif %};color:{{ p.colors.accent }}">{{ m.suffix }}</span></span>
+{% if p.fun_fact %}<div style="{% if tall %}flex:1;{% else %}width:296px;flex-shrink:0;{% endif %}background:linear-gradient(180deg,rgba({{ p.colors.tint }},.10),rgba({{ p.colors.tint }},.02));border:1px solid rgba({{ p.colors.tint }},.28);border-radius:8px;padding:{% if tall %}26px 34px 22px{% else %}26px{% endif %};display:flex;flex-direction:column;overflow:hidden">
+  <div style="font-size:20px;font-weight:700;letter-spacing:.04em;color:{{ p.colors.accent }};margin-bottom:{% if tall %}12px{% else %}16px{% endif %}">נתון מעניין</div>
+  <div class="mono" style="font-size:{% if tall %}78px{% else %}68px{% endif %};font-weight:700;line-height:.9;color:#111">{{ p.fun_fact.value }}<span style="font-size:{% if tall %}44px{% else %}41px{% endif %};color:{{ p.colors.accent }}">{{ p.fun_fact.suffix }}</span></div>
+  <div style="font-size:{% if tall %}27px{% else %}25px{% endif %};line-height:1.4;color:#404040;margin-top:14px;text-wrap:pretty;{% if tall %}max-width:620px{% endif %}">{{ p.fun_fact.text }}</div>
+  {% if p.fun_fact_more %}<div style="margin-top:auto;padding-top:{% if tall %}18px{% else %}20px{% endif %}">
+    {# the tall panel shares a fixed-height band with the highlight cards, so it
+       carries two runners-up, not three — a third would be clipped, not read #}
+    {% for m in (p.fun_fact_more[:2] if tall else p.fun_fact_more) %}<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:{% if tall %}9px{% else %}9px{% endif %} 0;border-top:1px solid rgba({{ p.colors.tint }},.24)">
+      <span style="font-size:{% if tall %}23px{% else %}20px{% endif %};color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.label }}</span>
+      <span class="mono" style="font-size:{% if tall %}31px{% else %}25px{% endif %};font-weight:700;color:#404040;white-space:nowrap">{{ m.value }}<span style="font-size:{% if tall %}21px{% else %}17px{% endif %};color:{{ p.colors.accent }}">{{ m.suffix }}</span></span>
     </div>{% endfor %}
   </div>{% endif %}
 </div>{% endif %}
 {%- endmacro %}
 
 {% macro table_block(p) -%}
-<div style="display:grid;grid-template-columns:46px 1fr 150px 104px 92px 158px;gap:14px;padding:0 18px 6px;font-size:15px;font-weight:700;color:#808080;letter-spacing:.03em"><div>#</div><div>כותרת</div><div>כתב/ת</div><div style="text-align:left">צפיות</div><div style="text-align:left">מעורבות</div><div style="text-align:left">חריג</div></div>
+<div style="display:grid;grid-template-columns:46px 1fr 150px 104px 92px 158px;gap:14px;padding:0 18px 6px;font-size:20px;font-weight:700;color:#808080;letter-spacing:.03em"><div>#</div><div>כותרת</div><div>כתב/ת</div><div style="text-align:left">צפיות</div><div style="text-align:left">מעורבות</div><div style="text-align:left">חריג</div></div>
 <div style="display:flex;flex-direction:column;gap:4px;flex:1">
   {% for row in p.top10 %}
   {%- if row.highlight -%}
     {%- set alpha = {1:'0.16',2:'0.11',3:'0.07'}[row.rank] -%}
-    <div style="display:grid;grid-template-columns:46px 1fr 150px 104px 92px 158px;gap:14px;align-items:center;padding:5px 18px;background:rgba({{ p.colors.tint }},{{ alpha }});border-right:3px solid {{ p.colors.bar }};border-radius:4px"><div class="mono" style="font-size:22px;font-weight:700">{{ row.rank }}</div>{{ title_cell(row, "20px", "600") }}<div style="font-size:18px;color:#404040;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:21px;font-weight:700">{{ row.views_fmt }}</div><div style="text-align:left;font-size:19px;color:#404040">{{ row.eng_str }}</div><div style="text-align:left">{% if row.anomaly %}<span style="display:inline-flex;align-items:center;gap:5px;font-size:14px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:3px 10px;white-space:nowrap"><span style="font-size:13px">{{ row.anomaly.icon }}</span>{{ row.anomaly.label }} <span class="mono">{{ row.anomaly.mult }}</span></span>{% endif %}</div></div>
+    <div style="display:grid;grid-template-columns:46px 1fr 150px 104px 92px 158px;gap:14px;align-items:center;padding:4px 18px;background:rgba({{ p.colors.tint }},{{ alpha }});border-right:3px solid {{ p.colors.bar }};border-radius:4px"><div class="mono" style="font-size:29px;font-weight:700">{{ row.rank }}</div>{{ title_cell(row, "26px", "600") }}<div style="font-size:23px;color:#404040;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:27px;font-weight:700">{{ row.views_fmt }}</div><div style="text-align:left;font-size:25px;color:#404040">{{ row.eng_str }}</div><div style="text-align:left">{% if row.anomaly %}<span style="display:inline-flex;align-items:center;gap:5px;font-size:18px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:3px 10px;white-space:nowrap"><span style="font-size:17px">{{ row.anomaly.icon }}</span>{{ row.anomaly.label }} {{ row.anomaly.mult }}</span>{% endif %}</div></div>
   {%- elif row.anomaly -%}
-    <div style="display:grid;grid-template-columns:46px 1fr 150px 104px 92px 158px;gap:14px;align-items:center;padding:5px 18px;background:rgba(255,51,0,0.07);border-right:3px solid #FF3300;border-radius:4px"><div class="mono" style="font-size:20px;color:#808080">{{ row.rank }}</div>{{ title_cell(row, "19px", "") }}<div style="font-size:17px;color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:20px">{{ row.views_fmt }}</div><div style="text-align:left;font-size:19px;color:#404040">{{ row.eng_str }}</div><div style="text-align:left">{% if row.anomaly %}<span style="display:inline-flex;align-items:center;gap:5px;font-size:14px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:3px 10px;white-space:nowrap"><span style="font-size:13px">{{ row.anomaly.icon }}</span>{{ row.anomaly.label }} <span class="mono">{{ row.anomaly.mult }}</span></span>{% endif %}</div></div>
+    <div style="display:grid;grid-template-columns:46px 1fr 150px 104px 92px 158px;gap:14px;align-items:center;padding:4px 18px;background:rgba(255,51,0,0.07);border-right:3px solid #FF3300;border-radius:4px"><div class="mono" style="font-size:26px;color:#808080">{{ row.rank }}</div>{{ title_cell(row, "25px", "") }}<div style="font-size:22px;color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:26px">{{ row.views_fmt }}</div><div style="text-align:left;font-size:25px;color:#404040">{{ row.eng_str }}</div><div style="text-align:left">{% if row.anomaly %}<span style="display:inline-flex;align-items:center;gap:5px;font-size:18px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:3px 10px;white-space:nowrap"><span style="font-size:17px">{{ row.anomaly.icon }}</span>{{ row.anomaly.label }} {{ row.anomaly.mult }}</span>{% endif %}</div></div>
   {%- else -%}
-    <div style="display:grid;grid-template-columns:46px 1fr 150px 104px 92px 158px;gap:14px;align-items:center;padding:4px 18px;border-bottom:1px solid #e0e0e0"><div class="mono" style="font-size:20px;color:#808080">{{ row.rank }}</div>{{ title_cell(row, "19px", "") }}<div style="font-size:17px;color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:20px">{{ row.views_fmt }}</div><div style="text-align:left;font-size:19px;color:#404040">{{ row.eng_str }}</div><div style="text-align:left">{% if row.anomaly %}<span style="display:inline-flex;align-items:center;gap:5px;font-size:14px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:3px 10px;white-space:nowrap"><span style="font-size:13px">{{ row.anomaly.icon }}</span>{{ row.anomaly.label }} <span class="mono">{{ row.anomaly.mult }}</span></span>{% endif %}</div></div>
+    <div style="display:grid;grid-template-columns:46px 1fr 150px 104px 92px 158px;gap:14px;align-items:center;padding:3px 18px;border-bottom:1px solid #e0e0e0"><div class="mono" style="font-size:26px;color:#808080">{{ row.rank }}</div>{{ title_cell(row, "25px", "") }}<div style="font-size:22px;color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.reporter }}</div><div class="mono" style="text-align:left;font-size:26px">{{ row.views_fmt }}</div><div style="text-align:left;font-size:25px;color:#404040">{{ row.eng_str }}</div><div style="text-align:left">{% if row.anomaly %}<span style="display:inline-flex;align-items:center;gap:5px;font-size:18px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:3px 10px;white-space:nowrap"><span style="font-size:17px">{{ row.anomaly.icon }}</span>{{ row.anomaly.label }} {{ row.anomaly.mult }}</span>{% endif %}</div></div>
   {%- endif -%}
   {% endfor %}
 </div>
 {%- endmacro %}
 
 {% macro platform_slide(p) %}
-<section class="slide" dir="rtl" style="background:#f4f4f4;font-family:'SimplerPro',sans-serif;color:#111;padding:60px 80px 52px;display:flex;flex-direction:column">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px"><div style="display:flex;align-items:center;gap:20px">{{ p.icon }}<div><div style="font-size:15px;font-weight:700;letter-spacing:.05em;color:#FF3300">{{ p.rank_label }}</div><h2 style="margin:2px 0 0;font-size:46px;font-weight:900;letter-spacing:-.02em">{{ p.name }}</h2></div></div>
-    <div style="display:flex;gap:44px;align-items:center"><div style="text-align:center"><div class="mono" style="font-size:42px;font-weight:700;line-height:1">{{ p.weekly_views_fmt }}</div><div style="font-size:15px;color:#808080;margin-top:4px">צפיות השבוע</div></div><div style="width:1px;height:50px;background:#e0e0e0"></div><div style="text-align:center"><div class="mono" style="font-size:42px;font-weight:700;line-height:1;color:{{ p.delta_color }}">{% if p.has_delta %}{{ p.delta_str }}{% else %}—{% endif %}</div><div style="font-size:15px;color:#808080;margin-top:4px">מול שבוע שעבר</div></div></div></div>
+<section class="slide" dir="rtl" style="background:#f4f4f4;font-family:'SimplerPro',sans-serif;color:#111;padding:46px 72px 40px;display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="display:flex;align-items:center;gap:20px">{{ p.icon }}<div><div style="font-size:20px;font-weight:700;letter-spacing:.05em;color:#FF3300">{{ p.rank_label }}</div><h2 style="margin:2px 0 0;font-size:51px;font-weight:900;letter-spacing:-.02em">{{ p.name }}</h2></div></div>
+    <div style="display:flex;gap:44px;align-items:center"><div style="text-align:center"><div class="mono" style="font-size:51px;font-weight:700;line-height:1">{{ p.weekly_views_fmt }}</div><div style="font-size:20px;color:#808080;margin-top:4px">צפיות השבוע</div></div><div style="width:1px;height:50px;background:#e0e0e0"></div><div style="text-align:center"><div class="mono" style="font-size:51px;font-weight:700;line-height:1;color:{{ p.delta_color }}">{% if p.has_delta %}{{ p.delta_str }}{% else %}—{% endif %}</div><div style="font-size:20px;color:#808080;margin-top:4px">מול שבוע שעבר</div></div></div></div>
 
   {% if not p.has_data %}
   <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#808080;gap:18px">
     <div style="opacity:.45">{{ p.icon_big }}</div>
-    <div style="font-size:30px;font-weight:700;color:#404040">אין פרסומים ב{{ p.name }} השבוע</div>
-    <div style="font-size:19px">לא נאספו נתונים לחלון {{ week.range_short }}</div>
+    <div style="font-size:37px;font-weight:700;color:#404040">אין פרסומים ב{{ p.name }} השבוע</div>
+    <div style="font-size:25px">לא נאספו נתונים לחלון {{ week.range_short }}</div>
   </div>
 
   {% elif p.text_cards %}
@@ -136,7 +144,7 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 
   {% elif thumbstyle == 'portrait' %}
   {#--- portrait: taller/narrower cards beside a wide fun-fact; table full width ---#}
-  <div style="display:flex;gap:22px;margin-bottom:14px;flex-shrink:0">
+  <div style="display:flex;gap:18px;margin-bottom:10px;flex-shrink:0;height:378px">
     <div style="display:flex;gap:22px;flex-shrink:0">{% for c in p.top3 %}{{ card_portrait(p, c) }}{% endfor %}</div>
     {{ funfact_box(p, true) }}
   </div>
@@ -157,34 +165,34 @@ html,body{margin:0;padding:0;background:#f4f4f4}
   <div style="position:absolute;top:0;right:0;width:8px;height:100%;background:#FF3300"></div>
   <div style="display:flex;align-items:flex-start;justify-content:space-between">
     <div>
-      <div style="font-size:22px;font-weight:700;letter-spacing:.04em;color:#FF3300;margin-bottom:26px">סיכום סושיאל שבועי</div>
+      <div style="font-size:29px;font-weight:700;letter-spacing:.04em;color:#FF3300;margin-bottom:26px">סיכום סושיאל שבועי</div>
       <h1 style="margin:0;font-size:104px;font-weight:900;line-height:.98;letter-spacing:-.02em">הסושיאל<br>של השבוע</h1>
-      <div style="margin-top:30px;font-size:30px;font-weight:400;color:#404040">{{ week.range_str }}</div>
+      <div style="margin-top:30px;font-size:37px;font-weight:400;color:#404040">{{ week.range_str }}</div>
     </div>
     {{ logo_lockup(58) }}
   </div>
   <div style="display:flex;align-items:flex-end;justify-content:space-between;border-top:1px solid #e0e0e0;padding-top:44px">
     <div>
-      <div style="font-size:24px;font-weight:600;color:#808080;margin-bottom:8px">סה״כ צפיות בכל הפלטפורמות</div>
+      <div style="font-size:31px;font-weight:600;color:#808080;margin-bottom:8px">סה״כ צפיות בכל הפלטפורמות</div>
       <div class="mono" style="font-size:200px;font-weight:700;line-height:.85;letter-spacing:-.03em;color:#111">{{ hero.total_main }}<span style="font-size:96px;color:#FF3300">{{ hero.total_suffix }}</span></div>
     </div>
-    {% if hero.has_delta %}<div style="text-align:left;display:flex;align-items:center;gap:12px;color:{{ hero.delta_color }};font-size:30px;font-weight:700"><span style="font-size:34px">{{ hero.delta_arrow }}</span>{{ hero.delta_str }} מול השבוע שעבר</div>{% endif %}
+    {% if hero.has_delta %}<div style="text-align:left;display:flex;align-items:center;gap:12px;color:{{ hero.delta_color }};font-size:37px;font-weight:700"><span class="ltr" style="display:inline-flex;align-items:center;gap:12px"><span style="font-size:41px">{{ hero.delta_arrow }}</span>{{ hero.delta_str }}</span> מול השבוע שעבר</div>{% endif %}
   </div>
 </section>
 
 {#================= OVERVIEW =================#}
 <section class="slide" dir="rtl" style="background:#f4f4f4;font-family:'SimplerPro',sans-serif;color:#111;padding:84px 96px;display:flex;flex-direction:column">
   <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:8px">
-    <div style="display:flex;align-items:baseline;gap:20px"><div style="width:44px;height:8px;background:#FF3300;align-self:center"></div><h2 style="margin:0;font-size:60px;font-weight:900;letter-spacing:-.02em">השבוע במספרים</h2></div>
-    <div style="text-align:left"><div class="mono" style="font-size:52px;font-weight:700;line-height:1">{{ hero.total_fmt }}</div><div style="font-size:16px;color:#808080;margin-top:2px">סה״כ צפיות{% if hero.has_delta %} · <span style="color:{{ hero.delta_color }};font-weight:700">{{ hero.delta_arrow }} {{ hero.delta_str }}</span> מהשבוע שעבר{% endif %}</div></div></div>
-  <div style="font-size:20px;color:#808080;margin-bottom:12px">מדורג לפי נפח צפיות — אורך הבר = נתח מסך הצפיות</div>
-  <div style="display:grid;grid-template-columns:250px 1fr 130px 120px;gap:26px;padding:0 2px 14px;border-bottom:1px solid #e0e0e0;font-size:14px;font-weight:700;color:#808080;letter-spacing:.03em"><div>פלטפורמה</div><div>נתח מסך הצפיות</div><div>צפיות השבוע</div><div style="text-align:left">מגמה</div></div>
+    <div style="display:flex;align-items:baseline;gap:20px"><div style="width:44px;height:8px;background:#FF3300;align-self:center"></div><h2 style="margin:0;font-size:66px;font-weight:900;letter-spacing:-.02em">השבוע במספרים</h2></div>
+    <div style="text-align:left"><div class="mono" style="font-size:57px;font-weight:700;line-height:1">{{ hero.total_fmt }}</div><div style="font-size:21px;color:#808080;margin-top:2px">סה״כ צפיות{% if hero.has_delta %} · <span class="ltr" style="color:{{ hero.delta_color }};font-weight:700">{{ hero.delta_arrow }} {{ hero.delta_str }}</span> מהשבוע שעבר{% endif %}</div></div></div>
+  <div style="font-size:26px;color:#808080;margin-bottom:12px">מדורג לפי נפח צפיות — אורך הבר = נתח מסך הצפיות</div>
+  <div style="display:grid;grid-template-columns:250px 1fr 130px 120px;gap:26px;padding:0 2px 14px;border-bottom:1px solid #e0e0e0;font-size:18px;font-weight:700;color:#808080;letter-spacing:.03em"><div>פלטפורמה</div><div>נתח מסך הצפיות</div><div>צפיות השבוע</div><div style="text-align:left">מגמה</div></div>
   <div style="flex:1;display:flex;flex-direction:column;justify-content:space-around;padding:10px 0">
     {% for r in overview_rows %}<div style="display:grid;grid-template-columns:250px 1fr 130px 120px;gap:26px;align-items:center">
-      <div style="display:flex;align-items:center;gap:16px">{{ r.icon }}<div><div style="font-size:27px;font-weight:700">{{ r.name }}</div><div style="font-size:15px;color:#808080;margin-top:2px">{% if r.followers_fmt %}{{ r.followers_fmt }} עוקבים{% endif %}</div></div></div>
+      <div style="display:flex;align-items:center;gap:16px">{{ r.icon }}<div><div style="font-size:33px;font-weight:700">{{ r.name }}</div><div style="font-size:20px;color:#808080;margin-top:2px">{% if r.followers_fmt %}{{ r.followers_fmt }} עוקבים{% endif %}</div></div></div>
       <div style="position:relative;height:42px;background:#e0e0e0;border-radius:8px;overflow:hidden"><div style="position:absolute;top:0;right:0;height:100%;width:{{ r.bar_pct }}%;background:{{ r.bar_color }};border-radius:8px"></div></div>
-      <div class="mono" style="font-size:32px;font-weight:700">{{ r.views_fmt }}</div>
-      <div style="font-size:18px;font-weight:700;color:{{ r.delta_color }};text-align:left">{% if r.has_delta %}{{ r.delta_arrow }} {{ r.delta_str }}{% else %}—{% endif %}</div></div>
+      <div class="mono" style="font-size:39px;font-weight:700">{{ r.views_fmt }}</div>
+      <div style="font-size:23px;font-weight:700;color:{{ r.delta_color }};text-align:left">{% if r.has_delta %}<span class="ltr">{{ r.delta_arrow }} {{ r.delta_str }}</span>{% else %}—{% endif %}</div></div>
     {% endfor %}
   </div>
 </section>
@@ -194,7 +202,7 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 
 {#================= LEARNINGS =================#}
 <section class="slide" dir="rtl" style="background:radial-gradient(120% 120% at 22% 10%,#ffffff 0%,#f4f4f4 60%,#e9e9e9 100%);font-family:'SimplerPro',sans-serif;color:#111;padding:72px 96px;display:flex;flex-direction:column">
-  <div style="display:flex;align-items:baseline;gap:20px;margin-bottom:32px;flex-shrink:0"><div style="width:44px;height:8px;background:#FF3300;align-self:center"></div><h2 style="margin:0;font-size:60px;font-weight:900;letter-spacing:-.02em">מה למדנו השבוע</h2></div>
+  <div style="display:flex;align-items:baseline;gap:20px;margin-bottom:32px;flex-shrink:0"><div style="width:44px;height:8px;background:#FF3300;align-self:center"></div><h2 style="margin:0;font-size:66px;font-weight:900;letter-spacing:-.02em">מה קרה השבוע</h2></div>
 
   {#--- story of the week takes the freed vertical space; its per-platform
        numbers are the strongest thing on the slide, so they get real size ---#}
@@ -202,12 +210,12 @@ html,body{margin:0;padding:0;background:#f4f4f4}
   <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:44px 48px;position:relative;overflow:hidden;margin-bottom:28px;flex:1;min-height:280px;max-height:400px;display:flex;align-items:center;gap:52px">
     <div style="position:absolute;top:0;right:0;width:8px;height:100%;background:#FF3300"></div>
     <div style="flex:1;min-width:0">
-      <div style="font-size:16px;font-weight:700;letter-spacing:.05em;color:#FF3300;margin-bottom:16px">הסיפור של השבוע</div>
-      <div style="font-size:52px;font-weight:900;line-height:1.1;letter-spacing:-.015em;text-wrap:pretty">{{ story.title }}</div>
-      <div style="font-size:24px;color:#404040;line-height:1.5;margin-top:20px;text-wrap:pretty">{{ story.sentence }}</div>
+      <div style="font-size:21px;font-weight:700;letter-spacing:.05em;color:#FF3300;margin-bottom:16px">הסיפור של השבוע</div>
+      <div style="font-size:57px;font-weight:900;line-height:1.1;letter-spacing:-.015em;text-wrap:pretty">{{ story.title }}</div>
+      <div style="font-size:31px;color:#404040;line-height:1.5;margin-top:20px;text-wrap:pretty">{{ story.sentence }}</div>
     </div>
     {% if story.platforms %}<div style="display:flex;gap:48px;flex-shrink:0;padding-right:48px;border-right:1px solid #ececec">
-      {% for s in story.platforms %}<div style="text-align:center"><div class="mono" style="font-size:62px;font-weight:700;line-height:1;letter-spacing:-.02em">{{ s.views_fmt }}</div><div style="font-size:18px;color:#808080;margin-top:10px">{{ s.name }}</div></div>{% endfor %}
+      {% for s in story.platforms %}<div style="text-align:center"><div class="mono" style="font-size:68px;font-weight:700;line-height:1;letter-spacing:-.02em">{{ s.views_fmt }}</div><div style="font-size:23px;color:#808080;margin-top:10px">{{ s.name }}</div></div>{% endfor %}
     </div>{% endif %}
   </div>
   {% endif %}
@@ -216,10 +224,10 @@ html,body{margin:0;padding:0;background:#f4f4f4}
        inside a card; without a story band they centre in the leftover space ---#}
   <div style="display:grid;grid-template-columns:repeat({{ learnings|length or 1 }},1fr);gap:24px;align-items:start;flex-shrink:0{% if not story %};margin:auto 0{% endif %}">
     {% for c in learnings %}<div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:{% if story %}28px 30px 30px{% else %}44px 40px{% endif %};display:flex;flex-direction:column;overflow:hidden">
-      <div style="font-size:{% if story %}30px{% else %}42px{% endif %};line-height:1">{{ c.icon }}</div>
-      {% if c.number %}<div class="mono" style="font-size:{% if story %}54px{% else %}88px{% endif %};font-weight:700;line-height:.9;color:{{ c.color }};margin-top:{% if story %}10px{% else %}20px{% endif %}">{{ c.number_main }}<span style="font-size:{% if story %}30px{% else %}48px{% endif %}">{{ c.number_suffix }}</span></div>{% endif %}
-      <div style="font-size:{% if story %}22px{% else %}30px{% endif %};font-weight:900;line-height:1.2;letter-spacing:-.01em;margin-top:{% if story %}14px{% else %}22px{% endif %};text-wrap:pretty">{{ c.title }}</div>
-      <div style="margin-top:12px;font-size:{% if story %}16px{% else %}19px{% endif %};color:#808080;line-height:1.55;text-wrap:pretty">{{ c.sentence }}</div>
+      <div style="font-size:{% if story %}37px{% else %}51px{% endif %};line-height:1">{{ c.icon }}</div>
+      {% if c.number %}<div class="mono" style="font-size:{% if story %}59px{% else %}88px{% endif %};font-weight:700;line-height:.9;color:{{ c.color }};margin-top:{% if story %}10px{% else %}20px{% endif %}">{{ c.number_main }}<span style="font-size:{% if story %}37px{% else %}53px{% endif %}">{{ c.number_suffix }}</span></div>{% endif %}
+      <div style="font-size:{% if story %}29px{% else %}37px{% endif %};font-weight:900;line-height:1.2;letter-spacing:-.01em;margin-top:{% if story %}14px{% else %}22px{% endif %};text-wrap:pretty">{{ c.title }}</div>
+      <div style="margin-top:12px;font-size:{% if story %}21px{% else %}25px{% endif %};color:#808080;line-height:1.55;text-wrap:pretty">{{ c.sentence }}</div>
     </div>{% endfor %}
   </div>
 </section>
@@ -227,11 +235,11 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 {#================= CLOSING =================#}
 <section class="slide" dir="rtl" style="background:radial-gradient(120% 120% at 50% 40%,#ffffff 0%,#f4f4f4 60%,#e6e6e6 100%);font-family:'SimplerPro',sans-serif;color:#111;padding:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
   <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:8px;height:120px;background:#FF3300"></div>
-  <div style="font-size:24px;font-weight:700;letter-spacing:.05em;color:#FF3300;margin-bottom:28px">סיכום סושיאל שבועי</div>
+  <div style="font-size:31px;font-weight:700;letter-spacing:.05em;color:#FF3300;margin-bottom:28px">סיכום סושיאל שבועי</div>
   <h1 style="margin:0;font-size:120px;font-weight:900;line-height:.95;letter-spacing:-.02em">נתראה בשבוע הבא</h1>
   <div style="margin-top:56px">{{ logo_lockup(56) }}</div>
   
-  <div style="position:absolute;bottom:64px;font-size:17px;color:#808080">{{ closing_note }}{% if week.range_short %} · {{ week.range_short }}{% endif %}</div>
+  <div style="position:absolute;bottom:64px;font-size:22px;color:#808080">{{ closing_note }}{% if week.range_short %} · {{ week.range_short }}{% endif %}</div>
 </section>
 
 </body>

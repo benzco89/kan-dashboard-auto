@@ -26,6 +26,8 @@ python weekly_deck/generate_deck.py --extract
 # 2. EDIT  out/deck_content.json  by hand — titles, reporters, learnings,
 #    fun_fact.chosen, story_of_the_week, closing credits. It is plain UTF-8
 #    JSON with no base64 in it.
+#    Uncredited items are listed in out/reporters_todo.txt — fill the names into
+#    weekly_deck/reporters_overrides.json so they survive the next extract.
 
 # 3. RENDER — offline, instant, deterministic. Re-run this after every edit.
 python weekly_deck/generate_deck.py --render
@@ -38,8 +40,18 @@ Outputs: `out/deck.html`, `out/deck.pdf`, `out/slide_1.png` / `slide_2.png`
 (`--qa-all` screenshots every slide).
 
 Flags: `--thumbstyle portrait|blur` (see below) · `--no-thumbs` (skip downloads)
-· `--gemini` (opt in to an LLM rewrite of the learnings prose during extract —
-**off by default**, and it still never touches numbers).
+· `--reporters-todo` (rebuild the uncredited-items list from an existing
+`deck_content.json`, offline) · `--gemini` (opt in to an LLM rewrite of the
+prose during extract — **off by default**, and it still never touches numbers).
+
+### What the deck deliberately does not say
+
+It goes to the whole newsroom, so it reports the week and stops there. No card
+compares one content format against another ("X% of the views came from Reels")
+and none ends in advice ("worth focusing there", "worth a look"): a news desk
+covers the news it has, and next week's editorial calls should not be argued
+from last week's format mix. Keep hand-written `learnings` and `fun_fact` text on
+the same side of that line.
 
 ### What lives in deck_content.json
 
@@ -77,17 +89,17 @@ prior Sun–Sat is the baseline for week-over-week deltas. Running Tue 2026-07-2
 - **Per-platform slides** (dynamic order by views) — top-3 highlight cards + a
   top-10 table (square leading thumbnails) with its own **חריג column** saying
   *what* is unusual about an item — shares, comments, likes or engagement at
-  2.5x or more of a normal post's **rate** that week, shown as e.g.
-  `🔁 שיתופים ×3.4` (empty on most rows). Rates, not absolute counts: the top-10
+  3x or more of a normal post's **rate** that week, shown as e.g.
+  `🔁 שיתופים פי 3.4` (empty on most rows, and capped at 4 badges per slide). Rates, not absolute counts: the top-10
   are the week's biggest posts by definition, so comparing raw counts would flag
   almost every row and only restate the views column. Comparing
   interactions-per-view instead surfaces the post that punched above its own
   reach — and a `נתון מעניין` picked from the platform's
   candidate list (`fun_fact.chosen`).
-- **מה למדנו** — 3–4 learning cards `{icon, number, color, title, sentence}`
-  plus an optional wider **story of the week** block that names one story and
-  shows its per-platform numbers. Authored in `deck_content.json`; the code only
-  seeds deterministic defaults.
+- **מה קרה השבוע** — 3–4 cards `{icon, number, color, title, sentence}` plus an
+  optional wider **story of the week** block that names one story and shows its
+  per-platform numbers. Authored in `deck_content.json`; the code only seeds
+  deterministic defaults.
 - **Closing** — sign-off and week dates.
 
 Platforms with no rows in the window keep their slide but show an honest empty
@@ -137,13 +149,34 @@ almost every post. Everything else is left empty and listed in the report below.
 `reporter_source` on each item records **how** the credit was found, so guesses
 (`trailing-latin` / `trailing-hebrew`) are easy to spot while authoring.
 
-### The extract report
+Once a credit is known, the `@handle` or `(שם)` it came from is **removed from
+the headline** — it would only duplicate the כתב/ת column. With no credit the
+handle stays visible: it is the hint that `reporters_map.json` needs a line.
+
+### The extract report and the TODO list
 
 `--extract` ends with a reporter report: the hit rate, a breakdown by source, a
 "worth a glance" list of bare-trailing-name guesses (with any second name seen),
-and an **UNRESOLVED** list showing the **last 80 chars** of each uncredited
-caption — that is where credits live, so it is obvious at a glance which posts
-are genuinely uncredited and which just need a new `reporters_map` entry.
+and a list of the items with **no credit anywhere in the text**.
+
+That last group is mostly not a parsing miss — plenty of items (YouTube titles,
+agency copy, quoted statements) genuinely ship without a byline, and no amount of
+regex will find a name that was never written. So instead of guessing, the run
+writes `out/reporters_todo.txt`: each uncredited item's headline, a link to it
+where one can be derived, and a **paste-ready JSON block** to fill in.
+
+Rebuild that list at any time, offline, with:
+
+```bash
+python weekly_deck/generate_deck.py --reporters-todo
+```
+
+`reporters_overrides.json` (repo-tracked) takes those answers as
+`{"<platform>:<item id>": "שם"}`. It pins ONE item, where `reporters_map` teaches
+a reusable rule — and an empty value (`""`) records "checked, genuinely
+uncredited" so the item stops coming back. Overrides are applied on **both**
+`--extract` and `--render`, so a name filled in after the data was pulled lands
+with a re-render alone, and a re-extract never loses it.
 
 `reporters_map.json` (repo-tracked, **user-editable and meant to grow** — just
 add a line) maps `{"@handle": "שם בעברית"}` and is applied during extract. Keys

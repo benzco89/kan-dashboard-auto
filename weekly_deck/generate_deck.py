@@ -57,6 +57,8 @@ OUT_DIR = os.path.join(HERE, "out")
 THUMBS_DIR = os.path.join(OUT_DIR, "thumbs")
 CONTENT_PATH = os.path.join(OUT_DIR, "deck_content.json")
 REPORTERS_MAP_PATH = os.path.join(HERE, "reporters_map.json")
+REPORTERS_OVERRIDES_PATH = os.path.join(HERE, "reporters_overrides.json")
+TODO_PATH = os.path.join(OUT_DIR, "reporters_todo.txt")
 TEMPLATE = "template.html.j2"
 
 HEB_MONTHS = ['', 'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי',
@@ -465,9 +467,17 @@ def headline_of(text, reporter="", cap=80):
     if m:
         s = s[:m.start()]
     s = " ".join(s.split())
-    # a trailing credit duplicates the כתב/ת column
-    if reporter and s.endswith("(" + reporter + ")"):
-        s = s[:-(len(reporter) + 2)].rstrip()
+    # a trailing credit duplicates the כתב/ת column. Once the reporter is known
+    # the handle it came from is noise in the headline — and RTL captions often
+    # glue it straight onto the last word ("...הוביל לאש@hadasgrinberg"), so the
+    # separator is optional. With no reporter the handle STAYS: it is the visible
+    # hint that reporters_map is missing a line.
+    if reporter:
+        if s.endswith("(" + reporter + ")"):
+            s = s[:-(len(reporter) + 2)].rstrip()
+        s = re.sub(r"\s*@[A-Za-z0-9._]{2,30}[.,;:!?]*\s*$", "", s).rstrip()
+        if s.endswith(reporter):
+            s = s[:-len(reporter)].rstrip(" -–—|·,")
     if len(s) > cap:
         cut = s[:cap]
         sp = cut.rfind(" ")
@@ -497,6 +507,47 @@ def load_reporters_map():
     for k, v in derived.items():
         out.setdefault(k, v)          # an explicit entry always wins
     return out
+
+
+def load_reporter_overrides():
+    """{"<platform>:<item id>": "שם הכתב/ת"} — hand-filled credits for items whose
+    text carries no byline at all (most YouTube titles, agency posts, quotes).
+    Unlike reporters_map, which teaches a rule, this pins ONE item — so it is
+    applied on every --extract AND every --render: a credit filled in after the
+    extract lands without re-fetching a thing, and a re-extract never loses it.
+    An empty value means "checked, genuinely uncredited" and retires the item
+    from the TODO list instead of leaving it to be re-checked every week."""
+    try:
+        with open(REPORTERS_OVERRIDES_PATH, encoding='utf-8') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        print(f"   ⚠️ could not read reporters_overrides.json: {e}")
+        return {}
+    return {str(k).strip(): str(v or '').strip()
+            for k, v in data.items() if not str(k).startswith('_')}
+
+
+def apply_reporter_overrides(content, overrides=None):
+    """Overwrite per-item credits from the overrides file. Returns (set, vetoed)."""
+    overrides = load_reporter_overrides() if overrides is None else overrides
+    if not overrides:
+        return 0, 0
+    filled = vetoed = 0
+    for p in content.get('platforms', []):
+        for it in p.get('top', []):
+            key = "%s:%s" % (p.get('key', ''), it.get('id', ''))
+            if key not in overrides:
+                continue
+            name = overrides[key]
+            it['_override'] = True
+            if name != (it.get('reporter') or ''):
+                it['reporter'] = name
+                it['reporter_source'] = 'override' if name else 'override-none'
+                filled += 1 if name else 0
+                vetoed += 0 if name else 1
+    return filled, vetoed
 
 
 def _derived_name_keys(handle):
@@ -712,21 +763,42 @@ def _cand(label, value, suffix, text):
     return dict(label=label, value=str(value), suffix=suffix, text=text)
 
 
+# Only for the TODO list an editor fills reporters from — the collectors already
+# store a permalink for FB/IG/X, and YouTube/TikTok IDs build a URL on their own.
+_ITEM_URL_TPL = {
+    'youtube': 'https://youtu.be/{id}',
+    # a Facebook post_id is already "<page>_<post>", which resolves as a path
+    'facebook': 'https://www.facebook.com/{id}',
+    'tiktok': 'https://www.tiktok.com/@%s/video/{id}' % os.environ.get('TIKTOK_USERNAME', 'kan_news'),
+    'x': 'https://x.com/%s/status/{id}' % os.environ.get('TWITTER_USERNAME', 'kann_news'),
+}
+
+
+def _item_url(key, row, item_id):
+    link = str(row.get('permalink', '') or '').strip()
+    if link.startswith('http'):
+        return link
+    tpl = _ITEM_URL_TPL.get(key)
+    return tpl.format(id=item_id) if (tpl and item_id) else ''
+
+
 def fun_fact_candidates(key, df):
     """4-6 deterministic candidate facts per platform. candidates[0] is the
-    default `chosen`; the editor can switch `chosen` or rewrite any text."""
+    default `chosen`; the editor can switch `chosen` or rewrite any text.
+
+    All of them describe WHAT HAPPENED. None compares one content format against
+    another: this deck goes to the whole newsroom, and a line like "X% of the
+    views came from Reels" reads as an instruction to make more Reels — a
+    news desk covers the news it has, and next week's editorial calls should not
+    be argued from last week's format mix."""
     c = []
     try:
         v = to_num(df['views'])
-        vsum = float(v.sum())
         n = len(df)
         eng = engagement_series(key, df)
         med = float(v.median()) if n else 0.0
 
         if key == 'youtube':
-            if 'video_type' in df.columns and vsum > 0:
-                sv = float(to_num(df[df['video_type'] == 'Shorts']['views']).sum())
-                c.append(_cand('shorts_share', int(round(sv / vsum * 100)), '%', 'מהצפיות ביוטיוב הגיעו מ‑Shorts'))
             if 'likes' in df.columns:
                 c.append(_cand('likes_total', fmt_num(to_num(df['likes']).sum()), '', 'לייקים על סרטוני יוטיוב השבוע'))
             if 'comments' in df.columns:
@@ -740,9 +812,6 @@ def fun_fact_candidates(key, df):
             if 'shares' in df.columns:
                 c.append(_cand('shares', fmt_num(to_num(df['shares']).sum()), '', 'שיתופים של סרטוני טיקטוק השבוע'))
         elif key == 'instagram':
-            if 'type' in df.columns and vsum > 0:
-                rv = float(to_num(df[df['type'].astype(str).str.contains('Reel', case=False, na=False)]['views']).sum())
-                c.append(_cand('reels_share', int(round(rv / vsum * 100)), '%', 'מהצפיות באינסטגרם הגיעו מ‑Reels'))
             if 'saved' in df.columns:
                 c.append(_cand('saves', fmt_num(to_num(df['saved']).sum()), '', 'שמירות על תכני אינסטגרם השבוע'))
             if 'reach' in df.columns:
@@ -854,6 +923,7 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
                           reporter=reporter,
                           reporter_source=res['source'],
                           _others=res['others'], _raw=raw,
+                          _url=_item_url(key, r, str(r.get(idc, ''))),
                           views=int(r['views']),
                           likes=_row_int(r, 'likes'),
                           comments=_row_int(r, 'comments', 'replies'),
@@ -934,8 +1004,13 @@ def followers_map(gc):
 # ---------------------------------------------------------------- learnings
 
 def default_learnings(platforms):
-    """Deterministic starting point for the 'מה למדנו' slide — 3 cards the
-    editor is expected to rewrite/extend (3-4 supported) in deck_content.json."""
+    """Deterministic starting point for the 'מה קרה השבוע' slide — 3 cards the
+    editor is expected to rewrite/extend (3-4 supported) in deck_content.json.
+
+    Descriptive only. The deck reports the week to the newsroom; it does not tell
+    it where to put its effort next week, so no card ends in advice ("שם כדאי
+    למקד", "שווה בדיקה"). The editorial call belongs to the desk, not to a
+    number that happened to move."""
     have = [p for p in platforms if p['weekly_views'] > 0]
     cards = []
     if not have:
@@ -949,7 +1024,7 @@ def default_learnings(platforms):
         d = build_delta(best['delta_pct'])
         cards.append(dict(icon='🚀', number=d['str_signed'], color=GREEN,
                           title=f"{best['name']} בצמיחה החדה ביותר השבוע",
-                          sentence=f"{best['name']} עלה ב{d['str_abs']} בצפיות מול השבוע שעבר — שם כדאי למקד את המאמץ."))
+                          sentence=f"{best['name']} עלה ב{d['str_abs']} בצפיות מול השבוע שעבר."))
     else:
         top = max(have, key=lambda p: p['weekly_views'])
         cards.append(dict(icon='🏆', number=fmt_num(top['weekly_views']), color='#111',
@@ -971,8 +1046,8 @@ def default_learnings(platforms):
         worst = min(down, key=lambda p: p['delta_pct'])
         d = build_delta(worst['delta_pct'])
         cards.append(dict(icon='📉', number=d['str_signed'], color=RED,
-                          title=f"{worst['name']} במגמת ירידה",
-                          sentence='הפלטפורמה היחידה עם צפיות יורדות — שווה בדיקה.'))
+                          title=f"{worst['name']} עם הירידה החדה ביותר",
+                          sentence=f"{worst['name']} ירד ב{d['str_abs']} בצפיות מול השבוע שעבר."))
     else:
         engs = [(p, max((i['engagement'] for i in p['top']), default=0)) for p in have]
         engs = [e for e in engs if e[1] > 0]
@@ -1007,6 +1082,7 @@ def build_deck_content(gc, thumbs_enabled, use_gemini=False):
 
 
 def assemble_content(plats, window, use_gemini=False):
+    apply_reporter_overrides(dict(platforms=plats))   # before reporters[] is built
     total_this = sum(p['weekly_views'] for p in plats)
     hero_delta = None
     # hero delta from the per-platform deltas' implied prior totals
@@ -1083,20 +1159,57 @@ def report_reporters(content):
             extra = ("   (also seen: %s)" % ", ".join(others)) if others else ""
             print("    %-10s #%-3d %s%s" % (k, n, it['reporter'], extra))
 
-    missing = [t for t in items if not (t[2].get('reporter') or '').strip()]
+    # Items with no credit ANYWHERE in the text. Most are genuinely uncredited
+    # (agency copy, quotes, YouTube titles) rather than a parsing miss, so the
+    # report stops guessing and hands over a paste-ready block for
+    # reporters_overrides.json instead - headline + link per item, which is what
+    # an editor actually needs to name the reporter.
+    missing = [t for t in items
+               if not (t[2].get('reporter') or '').strip() and not t[2].get('_override')]
     if missing:
         print("")
-        print("  x UNRESOLVED (%d) - last 80 chars of each caption:" % len(missing))
+        print("  x NO CREDIT IN THE TEXT (%d) - fill these in reporters_overrides.json:" % len(missing))
         for k, n, it in missing:
-            raw = it.get('_raw') or it.get('caption') or ''
-            tail = " ".join(str(raw).split())[-80:]
-            print("    %-10s #%-3d ...%s" % (k, n, tail))
+            print("    %-10s #%-3d %s" % (k, n, clean_title(it.get('title', ''), 60)))
+        print("")
+        print("  -> paste-ready block written to %s" % TODO_PATH)
+        write_reporters_todo(missing)
     print(bar)
     print("")
 
     for _, _, it in items:          # internal only - never written to the JSON
         it.pop('_others', None)
         it.pop('_raw', None)
+        it.pop('_url', None)
+        it.pop('_override', None)
+
+
+def write_reporters_todo(missing):
+    """A file the editor can work through: headline + link per uncredited item,
+    then the exact JSON lines to paste into reporters_overrides.json. Leaving a
+    value as "" is a valid answer - it records "no reporter" so the item never
+    comes back on next week's list."""
+    lines = ["רשימת השלמה — פריטים שאין בטקסט שלהם קרדיט לכתב/ת.",
+             "מלאו שם מול כל שורה בבלוק ה-JSON שבסוף, והעתיקו אותו אל",
+             "weekly_deck/reporters_overrides.json. ערך ריק (\"\") = אין כתב/ת, וזה בסדר.",
+             ""]
+    for k, n, it in missing:
+        lines.append("[%s #%d] %s" % (k, n, clean_title(it.get('title', ''), 90)))
+        # a saved deck_content.json has no _url (it is stripped as internal), so
+        # --reporters-todo rebuilds what it can from the id alone. Instagram's
+        # media_id is not a shortcode and cannot become a link — the headline has
+        # to carry it there.
+        url = it.get('_url') or (_ITEM_URL_TPL[k].format(id=it['id'])
+                                 if k in _ITEM_URL_TPL and it.get('id') else '')
+        if url:
+            lines.append("   " + url)
+        lines.append("")
+    lines.append("--- JSON ---")
+    entries = ['  "%s:%s": ""' % (k, it.get('id', '')) for k, _, it in missing]
+    lines.append("{\n" + ",\n".join(entries) + "\n}")
+    os.makedirs(OUT_DIR, exist_ok=True)
+    with open(TODO_PATH, 'w', encoding='utf-8') as f:
+        f.write("\n".join(lines) + "\n")
 
 
 def save_content(content):
@@ -1130,7 +1243,9 @@ def gemini_polish_content(content):
     seeds = [{"i": i, "title": c['title'], "sentence": c['sentence'], "number": c.get('number', '')}
              for i, c in enumerate(content['learnings'])]
     prompt = ("אתה עורך של כאן חדשות. שכתב כותרת ומשפט לכל תובנה, בעברית, קצר וענייני. "
-              "אל תשנה ואל תמציא מספרים. החזר JSON: רשימה של {i, title, sentence}.\n\n"
+              "אל תשנה ואל תמציא מספרים. כתוב אך ורק מה קרה — בלי המלצות, בלי "
+              "'כדאי', בלי 'שווה לבדוק', ובלי להשוות פורמטים (רילז/שורטס/תמונות). "
+              "החזר JSON: רשימה של {i, title, sentence}.\n\n"
               + json.dumps(seeds, ensure_ascii=False))
     text = None
     for model in ["gemini-3.5-flash", "gemini-2.5-pro"]:
@@ -1211,9 +1326,12 @@ def logo_data_uri():
 # Short Hebrew labels for the secondary candidate list in the fun-fact panel.
 # Keyed on the candidate `label` in deck_content.json, so the JSON needs no
 # re-extract when this list changes.
+# Format-share facts the deck no longer makes. Dropped at RENDER as well as at
+# extract, so a deck_content.json produced before this rule can be re-rendered
+# without one slipping back in.
+RETIRED_CAND_LABELS = {'shorts_share', 'reels_share'}
+
 CAND_LABEL_HE = {
-    'shorts_share': 'נתח Shorts',
-    'reels_share': 'נתח Reels',
     'reply_share': 'נתח תגובות',
     'whatsapp': 'שיתופים לוואטסאפ',
     'likes_total': 'לייקים',
@@ -1297,7 +1415,9 @@ def _anomaly_of(item, med_rates):
             continue
         ratio = value / typical
         if ratio >= ANOMALY_MIN and (best is None or ratio > best['ratio']):
-            best = dict(ratio=ratio, icon=icon, label=label, mult="×%.1f" % ratio)
+            # "פי 5.7", not "×5.7" — reads as Hebrew inside a Hebrew badge and
+            # sidesteps the leading-symbol bidi trap entirely.
+            best = dict(ratio=ratio, icon=icon, label=label, mult="פי %.1f" % ratio)
     return best
 
 
@@ -1311,6 +1431,17 @@ def _cap_anomalies(rows, platform_key):
     for r in flagged[ANOMALY_MAX_PER_SLIDE:]:
         r['anomaly'] = None
     print(f"   {platform_key}: {len(flagged)} qualified, showing top {ANOMALY_MAX_PER_SLIDE}")
+
+
+def _display_title(item):
+    """headline_of already drops the credit an item's reporter came from, but it
+    runs at extract. Repeating it here means a credit added later — a new
+    reporters_map line, an override — also stops showing its raw @handle in the
+    headline, without paying for a re-extract."""
+    title = item.get('title', '') or ''
+    if (item.get('reporter') or '').strip():
+        title = re.sub(r"\s*@[A-Za-z0-9._]{2,30}[.,;:!?]*\s*$", "", title).rstrip()
+    return title
 
 
 def content_to_context(content, thumbstyle='portrait'):
@@ -1329,7 +1460,7 @@ def content_to_context(content, thumbstyle='portrait'):
         rows = []
         meds = _typical_rates(p)
         for n, it in enumerate(p.get('top', []), start=1):
-            rows.append(dict(rank=n, title=it.get('title', ''), reporter=it.get('reporter', '') or '',
+            rows.append(dict(rank=n, title=_display_title(it), reporter=it.get('reporter', '') or '',
                              views_fmt=fmt_num(it.get('views', 0)),
                              eng_str=f"{float(it.get('engagement', 0) or 0):.1f}%",
                              highlight=(n <= 3), anomaly=_anomaly_of(it, meds),
@@ -1338,13 +1469,14 @@ def content_to_context(content, thumbstyle='portrait'):
 
         top3 = []
         for n, it in enumerate(p.get('top', [])[:3]):
-            top3.append(dict(medal=medals[n], title=clean_title(it.get('title', ''), 110),
+            top3.append(dict(medal=medals[n], title=clean_title(_display_title(it), 110),
                              views_fmt=fmt_num(it.get('views', 0)),
                              reporter=it.get('reporter', '') or '',
                              thumb=thumb_data_uri(it.get('thumb'))))
 
         ff = p.get('fun_fact') or {}
-        cands = ff.get('candidates') or []
+        cands = [c for c in (ff.get('candidates') or [])
+                 if c.get('label') not in RETIRED_CAND_LABELS]
         chosen = next((c for c in cands if c.get('label') == ff.get('chosen')), None) or (cands[0] if cands else None)
         # the runners-up fill the panel with real per-platform numbers instead
         # of whitespace; the chosen fact stays the hero
@@ -1400,6 +1532,8 @@ def content_to_context(content, thumbstyle='portrait'):
     return dict(
         font_faces=font_faces(), logo_black=logo_data_uri(), mark=load_mark(),
         thumbstyle=thumbstyle,
+        # the legend must never drift from the constant it explains
+        anomaly_min=("%g" % ANOMALY_MIN),
         week=dict(range_str=window.get('range_str', ''), range_short=window.get('range_short', '')),
         hero=dict(total_fmt=fmt_num(hero.get('total_views', 0)), total_main=tmain,
                   total_suffix=tsuf, has_delta=hd['has_delta'], delta_str=hd['str_signed'],
@@ -1610,7 +1744,15 @@ def main():
     ap.add_argument('--no-thumbs', action='store_true', help="skip thumbnail downloads")
     ap.add_argument('--gemini', action='store_true', help="opt in to Gemini prose polish during extract")
     ap.add_argument('--qa-all', action='store_true', help="screenshot every slide, not just the first two")
+    ap.add_argument('--reporters-todo', action='store_true',
+                    help="rebuild out/reporters_todo.txt from deck_content.json and exit (offline)")
     args = ap.parse_args()
+
+    if args.reporters_todo:
+        content = load_content()
+        apply_reporter_overrides(content)
+        report_reporters(content)
+        return
 
     do_extract = args.extract or not args.render
     do_render = args.render or not args.extract
@@ -1632,6 +1774,9 @@ def main():
     if do_render:
         print(f"🎨 Rendering (thumbstyle={args.thumbstyle})...")
         content = load_content()
+        filled, vetoed = apply_reporter_overrides(content)
+        if filled or vetoed:
+            print(f"   ✍️  reporters_overrides: {filled} credited, {vetoed} marked uncredited")
         context = content_to_context(content, thumbstyle=args.thumbstyle)
         html_path = render(context)
         print("🖨️  Rendering PDF (Playwright)...")

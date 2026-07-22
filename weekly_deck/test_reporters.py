@@ -113,6 +113,45 @@ HEADLINES = [
      "bidi controls stripped"),
 ]
 
+# headline_of(caption, reporter) — once the credit is known it stops being part
+# of the headline. RTL captions routinely glue the handle onto the last word.
+HEADLINES_CREDITED = [
+    ("ג'פניקה הפכה לזירת קרב: הסכסוך של משפחות הפשע הוביל לאש@hadasgrinberg",
+     "הדס גרינברג", "ג'פניקה הפכה לזירת קרב: הסכסוך של משפחות הפשע הוביל לאש",
+     "handle glued to the last word is dropped"),
+    ("שר הביטחון הגיש בקשה למחיקת הרישום @MoavVardi", "מואב ורדי",
+     "שר הביטחון הגיש בקשה למחיקת הרישום", "spaced handle is dropped"),
+    ("הדייג באילת חשב שתפס דג גדול (יותם ווקס)", "יותם ווקס",
+     "הדייג באילת חשב שתפס דג גדול", "parenthesised credit is dropped"),
+    ("תיעוד מהזירה — איתי בלומנטל", "איתי בלומנטל", "תיעוד מהזירה",
+     "bare trailing name and its separator are dropped"),
+    ("המשקיעים החדשים בבורסה @kann_news", "", "המשקיעים החדשים בבורסה @kann_news",
+     "with NO reporter the handle stays — it is the hint that the map is missing a line"),
+]
+
+
+def _override_cases():
+    """apply_reporter_overrides is what makes a hand-filled credit survive both a
+    re-render and a re-extract, so it is worth pinning down."""
+    content = dict(platforms=[dict(key='youtube', top=[
+        dict(id='vid1', reporter=''),            # no credit -> filled
+        dict(id='vid2', reporter='מישהו אחר'),   # wrong credit -> replaced
+        dict(id='vid3', reporter='גילי כהן'),    # not in the file -> untouched
+        dict(id='vid4', reporter='טעות'),        # empty value -> deliberate veto
+    ])])
+    ov = {'youtube:vid1': 'איתי בלומנטל', 'youtube:vid2': 'מואב ורדי',
+          'youtube:vid4': ''}
+    filled, vetoed = g.apply_reporter_overrides(content, ov)
+    top = content['platforms'][0]['top']
+    return [
+        (top[0]['reporter'], 'איתי בלומנטל', "an uncredited item gets its name"),
+        (top[1]['reporter'], 'מואב ורדי', "an override beats an auto-resolved name"),
+        (top[2]['reporter'], 'גילי כהן', "an item with no override is untouched"),
+        (top[3]['reporter'], '', 'an empty value vetoes a wrong auto-credit'),
+        (top[3]['_override'], True, "a vetoed item is marked, so it leaves the TODO list"),
+        ((filled, vetoed), (2, 1), "counts reported back to the caller"),
+    ]
+
 
 def main():
     failures = 0
@@ -133,7 +172,22 @@ def main():
         print(("  PASS  " if ok else "  FAIL  ") + label
               + ("" if ok else f"\n          got {got!r}, expected {expected!r}"))
 
-    total = len(CASES) + len(HEADLINES)
+    print("\nheadline extraction with a known credit")
+    for caption, reporter, expected, label in HEADLINES_CREDITED:
+        got = g.headline_of(caption, reporter)
+        ok = got == expected
+        failures += 0 if ok else 1
+        print(("  PASS  " if ok else "  FAIL  ") + label
+              + ("" if ok else f"\n          got {got!r}, expected {expected!r}"))
+
+    print("\nper-item overrides")
+    for got, expected, label in _override_cases():
+        ok = got == expected
+        failures += 0 if ok else 1
+        print(("  PASS  " if ok else "  FAIL  ") + label
+              + ("" if ok else f"\n          got {got!r}, expected {expected!r}"))
+
+    total = len(CASES) + len(HEADLINES) + len(HEADLINES_CREDITED) + len(_override_cases())
     print(f"\n{total - failures}/{total} passed")
     return 1 if failures else 0
 
