@@ -189,6 +189,27 @@ CLAUSES = [
 ]
 
 
+def _program_cases():
+    """resolve_program. Kan signs its YouTube descriptions
+    "הכתבה של <כתב>, מתוך <תוכנית> <תאריך>" — 80% of a real week's videos carry
+    it, and the deck read none of them until the template was handled."""
+    pm = g.load_programs_map()
+    return [
+        (g.resolve_program('הכתבה של איילה חסון, מתוך חדשות השבת 18.07.26', pm),
+         ('חדשות השבת', 'dated'), "the dated template names the programme"),
+        (g.resolve_program('הכתבה של חיים גולדיטש, מתוך מהדורת כאן חדשות 15.07.26', pm),
+         ('מהדורת כאן חדשות', 'dated'), "a multi-word programme name"),
+        (g.resolve_program('תיעוד מתוך האירוע התפרסם ברשתות החברתיות', pm),
+         ('', ''), "'מתוך' in prose, with no date, is not a programme"),
+        (g.resolve_program('מתוך תחקירו של גילי כהן ששודר אמש', pm),
+         ('', ''), "'מתוך תחקירו של X' is a credit, not a programme"),
+        (g.resolve_program('הסרטון המלא #מונטנגרו', pm),
+         ('', ''), "a topic hashtag never becomes a programme"),
+        (g.resolve_program("כאן חדשות ברשת ב' 🎙 אריה גולן", pm),
+         ('רשת ב׳', 'station'), "the radio sign-off falls back to the station"),
+    ]
+
+
 def _split_cases():
     """An editor filling credits by hand states the programme where it is natural
     to state it — inside the name. It belongs in the programme column."""
@@ -263,6 +284,14 @@ def main():
     print("\nclause trimming")
     for src, expected, label in CLAUSES:
         got = g.trim_to_clause(src, 62)
+        ran += 1
+        ok = got == expected
+        failures += 0 if ok else 1
+        print(("  PASS  " if ok else "  FAIL  ") + label
+              + ("" if ok else f"\n          got {got!r}, expected {expected!r}"))
+
+    print("\nprogramme detection")
+    for got, expected, label in _program_cases():
         ran += 1
         ok = got == expected
         failures += 0 if ok else 1

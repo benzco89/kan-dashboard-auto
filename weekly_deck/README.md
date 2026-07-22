@@ -169,6 +169,24 @@ Kan tags the source programme as a **hashtag** on the post — `#כאןבשלו�
 cannot be word-split deterministically, so `programs_map.json` (repo-tracked,
 meant to grow) turns `#כאןבשלוש` into `כאן בשלוש`. Matching ignores `#` and case.
 
+On YouTube the signal is not a hashtag at all. Kan signs its video descriptions
+with a fixed template:
+
+```
+… הכתבה של איילה חסון, מתוך חדשות השבת 18.07.26
+```
+
+The trailing **broadcast date** is what makes that readable without a map — prose
+does not end in `18.07.26`, so the slot before it holds a programme by
+construction. Measured over a real week: 66 of 83 videos (80%) carry it, against
+2 that carried a mapped hashtag. Without a date the same words are ordinary text
+(`תיעוד מתוך האירוע התפרסם ברשתות`) and the name still has to be one the map
+knows; `מתוך תחקירו של X` is a credit and is excluded outright.
+
+The template is a YouTube-description convention — checked across the sheets, it
+does not appear on the social platforms, which use hashtags and the radio
+sign-off.
+
 **An unmapped hashtag never becomes a programme.** Posts carry topic tags too
 (`#מונטנגרו`), and guessing would put nonsense in the column — so unmapped tags
 are listed at the end of `--extract` instead, where a real programme is one line

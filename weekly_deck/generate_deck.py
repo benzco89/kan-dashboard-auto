@@ -595,6 +595,17 @@ _HASHTAG_RE = re.compile(r"#([\w֐-׿]{2,40})")
 _RESHETB_RE = re.compile(r"כאן חדשות ב?רשת ב")
 # an explicitly quoted programme name — quotes required, so it never fires on prose
 _PROGRAM_PROSE_RE = re.compile(r'(?:ב?תוכנית|בפינה|במהדורת)\s*["״”]([^"״”\n]{2,30})["״”]')
+# Kan signs its video descriptions with a fixed template:
+#     הכתבה של <כתב>, מתוך <תוכנית> 18.07.26
+# The trailing broadcast date is what makes this readable without a map — prose
+# does not end in "18.07.26", so the slot before it holds a programme by
+# construction. Without a date the same words are ordinary text ("תיעוד מתוך
+# האירוע התפרסם ברשתות") and the name still has to be one the map knows.
+_PROGRAM_DATED_RE = re.compile(
+    r"מתוך\s+(?:ה?תוכנית\s+)?([^\n,|•]{2,40}?)\s+\d{1,2}\.\d{1,2}\.\d{2,4}")
+_PROGRAM_LOOSE_RE = re.compile(r"מתוך\s+(?:ה?תוכנית\s+)?([^\n,|•.]{2,40})")
+# "מתוך תחקירו של גילי כהן" is a CREDIT, not a programme
+_NOT_A_PROGRAM = ('כתבה', 'כתבת', 'כתבתו', 'תחקיר', 'דיווח', 'ראיון', 'ריאיון', ' של ')
 
 
 def load_programs_map():
@@ -624,6 +635,15 @@ def resolve_program(text, pmap):
     m = _PROGRAM_PROSE_RE.search(s)
     if m:
         return m.group(1).strip(), 'quoted'
+    m = _PROGRAM_DATED_RE.search(s)
+    if m:
+        cand = m.group(1).strip(' "\'״”')
+        if cand and not any(w in cand for w in _NOT_A_PROGRAM):
+            return pmap.get(cand.lower(), cand), 'dated'
+    for m in _PROGRAM_LOOSE_RE.finditer(s):
+        cand = m.group(1).strip(' "\'״”').lower()
+        if pmap.get(cand):          # undated: the name still has to be known
+            return pmap[cand], 'prose'
     if _RESHETB_RE.search(s):
         return "רשת ב׳", 'station'
     return '', ''
