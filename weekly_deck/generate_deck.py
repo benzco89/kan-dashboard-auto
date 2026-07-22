@@ -1820,6 +1820,7 @@ def content_to_context(content, thumbstyle='portrait'):
         for n, it in enumerate(p.get('top', []), start=1):
             rows.append(dict(rank=n, title=_display_title(it), reporter=it.get('reporter', '') or '',
                              program=_row_program(it, pmap),
+                             prog_stated=(it.get('_prog_src') == 'override'),
                              url=_row_url(key, it),
                              views_fmt=fmt_num(it.get('views', 0)),
                              eng_str=f"{float(it.get('engagement', 0) or 0):.1f}%",
@@ -1827,9 +1828,12 @@ def content_to_context(content, thumbstyle='portrait'):
                              thumb=thumb_data_uri(it.get('thumb'))))
         _cap_anomalies(rows, p.get('key', ''))
         # An almost-empty column is worse than no column: it reads as missing
-        # data on every row instead of as extra information on a few. The
-        # programme column only appears once a slide has a few of them.
-        show_program = sum(1 for r in rows if r['program']) >= 2
+        # data on every row instead of as extra information on a few — so the
+        # programme column waits until a slide has a few. But the threshold is
+        # there for sparse AUTO-detection; a programme an editor typed in by hand
+        # is a deliberate statement and is never hidden by it.
+        show_program = (sum(1 for r in rows if r['program']) >= 2
+                        or any(r['prog_stated'] for r in rows))
 
         top3 = []
         for n, it in enumerate(p.get('top', [])[:3]):
