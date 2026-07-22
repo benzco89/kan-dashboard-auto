@@ -101,9 +101,34 @@ prior Sun–Sat is the baseline for week-over-week deltas. Running Tue 2026-07-2
   reach — and a `נתון מעניין` picked from the platform's
   candidate list (`fun_fact.chosen`).
 - **מה קרה השבוע** — 3–4 cards `{icon, number, color, title, sentence}` plus an
-  optional wider **story of the week** block that names one story and shows its
-  per-platform numbers. Authored in `deck_content.json`; the code only seeds
-  deterministic defaults.
+  optional wider **story of the week** block. Authored in `deck_content.json`;
+  the code only seeds deterministic defaults.
+
+### The story of the week
+
+Kan runs a story everywhere, so the week's story is the one that reached the
+most platforms — and that, unlike "is this interesting", is something the data
+can answer. `--extract` groups the week's items by caption word overlap
+(transitively, so a first-person testimonial can reach a news summary through a
+third post that sits between them) and lists the strongest clusters, ranked by
+platform reach first and total views second.
+
+It **suggests**; it never decides. Word overlap can tell that two posts share
+wording, not that a desk would call them the same story.
+
+The block records the **items** it is about:
+
+```jsonc
+"story_of_the_week": {
+  "title": "…", "sentence": "…",             // yours
+  "items": ["facebook:<id>", "tiktok:<id>"], // which posts it is about
+  "platforms": [{"name","views"}]            // COMPUTED from those items
+}
+```
+
+The figures under it are recomputed from those items on every render, so they
+cannot drift away from the deck around them — which is exactly what happened
+when they were typed by hand. Write the words; never type the numbers.
 - **Closing** — sign-off and week dates.
 
 Platforms with no rows in the window keep their slide but show an honest empty

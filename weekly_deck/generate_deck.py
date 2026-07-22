@@ -1402,6 +1402,9 @@ def report_reporters(content):
         print("  -> paste-ready block written to %s" % TODO_PATH)
         write_reporters_todo(missing, sugg)
     print("")
+    report_story(content)
+    resolve_story_numbers(content)
+    print("")
     check_editorial_numbers(content)
     report_long_headlines(content)
     print("")
@@ -1572,6 +1575,129 @@ def report_long_headlines(content):
           "important half is missing:" % len(cut))
     for k, n, it in cut:
         print("    %-10s #%-3d %s" % (k, n, it['title']))
+
+
+def story_clusters(items, floor=0.40):
+    """Groups of items across platforms that look like ONE story, best first.
+
+    Kan runs a story everywhere, so the week's biggest story is the one that
+    appears on the most platforms — which is something word overlap can actually
+    measure, unlike "is this interesting". Ranked by platform reach first and
+    total views second: a story on four platforms is the week's story even if a
+    single viral clip elsewhere beat it on views.
+
+    Grouping is transitive (union-find), because two posts about the same event
+    can share almost no wording — a first-person testimonial and a news summary
+    of it — and still both link to a third that sits between them. Known limit:
+    when nothing bridges them, the outlier is left out. Measured on a real week,
+    the Facebook testimonial of the Montenegro attack overlapped the TikTok and
+    Instagram versions by 4-7%, and only reached them through YouTube's headline.
+    """
+    idx = {(k, n): i for i, (k, n, _) in enumerate(items)}
+    toks = [_story_tokens(it) for _, _, it in items]
+    parent = list(range(len(items)))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for i in range(len(items)):
+        if not toks[i]:
+            continue
+        for j in range(i + 1, len(items)):
+            if not toks[j]:
+                continue
+            if len(toks[i] & toks[j]) / min(len(toks[i]), len(toks[j])) >= floor:
+                ri, rj = find(i), find(j)
+                if ri != rj:
+                    parent[ri] = rj
+
+    groups = {}
+    for i in range(len(items)):
+        groups.setdefault(find(i), []).append(i)
+
+    out = []
+    for members in groups.values():
+        # one item per platform — the biggest, since that is the one a reader saw
+        best = {}
+        for i in members:
+            k, n, it = items[i]
+            cur = best.get(k)
+            if cur is None or (it.get('views') or 0) > (items[cur][2].get('views') or 0):
+                best[k] = i
+        if len(best) < 2:
+            continue
+        picked = list(best.values())
+        out.append(dict(members=[(items[i][0], items[i][1]) for i in picked],
+                        platforms=len(best),
+                        views=sum(items[i][2].get('views') or 0 for i in picked)))
+    out.sort(key=lambda c: (-c['platforms'], -c['views']))
+    return out
+
+
+def _story_from_cluster(cluster, content):
+    """A cluster -> the story block, with the numbers COMPUTED. The block records
+    which items it is about, so every later render recomputes them from live data
+    and they can never drift away from the deck around them."""
+    pos = {(p['key'], n): (p, it) for p in content['platforms']
+           for n, it in enumerate(p.get('top', []), start=1)}
+    members = sorted(cluster['members'],
+                     key=lambda m: -(pos[m][1].get('views') or 0))
+    head_p, head_it = pos[members[0]]
+    return dict(
+        title=clean_title(_display_title(head_it), 90),
+        sentence="",                      # the editor writes this
+        items=["%s:%s" % (pos[m][0]['key'], pos[m][1].get('id', '')) for m in members],
+        platforms=[dict(name=pos[m][0].get('name', ''),
+                        views=int(pos[m][1].get('views') or 0)) for m in members])
+
+
+def resolve_story_numbers(content):
+    """Recompute the story's per-platform figures from the items it names. The
+    words stay editorial; the arithmetic is never typed by hand, which is what
+    let the old figures go stale unnoticed."""
+    story = content.get('story_of_the_week') or {}
+    keys = story.get('items') or []
+    if not keys:
+        return
+    index = {"%s:%s" % (p['key'], it.get('id', '')): (p, it)
+             for p in content.get('platforms', []) for it in p.get('top', [])}
+    rows = []
+    for k in keys:
+        hit = index.get(k)
+        if hit:
+            rows.append(dict(name=hit[0].get('name', ''),
+                             views=int(hit[1].get('views') or 0)))
+    if rows:
+        story['platforms'] = sorted(rows, key=lambda r: -r['views'])
+
+
+def report_story(content):
+    """Offer the week's cross-platform stories. Never chosen automatically: word
+    overlap can tell that two items share wording, not that a desk would call
+    them the same story."""
+    items = [(pl['key'], n, it) for pl in content['platforms']
+             for n, it in enumerate(pl.get('top', []), start=1)]
+    clusters = story_clusters(items)[:3]
+    if not clusters:
+        return
+    cur = content.get('story_of_the_week') or {}
+    if not cur.get('items'):
+        content['story_of_the_week'] = _story_from_cluster(clusters[0], content)
+        print("  STORY OF THE WEEK - suggested (write the sentence, or swap it):")
+    else:
+        print("  STORY OF THE WEEK - candidates (the chosen one keeps its own numbers):")
+    pos = {(p['key'], n): (p, it) for p in content['platforms']
+           for n, it in enumerate(p.get('top', []), start=1)}
+    for c in clusters:
+        top = max(c['members'], key=lambda m: pos[m][1].get('views') or 0)
+        where = ", ".join(pos[m][0].get('name', '') for m in c['members'])
+        print("    %d פלטפורמות · %s צפיות  %s" % (
+            c['platforms'], fmt_num(c['views']),
+            clean_title(pos[top][1].get('title', ''), 52)))
+        print("       %s" % where)
 
 
 def report_programs(content):
@@ -2308,6 +2434,7 @@ def main():
         filled, vetoed = apply_reporter_overrides(content)
         if filled or vetoed:
             print(f"   ✍️  reporters_overrides: {filled} credited, {vetoed} marked uncredited")
+        resolve_story_numbers(content)
         if not do_extract:          # an extract in the same run already checked
             check_editorial_numbers(content)
         context = content_to_context(content, thumbstyle=args.thumbstyle)
