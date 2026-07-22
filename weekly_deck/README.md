@@ -205,7 +205,10 @@ the headline), in this order:
 
 0. a **role phrase right after the name** — `איציק זוארץ, כתב כאן11 בדרום` —
    the strongest byline signal Kan uses, so it outranks everything below;
-1. an explicit `כתב:` / `כתבת:` / `תחקיר:` credit;
+1. an explicit `כתב:` / `כתבת:` / `תחקיר:` credit, **or the possessive form of
+   the same thing** — `כתבתו של X`, `בכתבתה של X`, `מתוך תחקירו של X`, which
+   carries no colon. This is how Kan credits in YouTube descriptions and at the
+   end of reels. Both are tried together, before everything below;
 2. a parenthesised 2–3-word Hebrew name (the last one wins);
 3. an `@handle`;
 4. anyone already in `reporters_map.json`, named anywhere in the caption;
@@ -213,9 +216,6 @@ the headline), in this order:
    (`… | https://bit.ly/x Vered Pelman Haim Goldich`). Latin runs are accepted
    structurally and the FIRST name is taken (Kan lists reporter then
    photographer); the second is reported so you can check it;
-6. the **possessive** form, which carries no colon and so is invisible to rule 1
-   — `כתבתו של X`, `בכתבתה של X`, `מתוך תחקירו של X`. This is how Kan credits in
-   YouTube descriptions and at the end of reels.
 
 ### The full-text second pass
 
@@ -347,15 +347,16 @@ highlight cards are text-forward instead (the tweet is the hero, no grey box).
 Content is mixed *per item* (a YouTube top-3 can hold one Short and two
 landscape videos), so both variants are per-item agnostic:
 
-- **`portrait`** (default) — the highlight slot is a true 4:5 portrait
-  (272×340), `object-fit:cover` anchored `center top` so faces and on-screen
-  headlines survive. Cards are narrower, so the slide is rebalanced: cards sit
+- **`portrait`** (default) — the highlight slot is portrait (240×268),
+  `object-fit:cover` anchored `center top` so faces and on-screen headlines
+  survive; the credit sits on its own full-width line below the headline,
+  because a pair of names never fits beside the views figure. Cards are narrower, so the slide is rebalanced: cards sit
   beside a wide `נתון מעניין` panel and the top-10 table runs full width below.
 - **`blur`** — keeps the original wide 16:9 slot, but the image is `contain`ed
   at full frame over a blurred, scaled-up, darkened copy of itself. **Nothing is
   ever cropped.**
 
-Table row thumbnails are square (1:1, 26px) in both variants — squares degrade
+Table row thumbnails are square (1:1, 34px) in both variants — squares degrade
 gracefully for any source ratio at that size.
 
 ## Fonts (licensed — never committed)
@@ -375,7 +376,12 @@ used in the slide markup anyway).
   unavailable. The template falls back to a clean typographic `כאן חדשות`
   wordmark. Drop the real PNG into `design/assets/` and it is picked up
   automatically (inlined as a data URI).
-- **Reporter / כתב-ת column** — the sheets carry no author field, so that column
-  renders empty (kept for layout parity; no invented names).
-- **X thumbnails** — no cheap image source, so X highlight cards use the styled
-  placeholder.
+- **Reporter / כתב-ת column** — the sheets carry no author field, so the credit
+  is parsed out of the caption, recovered from the untruncated original, mapped
+  by handle or name, and completed by hand where the text has none. See
+  *Reporter credits* above. Nothing is ever invented; on a real week 46 of 50
+  items resolve and the rest are recorded as genuinely uncredited.
+- **X thumbnails** — X highlight cards are text-forward by design (the tweet is
+  the hero), not a placeholder for a missing image.
+- **Instagram links** — a `media_id` is not a shortcode, so an Instagram row is
+  only clickable when the collector stored a permalink for it.

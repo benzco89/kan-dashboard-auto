@@ -216,10 +216,12 @@ def _override_cases():
 
 def main():
     failures = 0
+    ran = 0
 
     print("reporter extraction")
     for caption, expected, label in CASES:
         got = g.resolve_reporter(caption, RMAP)
+        ran += 1
         ok = got == expected
         failures += 0 if ok else 1
         print(("  PASS  " if ok else "  FAIL  ") + label
@@ -228,6 +230,7 @@ def main():
     print("\nheadline extraction")
     for caption, expected, label in HEADLINES:
         got = g.headline_of(caption)
+        ran += 1
         ok = got == expected
         failures += 0 if ok else 1
         print(("  PASS  " if ok else "  FAIL  ") + label
@@ -236,6 +239,7 @@ def main():
     print("\nheadline extraction with a known credit")
     for caption, reporter, expected, label in HEADLINES_CREDITED:
         got = g.headline_of(caption, reporter)
+        ran += 1
         ok = got == expected
         failures += 0 if ok else 1
         print(("  PASS  " if ok else "  FAIL  ") + label
@@ -244,6 +248,15 @@ def main():
     print("\nclause trimming")
     for src, expected, label in CLAUSES:
         got = g.trim_to_clause(src, 62)
+        ran += 1
+        ok = got == expected
+        failures += 0 if ok else 1
+        print(("  PASS  " if ok else "  FAIL  ") + label
+              + ("" if ok else f"\n          got {got!r}, expected {expected!r}"))
+
+    print("\noverride value parsing")
+    for got, expected, label in _split_cases():
+        ran += 1
         ok = got == expected
         failures += 0 if ok else 1
         print(("  PASS  " if ok else "  FAIL  ") + label
@@ -251,13 +264,16 @@ def main():
 
     print("\nper-item overrides")
     for got, expected, label in _override_cases():
+        ran += 1
         ok = got == expected
         failures += 0 if ok else 1
         print(("  PASS  " if ok else "  FAIL  ") + label
               + ("" if ok else f"\n          got {got!r}, expected {expected!r}"))
 
-    total = (len(CASES) + len(HEADLINES) + len(HEADLINES_CREDITED)
-             + len(CLAUSES) + len(_split_cases()) + len(_override_cases()))
+    # counted from what actually ran, so a section that is never iterated can no
+    # longer inflate the total — that is exactly how five assertions went
+    # unnoticed while the suite reported all green
+    total = ran
     print(f"\n{total - failures}/{total} passed")
     return 1 if failures else 0
 

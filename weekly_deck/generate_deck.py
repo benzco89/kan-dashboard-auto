@@ -121,7 +121,8 @@ def fmt_num(x):
     if n >= 1_000_000:
         s = f"{x/1_000_000:.1f}M".replace(".0M", "M")
     elif n >= 1000:
-        s = f"{round(x/1000)}K"
+        # 999,600 rounds to 1000K, which is not a unit anyone writes
+        s = "1M" if round(n / 1000) >= 1000 else f"{round(x/1000)}K"
     else:
         s = str(int(round(x)))
     return s
@@ -383,15 +384,19 @@ _NAME_RE = re.compile(r"^[֐-׿]+(?:[ ׳״'\"\-][֐-׿]+){1,2}$")
 # Roles that are credited like a reporter but are NOT the reporter.
 _NOT_REPORTER = ('צילום', 'עריכה', 'עיבוד', 'גרפיקה', 'הפקה', 'תרגום', 'אנימציה')
 # "כתב: X" / "כתבת: X" / "תחקיר: X" style credits.
+# The lookbehind is load-bearing: Hebrew glues prefixes onto words, so without
+# it "כתב" matched inside "במכתב" and "דיווח" inside "הדיווח", turning everyday
+# captions ("השר הבהיר במכתב: לא מתפטר") into invented bylines — the one thing
+# this module promises never to do.
 _CREDIT_PREFIX_RE = re.compile(
-    r"(?:כתב/ת|כתבת|כתבנו|כתב|תחקיר|דיווח)\s*:\s*([^\n,|)\]#]{2,40})")
+    r"(?<![֐-׿])(?:כתב/ת|כתבת|כתבנו|כתב|תחקיר|דיווח)\s*:\s*([^\n,|)\]#]{2,40})")
 # The possessive form, which carries NO colon and so was invisible to the rule
 # above: "כתבתו של X", "בכתבתה של X", "מתוך תחקירו של X". This is how Kan credits
 # in YouTube descriptions and at the end of reels — the single most common shape
 # among items the extractor used to miss.
 _CREDIT_POSSESSIVE_RE = re.compile(
-    r"(?:כתבת[והםן]?|כתבה|תחקיר[והםן]?|דיווח[והםן]?|ראיון|ריאיון)\s+של\s+"
-    r"([^\n,|)\]#]{2,40})")
+    r"(?<![֐-׿])(?:כתבת[והםן]?|כתבה|תחקיר[והםן]?|דיווח[והםן]?|ראיון|ריאיון)"
+    r"\s+של\s+([^\n,|)\]#]{2,40})")
 
 
 _LATIN_FULLNAME_RE = re.compile(r"^[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+){1,2}$")
@@ -424,7 +429,12 @@ def _looks_like_name(s):
         return False
     if any(w in s for w in _NOT_REPORTER):
         return False
-    if any(w in _GENERIC_REF for w in s.split()):
+    words = s.split()
+    if any(w in _GENERIC_REF for w in words):
+        return False
+    # a candidate carrying a function word is a fragment of a sentence, not a
+    # name — "לא מתפטר", "השבוע על"
+    if any(w in _HEB_STOP for w in words):
         return False
     return bool(_NAME_RE.match(s))
 
@@ -646,8 +656,10 @@ def load_reporter_overrides():
 # it is natural to write it: "אריה גולן (מתוך הבוקר הזה)". Splitting it back out
 # here means the deck's programme column gets it even when the post carried no
 # hashtag — and the credit column shows the name alone instead of a run-on.
+# "מתוך" only — a bare "מ" prefix turned "(מירושלים)" and "(מהשטח)" into
+# programmes, which is the opposite of leaving non-programme parentheses alone.
 _OVERRIDE_PROGRAM_RE = re.compile(
-    r"\s*\(\s*(?:מתוך|מ)\s*(?:התוכנית\s*|תוכנית\s*)?([^)]{2,40})\)\s*$")
+    r"\s*\(\s*מתוך\s+(?:ה?תוכנית\s+)?([^)]{2,40})\)\s*$")
 
 
 def split_override(value):
@@ -729,8 +741,8 @@ def _trailing_latin_names(s):
     if not m:
         return []
     w = m.group(1).split()
-    if _URL_MARK in m.group(1):
-        return []
+    # (a _URL_MARK guard used to live here; unreachable — the pattern above
+    # matches Latin letters only, which the sentinel is not)
     if any(x.lower() in ('kan', 'news', 'photo', 'photos', 'editing', 'video') for x in w):
         return []
     if len(w) == 4:
@@ -899,7 +911,7 @@ def graph_full_text(ids, token, field):
         return out
     try:
         from utils import http_get_json
-        for i in range(0, len(ids), 25):       # the Graph ?ids= batch limit is 50
+        for i in range(0, len(ids), 25):       # well inside the ?ids= batch limit
             chunk = ids[i:i + 25]
             data = http_get_json(f"https://graph.facebook.com/{FB_API_VERSION}/",
                                  params={'ids': ','.join(chunk), 'fields': field,
@@ -1125,6 +1137,10 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
     last_views = float(last_df['views'].sum())
     out['weekly_views'] = int(this_views)
     out['delta_pct'] = round((this_views - last_views) / last_views * 100, 1) if last_views > 0 else None
+    # stored, not inferred: reconstructing it from delta_pct loses the platform
+    # entirely when it went to zero (delta -100), which silently removed last
+    # week's views from the hero baseline — the FB-outage shape exactly
+    out['last_week_views'] = int(last_views)
 
     if this_df.empty:
         return out
@@ -1308,25 +1324,22 @@ def assemble_content(plats, window, use_gemini=False):
     apply_reporter_overrides(dict(platforms=plats))   # before reporters[] is built
     total_this = sum(p['weekly_views'] for p in plats)
     hero_delta = None
-    # hero delta from the per-platform deltas' implied prior totals
+    # Hero delta from last week's actual totals. Older content has no
+    # last_week_views, so it still falls back to inferring the prior from the
+    # delta — which cannot represent a platform that dropped to zero.
     prior = 0.0
     known = False
     for p in plats:
-        if p.get('delta_pct') is not None and p['delta_pct'] != -100:
+        if p.get('last_week_views') is not None:
+            prior += float(p['last_week_views'])
+            known = True
+        elif p.get('delta_pct') not in (None, -100):
             prior += p['weekly_views'] / (1 + p['delta_pct'] / 100.0)
             known = True
         else:
             prior += p['weekly_views']
     if known and prior > 0:
         hero_delta = round((total_this - prior) / prior * 100, 1)
-
-    reporters, seen = [], set()
-    for p in sorted(plats, key=lambda x: -x['weekly_views']):
-        for it in p['top']:
-            nm = (it.get('reporter') or '').strip()
-            if nm and not nm.startswith('@') and nm not in seen:
-                seen.add(nm)
-                reporters.append(nm)
 
     content = {
         "_readme": ("קובץ עריכה. כל הטקסטים והמספרים כאן ניתנים לשינוי ידני ואז "
@@ -1339,8 +1352,7 @@ def assemble_content(plats, window, use_gemini=False):
         "platforms": plats,
         "learnings": default_learnings(plats),
         "story_of_the_week": None,
-        "closing": {"reporters": reporters[:12],
-                    "note": "מבוסס על דשבורד הסושיאל של כאן"},
+        "closing": {"note": "מבוסס על דשבורד הסושיאל של כאן"},
     }
     if use_gemini:
         try:
@@ -1747,8 +1759,8 @@ def write_reporters_todo(missing, suggestions=None):
             lines.append("   אולי %s  (%d%% חפיפה עם %s #%d: %s)"
                          % (other['reporter'], round(score * 100), k2, n2,
                             clean_title(other.get('title', ''), 55)))
-        # a saved deck_content.json has no _url (it is stripped as internal), so
-        # --reporters-todo rebuilds what it can from the id alone. Instagram's
+        # a mock or pre-links deck_content.json may carry no url, so
+         # --reporters-todo rebuilds what it can from the id alone. Instagram's
         # media_id is not a shortcode and cannot become a link — the headline has
         # to carry it there.
         url = it.get('url') or (_ITEM_URL_TPL[k].format(id=it['id'])
@@ -2069,7 +2081,6 @@ def content_to_context(content, thumbstyle='portrait'):
     no sheets, no Gemini. Images are inlined from the thumbs cache here."""
     window = content['window']
     pmap = load_programs_map()
-    plats_raw = {p['key']: p for p in content['platforms']}
     ordered = sorted(content['platforms'], key=lambda p: (-p.get('weekly_views', 0),
                                                           PLATFORM_ORDER.index(p['key'])))
     medals = ['🥇', '🥈', '🥉']
@@ -2173,7 +2184,6 @@ def content_to_context(content, thumbstyle='portrait'):
                   delta_arrow=hd['arrow'], delta_color=hd['color']),
         overview_rows=overview_rows, platforms=platforms,
         learnings=learnings, story=story,
-        reporters=content.get('closing', {}).get('reporters', []),
         closing_note=content.get('closing', {}).get('note', ''),
     )
 
@@ -2398,7 +2408,12 @@ def main():
         changed = 0
         for p in content.get('platforms', []):
             for it in p.get('top', []):
-                new = headline_of(it.get('caption') or it.get('title', ''),
+                # NOT re-derived from `caption`: clean_title collapsed its line
+                # breaks, so headline_of's first-line rule cannot see them and
+                # would merge two lines the extract had correctly split. The
+                # stored title is already that first line — this only re-applies
+                # the shortening rules on top of it.
+                new = headline_of(it.get('title', '') or it.get('caption') or '',
                                   it.get('reporter') or '')
                 if new and new != it.get('title'):
                     it['title'] = new
