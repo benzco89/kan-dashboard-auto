@@ -395,7 +395,8 @@ _CREDIT_PREFIX_RE = re.compile(
 # in YouTube descriptions and at the end of reels — the single most common shape
 # among items the extractor used to miss.
 _CREDIT_POSSESSIVE_RE = re.compile(
-    r"(?<![֐-׿])(?:כתבת[והםן]?|כתבה|תחקיר[והםן]?|דיווח[והםן]?|ראיון|ריאיון)"
+    r"(?:^|(?<=[\s\"'(\[|־–—]))[הבלמוש]?"
+    r"(?:כתבת[והםן]?|כתבה|תחקיר[והםן]?|דיווח[והםן]?|ראיון|ריאיון)"
     r"\s+של\s+([^\n,|)\]#]{2,40})")
 
 
@@ -418,7 +419,10 @@ def _looks_like_person(s):
 # possessive credit form makes these reachable — "כתבתו של הכתב שלנו" would
 # otherwise resolve to "הכתב שלנו".
 _GENERIC_REF = {'הכתב', 'הכתבת', 'הכתבים', 'שלנו', 'שלהם', 'המערכת', 'הצוות',
-                'העיתון', 'הערוץ', 'התוכנית', 'הסוכנות', 'הכתבה'}
+                'העיתון', 'הערוץ', 'התוכנית', 'הסוכנות', 'הכתבה',
+                # organisations reachable through the possessive form
+                'רשת', 'הרשת', 'ערוץ', 'עיתון', 'סוכנות', 'אתר', 'האתר',
+                'מהדורה', 'המהדורה', 'תוכנית', 'תאגיד', 'התאגיד'}
 
 
 def _looks_like_name(s):

@@ -50,6 +50,21 @@ CASES = [
      "possessive credit: כתבתו של X"),
     ("מתוך תחקירה של גילי כהן ששודר אמש", mapped('גילי כהן', 'גילי כהן'),
      "possessive credit: תחקירה של X"),
+    # the definite article is simply how Hebrew says "X's article"; a lookbehind
+    # strict enough to block "במכתב:" also blocked this, and cost a real credit
+    # on live YouTube descriptions
+    ("סרטון על הבורסה. הכתבה של יותם ווקס", mapped('יותם ווקס', 'יותם ווקס'),
+     "possessive credit behind the definite article: הכתבה של X"),
+    # …but the trigger must not fire inside a longer word, or everyday captions
+    # turn into invented bylines
+    ("השר הבהיר במכתב: לא מתפטר מהתפקיד", "",
+     "'כתב' inside 'במכתב' is not a credit"),
+    ("הדיווח: כוחות גדולים פועלים במרחב", "",
+     "'הדיווח:' is 'the report', not 'reported by'"),
+    ("בעקבות הכתבה של רשת אחרת ששודרה אמש", "",
+     "an organisation is not a person, even in the possessive form"),
+    ("הכתבה של השבוע על יוקר המחיה", "",
+     "a sentence fragment carrying a function word is not a name"),
     ("כתבתו של הכתב שלנו מהשטח", "",
      "a generic reference is not a person, even in the possessive form"),
     # the trailing-name rules fire at the END, so an appended tag used to hide them
