@@ -58,3 +58,9 @@ weekly_deck/.tmp_fonts_key.pub
 /reports/
 /*.docx
 mintty.*.png
+
+# Internal Kan reports dropped in for comparison — headlines, reporter names,
+# links and view counts. This repository is PUBLIC; none of that belongs in it.
+# Scoped to spreadsheets rather than to docs/, which holds tracked docs too.
+*.xlsx
+*.xls
