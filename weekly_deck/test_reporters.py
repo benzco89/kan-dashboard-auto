@@ -166,6 +166,23 @@ CLAUSES = [
 ]
 
 
+def _split_cases():
+    """An editor filling credits by hand states the programme where it is natural
+    to state it — inside the name. It belongs in the programme column."""
+    return [
+        (g.split_override('אריה גולן (מתוך הבוקר הזה)'), ('אריה גולן', 'הבוקר הזה'),
+         "programme pulled out of the credit"),
+        (g.split_override('יפעת גליק ותמר אלמוג (מתוך התוכנית גליק ותמר)'),
+         ('יפעת גליק ותמר אלמוג', 'גליק ותמר'),
+         "two reporters, and 'התוכנית' is not part of the programme name"),
+        (g.split_override('רן בנימיני ומזל מועלם'), ('רן בנימיני ומזל מועלם', ''),
+         "two reporters, no programme"),
+        (g.split_override(''), ('', ''), "an empty veto stays empty"),
+        (g.split_override('יואב לימור (כתב צבאי)'), ('יואב לימור (כתב צבאי)', ''),
+         "parentheses that are not a programme are left alone"),
+    ]
+
+
 def _override_cases():
     """apply_reporter_overrides is what makes a hand-filled credit survive both a
     re-render and a re-extract, so it is worth pinning down."""
@@ -232,7 +249,7 @@ def main():
               + ("" if ok else f"\n          got {got!r}, expected {expected!r}"))
 
     total = (len(CASES) + len(HEADLINES) + len(HEADLINES_CREDITED)
-             + len(CLAUSES) + len(_override_cases()))
+             + len(CLAUSES) + len(_split_cases()) + len(_override_cases()))
     print(f"\n{total - failures}/{total} passed")
     return 1 if failures else 0
 

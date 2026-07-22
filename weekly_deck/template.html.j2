@@ -141,8 +141,8 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 <{{ "a" if row.url else "div" }}{% if row.url %} href="{{ row.url }}"{% endif %} style="color:inherit;text-decoration:none;display:grid;grid-template-columns:{{ cols }};gap:14px;align-items:center;padding:{{ pad }} 18px;{% if bg %}background:{{ bg }};border-right:3px solid {{ edge }};border-radius:4px{% else %}border-bottom:1px solid #e0e0e0{% endif %}">
   <div class="mono" style="font-size:{{ rank_fs }};font-weight:{{ rank_w }};color:{{ rank_c }}">{{ row.rank }}</div>
   {{ title_cell(row, t_fs, t_fw) }}
-  <div style="font-size:22px;color:{{ meta_c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;unicode-bidi:plaintext">{{ row.reporter }}</div>
-  {% if p.show_program %}<div style="font-size:21px;color:{{ meta_c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;unicode-bidi:plaintext">{{ row.program }}</div>{% endif %}
+  <div style="font-size:21px;color:{{ meta_c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;unicode-bidi:plaintext">{{ row.reporter }}</div>
+  {% if p.show_program %}<div style="font-size:19px;color:{{ meta_c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;unicode-bidi:plaintext">{{ row.program }}</div>{% endif %}
   <div class="mono" style="text-align:left;font-size:{{ v_fs }};font-weight:{{ v_fw }}">{{ row.views_fmt }}</div>
   <div style="text-align:left;font-size:25px;color:#404040">{{ row.eng_str }}</div>
   <div style="text-align:left">{% if row.anomaly %}<span style="display:inline-flex;align-items:center;gap:5px;font-size:18px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:3px 10px;white-space:nowrap"><span style="font-size:17px">{{ row.anomaly.icon }}</span>{{ row.anomaly.label }} {{ row.anomaly.mult }}</span>{% endif %}</div>
@@ -150,7 +150,7 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 {%- endmacro %}
 
 {% macro table_block(p) -%}
-{%- set cols = "46px 1fr 150px " + ("124px " if p.show_program else "") + "104px 92px 158px" -%}
+{%- set cols = "46px 1fr 208px " + ("158px " if p.show_program else "") + "104px 92px 158px" -%}
 <div style="display:grid;grid-template-columns:{{ cols }};gap:14px;padding:0 18px 6px;font-size:20px;font-weight:700;color:#808080;letter-spacing:.03em"><div>#</div><div>כותרת</div><div>כתב/ת</div>{% if p.show_program %}<div>תוכנית</div>{% endif %}<div style="text-align:left">צפיות</div><div style="text-align:left">מעורבות</div><div style="text-align:left">חריג</div></div>
 <div style="display:flex;flex-direction:column;gap:4px;flex:1">
   {% for row in p.top10 %}{{ table_row(p, row, cols) }}{% endfor %}

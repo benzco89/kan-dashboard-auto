@@ -260,7 +260,18 @@ python weekly_deck/generate_deck.py --reporters-todo
 `reporters_overrides.json` (repo-tracked) takes those answers as
 `{"<platform>:<item id>": "שם"}`. It pins ONE item, where `reporters_map` teaches
 a reusable rule — and an empty value (`""`) records "checked, genuinely
-uncredited" so the item stops coming back. Overrides are applied on **both**
+uncredited" so the item stops coming back.
+
+Two shapes an editor writes naturally, both understood:
+
+- **Two reporters** — `"רן בנימיני ומזל מועלם"`. Kan credits a pair often enough
+  that the כתב/ת column is sized for it.
+- **The programme, in the credit** — `"אריה גולן (מתוך הבוקר הזה)"` or
+  `"… (מתוך התוכנית גליק ותמר)"`. The programme is split back out into the
+  תוכנית column instead of being crammed into the name, and an editor's
+  programme outranks one parsed from a hashtag. This is how a programme gets in
+  when the post carried no hashtag at all. Parentheses that are not a programme
+  (`"יואב לימור (כתב צבאי)"`) are left alone. Overrides are applied on **both**
 `--extract` and `--render`, so a name filled in after the data was pulled lands
 with a re-render alone, and a re-extract never loses it.
 

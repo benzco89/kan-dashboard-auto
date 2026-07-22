@@ -642,6 +642,23 @@ def load_reporter_overrides():
             for k, v in data.items() if not str(k).startswith('_')}
 
 
+# An editor filling credits by hand knows the programme too, and writes it where
+# it is natural to write it: "אריה גולן (מתוך הבוקר הזה)". Splitting it back out
+# here means the deck's programme column gets it even when the post carried no
+# hashtag — and the credit column shows the name alone instead of a run-on.
+_OVERRIDE_PROGRAM_RE = re.compile(
+    r"\s*\(\s*(?:מתוך|מ)\s*(?:התוכנית\s*|תוכנית\s*)?([^)]{2,40})\)\s*$")
+
+
+def split_override(value):
+    """'אריה גולן (מתוך הבוקר הזה)' -> ('אריה גולן', 'הבוקר הזה')."""
+    value = str(value or '').strip()
+    m = _OVERRIDE_PROGRAM_RE.search(value)
+    if not m:
+        return value, ''
+    return value[:m.start()].strip(), m.group(1).strip()
+
+
 def apply_reporter_overrides(content, overrides=None):
     """Overwrite per-item credits from the overrides file. Returns (set, vetoed)."""
     overrides = load_reporter_overrides() if overrides is None else overrides
@@ -653,8 +670,12 @@ def apply_reporter_overrides(content, overrides=None):
             key = "%s:%s" % (p.get('key', ''), it.get('id', ''))
             if key not in overrides:
                 continue
-            name = overrides[key]
+            name, program = split_override(overrides[key])
             it['_override'] = True
+            # a programme the editor states outranks one parsed from a hashtag
+            if program:
+                it['program'] = program
+                it['_prog_src'] = 'override'
             if name != (it.get('reporter') or ''):
                 it['reporter'] = name
                 it['reporter_source'] = 'override' if name else 'override-none'
