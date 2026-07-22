@@ -41,7 +41,7 @@ Outputs: `out/deck.html`, `out/deck.pdf`, `out/slide_1.png` / `slide_2.png`
 
 Flags: `--thumbstyle portrait|blur` (see below) · `--no-thumbs` (skip downloads)
 · `--reporters-todo` (rebuild the uncredited-items list from an existing
-`deck_content.json`, offline) · `--gemini` (opt in to an LLM rewrite of the
+`deck_content.json`, offline) · `--retitle` (re-derive headlines, offline) · `--gemini` (opt in to an LLM rewrite of the
 prose during extract — **off by default**, and it still never touches numbers).
 
 ### What the deck deliberately does not say
@@ -108,10 +108,29 @@ state (no fabricated numbers).
 ## Headlines vs captions
 
 Kan captions are long and run past the headline. `--extract` stores both: the
-rendered `title` is the **headline only** — cut at the first 👇, line break or
-sentence end (never at `:`, which is part of Kan headlines like
-`פרסום ראשון: ...`), then capped ~80 chars on a word boundary — and `caption`
-keeps the first 400 chars of the original for reference while editing.
+rendered `title` is the **headline only** and `caption` keeps the first 400
+chars of the original for reference while editing.
+
+The headline is cut at the first 👇, line break or sentence end, then **trimmed
+to its first self-sufficient clause** (`trim_to_clause`). Kan writes
+`<hook>: <elaboration>` and the hook is usually the whole headline — over a real
+week this took the median title from 76 chars to 51. The naive "cut at the
+colon" rule made several headlines worse, so it is fenced by four guards, each
+of which earned its place on that data:
+
+| guard | why |
+|---|---|
+| a title already inside the cap is left alone | shortening a 45-char headline only loses information |
+| a head that is **only a quotation** is dropped for the tail | `"הרגשה של נטישה"` identifies no story; what follows it does |
+| a **quoted tail** stops the cut | in `X: "…"` the quote *is* the news |
+| a head that is a **lead-in label** (`פרסום ראשון`) or ends in an **announcing verb** (`אישרה:`, `חושפת -`) is skipped | it announces the elaboration instead of replacing it |
+
+With nothing to cut at, it prefers a comma near the cap over slicing mid-clause.
+Cap is 62 chars (`headline_of(..., cap=)`).
+
+Re-derive every headline in an existing `deck_content.json` — useful when these
+rules change — with `--retitle`. It is opt-in because it **overwrites
+hand-edited titles**.
 
 ## Reporter credits (כתב/ת column)
 
@@ -164,6 +183,16 @@ agency copy, quoted statements) genuinely ship without a byline, and no amount o
 regex will find a name that was never written. So instead of guessing, the run
 writes `out/reporters_todo.txt`: each uncredited item's headline, a link to it
 where one can be derived, and a **paste-ready JSON block** to fill in.
+
+The list also carries **same-story suggestions**: Kan runs one report across all
+five platforms and often credits it on only some, so an uncredited item is
+matched against the credited ones by caption word overlap. These are printed as
+`אולי <name> (43% חפיפה עם …)` **next to the matched headline** and are never
+applied automatically — on a real week the method matched 4 of 11 uncredited
+items and one of the four was wrong (two unrelated stories about Israeli
+teenagers abroad shared enough words to score 50%). Word overlap cannot tell
+"same story" from "same subject"; showing the matched headline lets a human
+reject a bad guess at a glance.
 
 Rebuild that list at any time, offline, with:
 

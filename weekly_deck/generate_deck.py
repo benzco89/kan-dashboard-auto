@@ -452,11 +452,66 @@ def reporter_fallback(text):
 _HEADLINE_STOP_RE = re.compile(r"[.!?](?=\s|$)")
 _HEADLINE_CUT_CHARS = ('👇', '⬇️', '⬇', '🔗')
 
+# --- clause trimming ------------------------------------------------------
+# Kan headlines are built as <hook>: <elaboration>, and the hook alone is
+# usually the headline. Measured over a real week, cutting at the first
+# self-sufficient clause takes the median title from 76 chars to 51 — but only
+# with the guards below, each of which exists because the unguarded rule
+# produced a worse headline on this data.
+_CLAUSE_RE = re.compile(r"\s*(?::| [-–—] | \| )\s*")
+_QUOTE_CHARS = "\"“”״‘’'"
+# a head that is only a label ("פרסום ראשון") is not a headline
+_LEAD_IN = {
+    'פרסום ראשון', 'פרסום', 'בלעדי', 'מבזק', 'דיווח', 'עדכון', 'תיעוד', 'ראיון',
+    'לראשונה', 'תחקיר', 'חשיפה', 'פרשנות', 'דעה', 'כתבה', 'צפו', 'האזינו',
+    'חדש', 'דחוף', 'חשד', 'סיכום',
+}
+# "...הוועדה אישרה:" / "...משפחתו חושפת -" announce something; the announcement
+# is the elaboration, so the head on its own says nothing
+_ANNOUNCES_RE = re.compile(
+    r"(?:אישר|הודיע|חושפ|חשפ|מגל|מסר|טוע|אמר|סיפר|מזהיר|קובע|מכריז|מתריע"
+    r"|מבהיר|מודיע|הכריז|דיווח|מספר|מתכנן|החליט|הורה|הורת)(?:ה|ת|ים|ות|נו)?$")
+_MIN_CLAUSE = 25
 
-def headline_of(text, reporter="", cap=80):
+
+def _is_bare_quote(s):
+    s = s.strip()
+    return len(s) > 1 and s[0] in _QUOTE_CHARS and s[-1] in _QUOTE_CHARS
+
+
+def trim_to_clause(s, cap):
+    """Shorten a headline to its first self-sufficient clause, else cap it."""
+    s = " ".join(str(s or "").split()).strip().rstrip(" -–—|:,")
+    if len(s) <= cap:
+        return s                                  # short enough already: hands off
+    for m in _CLAUSE_RE.finditer(s):
+        head, tail = s[:m.start()].strip(), s[m.end():].strip()
+        if not head or not tail:
+            continue
+        if _is_bare_quote(head):
+            return trim_to_clause(tail, cap)      # a quote alone identifies nothing
+        if tail[0] in _QUOTE_CHARS:
+            break                                 # 'X said: "…"' — the quote IS the news
+        if (len(head) < _MIN_CLAUSE
+                or head.strip('.,:!?" ') in _LEAD_IN
+                or _ANNOUNCES_RE.search(head)):
+            continue
+        return head
+    # nothing to cut at: prefer a comma near the cap over slicing mid-clause.
+    # The window reaches a little PAST the cap on purpose — a clause that ends
+    # just beyond it is better kept whole than sliced and given an ellipsis.
+    comma = s.rfind(",", int(cap * 0.6), cap + 8)
+    if comma != -1:
+        return s[:comma].rstrip()
+    cut = s[:cap]
+    sp = cut.rfind(" ")
+    return (cut[:sp] if sp > cap * 0.6 else cut).rstrip(" -–—|,:") + "…"
+
+
+def headline_of(text, reporter="", cap=62):
     """The leading headline of a caption — what the table and cards show.
-    Deliberately does NOT cut at ':' — in Kan headlines the colon is part of the
-    headline ('פרסום ראשון: ...')."""
+    Deliberately does NOT cut at ':' unconditionally — in Kan headlines the colon
+    is often part of the headline ('פרסום ראשון: ...'); see trim_to_clause."""
     lines = [l for l in _strip_bidi(text).replace("\r", "\n").split("\n") if l.strip()]
     s = lines[0] if lines else ""
     for ch in _HEADLINE_CUT_CHARS:
@@ -478,11 +533,7 @@ def headline_of(text, reporter="", cap=80):
         s = re.sub(r"\s*@[A-Za-z0-9._]{2,30}[.,;:!?]*\s*$", "", s).rstrip()
         if s.endswith(reporter):
             s = s[:-len(reporter)].rstrip(" -–—|·,")
-    if len(s) > cap:
-        cut = s[:cap]
-        sp = cut.rfind(" ")
-        s = (cut[:sp] if sp > cap * 0.6 else cut).rstrip() + "…"
-    return s.strip()
+    return trim_to_clause(s, cap).strip()
 
 
 def load_reporters_map():
@@ -1171,9 +1222,13 @@ def report_reporters(content):
         print("  x NO CREDIT IN THE TEXT (%d) - fill these in reporters_overrides.json:" % len(missing))
         for k, n, it in missing:
             print("    %-10s #%-3d %s" % (k, n, clean_title(it.get('title', ''), 60)))
+        sugg = reporter_suggestions(items)
+        if sugg:
+            print("     (%d of them have a same-story candidate to check — see the file)"
+                  % len(sugg))
         print("")
         print("  -> paste-ready block written to %s" % TODO_PATH)
-        write_reporters_todo(missing)
+        write_reporters_todo(missing, sugg)
     print(bar)
     print("")
 
@@ -1184,17 +1239,81 @@ def report_reporters(content):
         it.pop('_override', None)
 
 
-def write_reporters_todo(missing):
+# Hebrew function words plus the brand's own name — present in every caption, so
+# they say nothing about which story an item covers.
+_MATCH_STOP = set((
+    "של את על עם אל גם כבר לא כן זה זו הוא היא הם הן אחרי לפני בתוך מתוך בגלל "
+    "כדי לאחר בעקבות עוד ועוד היה היו יש אין כל כמו רק אבל או אז מה מי כי אך אף "
+    "אחד אחת שני שתי בין ללא כאן חדשות אשר כאשר כפי לפי אולם ואילו כמה"
+).split())
+
+
+def _story_tokens(item):
+    """Content words of an item, spelling-normalised. Hebrew captions mix full
+    and defective spelling for the same word (הייתה / היתה), which would
+    otherwise stop the same story matching across two platforms."""
+    text = _strip_bidi((item.get('caption') or item.get('title') or ''))
+    text = re.sub(r"[^\w֐-׿ ]", " ", text)
+    return {w.replace('יי', 'י').replace('וו', 'ו')
+            for w in text.split() if len(w) > 2 and w not in _MATCH_STOP}
+
+
+def reporter_suggestions(items, floor=0.35):
+    """For each uncredited item, credited items covering what looks like the SAME
+    story — Kan runs one report across all five platforms and often credits it on
+    only some of them.
+
+    Deliberately NOT auto-applied. On a real week this matched 4 of 11 uncredited
+    items, and one of the four was wrong: two unrelated stories about Israeli
+    teenagers abroad shared enough words to score 50%. Word overlap cannot tell
+    "same story" from "same subject", so the deck offers the candidate with the
+    matched headline next to it and lets a human see the mismatch in one glance.
+    Returns {(platform, rank): [(score, platform, rank, item), ...]}.
+    """
+    cache = {(k, n): _story_tokens(it) for k, n, it in items}
+    out = {}
+    for k, n, it in items:
+        if (it.get('reporter') or '').strip() or it.get('_override'):
+            continue
+        mine = cache[(k, n)]
+        if not mine:
+            continue
+        hits = []
+        for k2, n2, other in items:
+            if (k2, n2) == (k, n) or not (other.get('reporter') or '').strip():
+                continue
+            theirs = cache[(k2, n2)]
+            if not theirs:
+                continue
+            score = len(mine & theirs) / min(len(mine), len(theirs))
+            if score >= floor:
+                hits.append((score, k2, n2, other))
+        if hits:
+            hits.sort(reverse=True, key=lambda h: h[0])
+            out[(k, n)] = hits[:3]
+    return out
+
+
+def write_reporters_todo(missing, suggestions=None):
     """A file the editor can work through: headline + link per uncredited item,
     then the exact JSON lines to paste into reporters_overrides.json. Leaving a
     value as "" is a valid answer - it records "no reporter" so the item never
     comes back on next week's list."""
+    suggestions = suggestions or {}
     lines = ["רשימת השלמה — פריטים שאין בטקסט שלהם קרדיט לכתב/ת.",
              "מלאו שם מול כל שורה בבלוק ה-JSON שבסוף, והעתיקו אותו אל",
              "weekly_deck/reporters_overrides.json. ערך ריק (\"\") = אין כתב/ת, וזה בסדר.",
+             "",
+             "שורות שמתחילות ב-\"אולי\" הן ניחוש: פריט אחר מאותו שבוע שנראה כאילו",
+             "הוא מכסה את אותו סיפור ויש בו קרדיט. הכותרת שלו מוצגת כדי שתוכלו",
+             "לפסול ניחוש שגוי במבט אחד. שום ניחוש לא מוחל אוטומטית.",
              ""]
     for k, n, it in missing:
         lines.append("[%s #%d] %s" % (k, n, clean_title(it.get('title', ''), 90)))
+        for score, k2, n2, other in suggestions.get((k, n), []):
+            lines.append("   אולי %s  (%d%% חפיפה עם %s #%d: %s)"
+                         % (other['reporter'], round(score * 100), k2, n2,
+                            clean_title(other.get('title', ''), 55)))
         # a saved deck_content.json has no _url (it is stripped as internal), so
         # --reporters-todo rebuilds what it can from the id alone. Instagram's
         # media_id is not a shortcode and cannot become a link — the headline has
@@ -1438,7 +1557,7 @@ def _display_title(item):
     runs at extract. Repeating it here means a credit added later — a new
     reporters_map line, an override — also stops showing its raw @handle in the
     headline, without paying for a re-extract."""
-    title = item.get('title', '') or ''
+    title = _strip_bidi(item.get('title', '') or '').strip()
     if (item.get('reporter') or '').strip():
         title = re.sub(r"\s*@[A-Za-z0-9._]{2,30}[.,;:!?]*\s*$", "", title).rstrip()
     return title
@@ -1746,7 +1865,25 @@ def main():
     ap.add_argument('--qa-all', action='store_true', help="screenshot every slide, not just the first two")
     ap.add_argument('--reporters-todo', action='store_true',
                     help="rebuild out/reporters_todo.txt from deck_content.json and exit (offline)")
+    ap.add_argument('--retitle', action='store_true',
+                    help="re-derive every headline in deck_content.json from its caption and exit "
+                         "(offline; OVERWRITES hand-edited titles)")
     args = ap.parse_args()
+
+    if args.retitle:
+        content = load_content()
+        apply_reporter_overrides(content)
+        changed = 0
+        for p in content.get('platforms', []):
+            for it in p.get('top', []):
+                new = headline_of(it.get('caption') or it.get('title', ''),
+                                  it.get('reporter') or '')
+                if new and new != it.get('title'):
+                    it['title'] = new
+                    changed += 1
+        print(f"   ✏️  {changed} headlines re-derived")
+        save_content(content)
+        return
 
     if args.reporters_todo:
         content = load_content()

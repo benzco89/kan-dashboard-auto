@@ -101,8 +101,8 @@ CASES = [
 HEADLINES = [
     ("הטרנד החדש שכובש את חטיבות הביניים: בני נוער משקיעים עשרות אלפי דולרים בבורסה, "
      "מוחקים את החסכונות. כתבה מיוחדת (יותם ווקס)",
-     "הטרנד החדש שכובש את חטיבות הביניים: בני נוער משקיעים עשרות אלפי דולרים בבורסה,…",
-     "colon kept, cut at 80 on a word boundary"),
+     "הטרנד החדש שכובש את חטיבות הביניים",
+     "long headline trimmed to the hook before the colon"),
     ("פרסום ראשון: המסמך שחושף הכל \U0001F447 קישור בתגובות", "פרסום ראשון: המסמך שחושף הכל",
      "cut at the pointer emoji"),
     ("שר הביטחון הגיש בקשה למחיקת הרישום\nפרטים נוספים בהמשך",
@@ -127,6 +127,33 @@ HEADLINES_CREDITED = [
      "bare trailing name and its separator are dropped"),
     ("המשקיעים החדשים בבורסה @kann_news", "", "המשקיעים החדשים בבורסה @kann_news",
      "with NO reporter the handle stays — it is the hint that the map is missing a line"),
+]
+
+
+# trim_to_clause(s, cap) — each guard here exists because the unguarded rule
+# produced a worse headline on a real week of Kan captions.
+CLAUSES = [
+    ("קרס דיג ננעץ בצוואר של יוליה בזמן הצלילה: \"הרופא אמר - 'בחרת' את המיקום\"",
+     "קרס דיג ננעץ בצוואר של יוליה בזמן הצלילה: \"הרופא אמר - 'בחרת'…",
+     "a quoted tail is the news — do not cut the hook off it"),
+    ("הטרנד החדש שכובש את חטיבות הביניים: בני נוער משקיעים עשרות אלפי דולרים בבורסה",
+     "הטרנד החדש שכובש את חטיבות הביניים",
+     "hook before the colon is the headline"),
+    ("\"הרגשה של נטישה\": כרם ונפתלי בני ה-18 רק רצו לחגוג את סיום התיכון בחופשה",
+     "כרם ונפתלי בני ה-18 רק רצו לחגוג את סיום התיכון בחופשה",
+     "a head that is only a quotation is dropped for the half that identifies the story"),
+    ("ועדת השרים לענייני שב\"כ אישרה: נתניהו יקבל אבטחה למשך כל החיים, רעייתו שרה",
+     "ועדת השרים לענייני שב\"כ אישרה: נתניהו יקבל אבטחה למשך כל החיים",
+     "an announcing head ('אישרה') is not a headline on its own"),
+    ("פרסום ראשון: רשות שדות התעופה הורתה שלא לאפשר מתדלקים אמריקניים לנחות בנתב\"ג",
+     "פרסום ראשון: רשות שדות התעופה הורתה שלא לאפשר מתדלקים…",
+     "a lead-in label is never the whole headline"),
+    ("רצח הצעיר בירושלים: משפחתו חושפת - \"הכתובת הייתה על הקיר\"",
+     "רצח הצעיר בירושלים: משפחתו חושפת - \"הכתובת הייתה על הקיר\"",
+     "already inside the cap — left alone"),
+    ("יוליה בת ה-33 יצאה לצלילה חופשית באילת, כשלפתע הרגישה מכה חזקה בצוואר ומשיכה",
+     "יוליה בת ה-33 יצאה לצלילה חופשית באילת",
+     "no clause break: falls back to a comma rather than slicing mid-sentence"),
 ]
 
 
@@ -180,6 +207,14 @@ def main():
         print(("  PASS  " if ok else "  FAIL  ") + label
               + ("" if ok else f"\n          got {got!r}, expected {expected!r}"))
 
+    print("\nclause trimming")
+    for src, expected, label in CLAUSES:
+        got = g.trim_to_clause(src, 62)
+        ok = got == expected
+        failures += 0 if ok else 1
+        print(("  PASS  " if ok else "  FAIL  ") + label
+              + ("" if ok else f"\n          got {got!r}, expected {expected!r}"))
+
     print("\nper-item overrides")
     for got, expected, label in _override_cases():
         ok = got == expected
@@ -187,7 +222,8 @@ def main():
         print(("  PASS  " if ok else "  FAIL  ") + label
               + ("" if ok else f"\n          got {got!r}, expected {expected!r}"))
 
-    total = len(CASES) + len(HEADLINES) + len(HEADLINES_CREDITED) + len(_override_cases())
+    total = (len(CASES) + len(HEADLINES) + len(HEADLINES_CREDITED)
+             + len(CLAUSES) + len(_override_cases()))
     print(f"\n{total - failures}/{total} passed")
     return 1 if failures else 0
 
