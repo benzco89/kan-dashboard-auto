@@ -1444,11 +1444,14 @@ def reporter_suggestions(items, floor=0.35):
     story — Kan runs one report across all five platforms and often credits it on
     only some of them.
 
-    Deliberately NOT auto-applied. On a real week this matched 4 of 11 uncredited
-    items, and one of the four was wrong: two unrelated stories about Israeli
-    teenagers abroad shared enough words to score 50%. Word overlap cannot tell
-    "same story" from "same subject", so the deck offers the candidate with the
-    matched headline next to it and lets a human see the mismatch in one glance.
+    Deliberately NOT auto-applied — not because it was measured to be wrong, but
+    because of what it can and cannot know. On a real week it matched 4 of 11
+    uncredited items and every match held up (one looked wrong at first glance:
+    a Montenegro item matched to a post about two teenagers, who turn out to be
+    the teenagers attacked in Montenegro). Word overlap can tell that two posts
+    share wording; it cannot tell "same story" from "same subject", and it has no
+    way to know that the person credited on one post wrote the other. So the deck
+    prints the candidate beside the headline it matched and a human decides.
     Returns {(platform, rank): [(score, platform, rank, item), ...]}.
     """
     cache = {(k, n): _story_tokens(it) for k, n, it in items}

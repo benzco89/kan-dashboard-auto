@@ -274,11 +274,13 @@ The list also carries **same-story suggestions**: Kan runs one report across all
 five platforms and often credits it on only some, so an uncredited item is
 matched against the credited ones by caption word overlap. These are printed as
 `אולי <name> (43% חפיפה עם …)` **next to the matched headline** and are never
-applied automatically — on a real week the method matched 4 of 11 uncredited
-items and one of the four was wrong (two unrelated stories about Israeli
-teenagers abroad shared enough words to score 50%). Word overlap cannot tell
-"same story" from "same subject"; showing the matched headline lets a human
-reject a bad guess at a glance.
+applied automatically. On a real week it matched 4 of 11 uncredited items and
+every match held up — including one that looked wrong at first glance, a
+Montenegro item matched to a post about two teenagers who turn out to be the
+teenagers attacked in Montenegro. The reason it still only suggests is what the
+method cannot know: word overlap can tell that two posts share wording, not that
+they are the same story, and not that whoever is credited on one wrote the
+other. Showing the matched headline lets a human settle both in a glance.
 
 Rebuild that list at any time, offline, with:
 
