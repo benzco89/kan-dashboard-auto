@@ -154,6 +154,12 @@ CLAUSES = [
     ("יוליה בת ה-33 יצאה לצלילה חופשית באילת, כשלפתע הרגישה מכה חזקה בצוואר ומשיכה",
      "יוליה בת ה-33 יצאה לצלילה חופשית באילת",
      "no clause break: falls back to a comma rather than slicing mid-sentence"),
+    # regression: dropping the quote left a 126-char first clause, which was
+    # returned whole because the cap was only applied on the fallback path
+    ("\"הרגשה של נטישה\": כרם ונפתלי בני ה-18 רק רצו לחגוג את סיום התיכון בחופשה "
+     "במונטנגרו יחד עם חבריהם, אבל הותקפו באלימות קשה - אחרי שסיפרו שהם ישראלים",
+     "כרם ונפתלי בני ה-18 רק רצו לחגוג את סיום התיכון בחופשה…",
+     "a clause LONGER than the cap is not an improvement — never returned whole"),
 ]
 
 

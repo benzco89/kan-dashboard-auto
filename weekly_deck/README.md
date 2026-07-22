@@ -132,6 +132,41 @@ Re-derive every headline in an existing `deck_content.json` — useful when thes
 rules change — with `--retitle`. It is opt-in because it **overwrites
 hand-edited titles**.
 
+## Which programme a clip came from (תוכנית column)
+
+Kan tags the source programme as a **hashtag** on the post — `#כאןבשלוש`,
+`#כאןבשש`, `#בחציהיום`, `#מהדורתכאןחדשות`. The tag has no spaces and Hebrew
+cannot be word-split deterministically, so `programs_map.json` (repo-tracked,
+meant to grow) turns `#כאןבשלוש` into `כאן בשלוש`. Matching ignores `#` and case.
+
+**An unmapped hashtag never becomes a programme.** Posts carry topic tags too
+(`#מונטנגרו`), and guessing would put nonsense in the column — so unmapped tags
+are listed at the end of `--extract` instead, where a real programme is one line
+to add. Two weaker signals back the hashtag up: a programme named in quotes
+(`בתוכנית "X"`), and the radio signature `כאן חדשות ברשת ב׳`, which yields the
+station `רשת ב׳` when no programme tag is present.
+
+Like the credit, the tag sits at the very END of the caption, so it is resolved
+on the **full raw text** at extract, never on the stored 400-char `caption`.
+
+The column only renders on a slide where **at least two rows have a programme**.
+An almost-empty column reads as missing data on every row instead of as extra
+information on a few.
+
+## Clickable rows
+
+Every table row and highlight card is an `<a>` when the item has a link, and
+Chromium's `page.pdf()` turns those into real PDF link annotations — so the
+exported deck is clickable, not just the HTML. The URL is the permalink the
+collectors already store for Facebook / Instagram / X; YouTube, TikTok, Facebook
+and X also rebuild one from the id alone, which is how a `deck_content.json`
+extracted before links existed still gets them. **Instagram rows stay unlinked**
+when there is no stored permalink: a `media_id` is not a shortcode, so there is
+nothing to build a URL from and a guess would point somewhere wrong.
+
+Since a PDF gives no visual cue that a row is a link, each platform slide carries
+a `↗ לחיצה על שורה פותחת את הפריט` hint beside the חריג legend.
+
 ## Reporter credits (כתב/ת column)
 
 The sheets carry no author field, so `--extract` pre-fills `reporter`

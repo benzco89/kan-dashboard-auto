@@ -58,6 +58,7 @@ THUMBS_DIR = os.path.join(OUT_DIR, "thumbs")
 CONTENT_PATH = os.path.join(OUT_DIR, "deck_content.json")
 REPORTERS_MAP_PATH = os.path.join(HERE, "reporters_map.json")
 REPORTERS_OVERRIDES_PATH = os.path.join(HERE, "reporters_overrides.json")
+PROGRAMS_MAP_PATH = os.path.join(HERE, "programs_map.json")
 TODO_PATH = os.path.join(OUT_DIR, "reporters_todo.txt")
 TEMPLATE = "template.html.j2"
 
@@ -492,7 +493,10 @@ def trim_to_clause(s, cap):
             return trim_to_clause(tail, cap)      # a quote alone identifies nothing
         if tail[0] in _QUOTE_CHARS:
             break                                 # 'X said: "…"' — the quote IS the news
-        if (len(head) < _MIN_CLAUSE
+        # A clause is only an improvement if it is SHORTER than the cap — a long
+        # first clause (which happens once the leading quote is dropped and the
+        # rest of the caption runs on) would otherwise be returned uncapped.
+        if (not _MIN_CLAUSE <= len(head) <= cap
                 or head.strip('.,:!?" ') in _LEAD_IN
                 or _ANNOUNCES_RE.search(head)):
             continue
@@ -558,6 +562,59 @@ def load_reporters_map():
     for k, v in derived.items():
         out.setdefault(k, v)          # an explicit entry always wins
     return out
+
+
+# --- which programme a clip was cut from -----------------------------------
+# Kan tags the source programme as a hashtag on the post: #כאןבשלוש, #בחציהיום,
+# #מהדורתכאןחדשות. The tag has no spaces and Hebrew cannot be word-split
+# deterministically, so — exactly like reporter handles — a hand-maintained map
+# turns the tag into a readable name and an unmapped tag is REPORTED rather than
+# guessed at. Topic hashtags (#מונטנגרו) must never become programmes.
+_HASHTAG_RE = re.compile(r"#([\w֐-׿]{2,40})")
+# the radio station signs its items on the news page; a station is not a
+# programme, so it is only used when no programme tag is present
+_RESHETB_RE = re.compile(r"כאן חדשות ב?רשת ב")
+# an explicitly quoted programme name — quotes required, so it never fires on prose
+_PROGRAM_PROSE_RE = re.compile(r'(?:ב?תוכנית|בפינה|במהדורת)\s*["״”]([^"״”\n]{2,30})["״”]')
+
+
+def load_programs_map():
+    """{"#כאןבשלוש": "כאן בשלוש"} — repo-tracked and meant to grow, like
+    reporters_map. Keys are matched without the '#' and case-insensitively."""
+    try:
+        with open(PROGRAMS_MAP_PATH, encoding='utf-8') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        print(f"   ⚠️ could not read programs_map.json: {e}")
+        return {}
+    return {str(k).lstrip('#').lower(): str(v) for k, v in data.items()
+            if v and not str(k).startswith('_')}
+
+
+def resolve_program(text, pmap):
+    """(name, source) for the programme a clip came from. ('', '') when the post
+    carries no programme signal — most social-native items genuinely have none,
+    and inventing one would be worse than an empty cell."""
+    s = _strip_bidi(text)
+    for m in _HASHTAG_RE.finditer(s):
+        name = pmap.get(m.group(1).lower())
+        if name:
+            return name, 'hashtag'
+    m = _PROGRAM_PROSE_RE.search(s)
+    if m:
+        return m.group(1).strip(), 'quoted'
+    if _RESHETB_RE.search(s):
+        return "רשת ב׳", 'station'
+    return '', ''
+
+
+def unmapped_hashtags(text, pmap):
+    """Hashtags the map does not know — printed after an extract so a real
+    programme tag is easy to spot and add (topic tags are simply ignored)."""
+    return [t for t in _HASHTAG_RE.findall(_strip_bidi(text))
+            if t.lower() not in pmap]
 
 
 def load_reporter_overrides():
@@ -929,7 +986,7 @@ def _median_of(df, *cols):
     return 0.0
 
 
-def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token, rmap):
+def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token, rmap, pmap):
     """Plain-data content for one platform (no markup, no base64). Thumbnails are
     written to out/thumbs/ and referenced by filename."""
     meta = PLATFORMS[key]
@@ -968,13 +1025,19 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
         raw = str(r.get(tc, '') or '')
         res = resolve_reporter_detailed(raw, rmap)
         reporter = res['name']
+        # the programme tag sits at the END of the caption with the credit, so
+        # both are resolved on the FULL raw text, never on the stored 400-char cut
+        program, prog_src = resolve_program(raw, pmap)
         items.append(dict(id=str(r.get(idc, '')),
                           title=headline_of(raw, reporter),
                           caption=clean_title(raw, 400),
                           reporter=reporter,
                           reporter_source=res['source'],
+                          program=program,
+                          url=_item_url(key, r, str(r.get(idc, ''))),
                           _others=res['others'], _raw=raw,
-                          _url=_item_url(key, r, str(r.get(idc, ''))),
+                          _prog_src=prog_src,
+                          _tags=unmapped_hashtags(raw, pmap),
                           views=int(r['views']),
                           likes=_row_int(r, 'likes'),
                           comments=_row_int(r, 'comments', 'replies'),
@@ -1118,12 +1181,13 @@ def build_deck_content(gc, thumbs_enabled, use_gemini=False):
     fb_token = os.environ.get('FACEBOOK_TOKEN', '')
     tikhub_token = os.environ.get('TIKHUB_TOKEN', '')
     rmap = load_reporters_map()
+    pmap = load_programs_map()
 
     plats = []
     for key in PLATFORM_ORDER:
         df = load_sheet(gc, PLATFORMS[key]['sheet']) if gc else None
         plats.append(extract_platform(key, df, window, thumbs_enabled,
-                                      fb_token, tikhub_token, rmap))
+                                      fb_token, tikhub_token, rmap, pmap))
 
     follows = followers_map(gc)
     for p in plats:
@@ -1229,14 +1293,17 @@ def report_reporters(content):
         print("")
         print("  -> paste-ready block written to %s" % TODO_PATH)
         write_reporters_todo(missing, sugg)
+    print("")
+    report_programs(content)
     print(bar)
     print("")
 
     for _, _, it in items:          # internal only - never written to the JSON
         it.pop('_others', None)
         it.pop('_raw', None)
-        it.pop('_url', None)
         it.pop('_override', None)
+        it.pop('_prog_src', None)
+        it.pop('_tags', None)
 
 
 # Hebrew function words plus the brand's own name — present in every caption, so
@@ -1294,6 +1361,30 @@ def reporter_suggestions(items, floor=0.35):
     return out
 
 
+def report_programs(content):
+    """Programme-tag coverage, plus the hashtags the map does not know yet. A
+    topic tag (#מונטנגרו) is noise here; a programme tag is one line to add."""
+    items = [(pl['key'], it) for pl in content['platforms']
+             for it in pl.get('top', [])]
+    named = [it for _, it in items if (it.get('program') or '').strip()]
+    by_src, seen_tags = {}, {}
+    for _, it in items:
+        if it.get('program'):
+            k = it.get('_prog_src') or '?'
+            by_src[k] = by_src.get(k, 0) + 1
+        for t in (it.get('_tags') or []):
+            seen_tags[t] = seen_tags.get(t, 0) + 1
+
+    print("  PROGRAMME REPORT - %d/%d tagged" % (len(named), len(items)))
+    if by_src:
+        print("  by: " + " | ".join("%s %d" % kv for kv in
+                                    sorted(by_src.items(), key=lambda x: -x[1])))
+    if seen_tags:
+        print("  unmapped hashtags (add the real programmes to programs_map.json):")
+        for t, n in sorted(seen_tags.items(), key=lambda x: -x[1])[:15]:
+            print("    #%-28s x%d" % (t, n))
+
+
 def write_reporters_todo(missing, suggestions=None):
     """A file the editor can work through: headline + link per uncredited item,
     then the exact JSON lines to paste into reporters_overrides.json. Leaving a
@@ -1318,7 +1409,7 @@ def write_reporters_todo(missing, suggestions=None):
         # --reporters-todo rebuilds what it can from the id alone. Instagram's
         # media_id is not a shortcode and cannot become a link — the headline has
         # to carry it there.
-        url = it.get('_url') or (_ITEM_URL_TPL[k].format(id=it['id'])
+        url = it.get('url') or (_ITEM_URL_TPL[k].format(id=it['id'])
                                  if k in _ITEM_URL_TPL and it.get('id') else '')
         if url:
             lines.append("   " + url)
@@ -1552,6 +1643,28 @@ def _cap_anomalies(rows, platform_key):
     print(f"   {platform_key}: {len(flagged)} qualified, showing top {ANOMALY_MAX_PER_SLIDE}")
 
 
+def _row_program(item, pmap):
+    """The programme for a row. An item extracted since programmes existed already
+    carries the answer — computed over the FULL caption — so an empty value there
+    means "no programme tag", not "not looked at", and is trusted. Only content
+    from before the feature falls back to the stored 400-char caption."""
+    if 'program' in item:
+        return (item.get('program') or '').strip()
+    return resolve_program(item.get('caption') or item.get('title') or '', pmap)[0]
+
+
+def _row_url(key, item):
+    """Where a row points. Prefers the permalink stored at extract; falls back to
+    the id, so a deck_content.json produced before links existed still gets them
+    for the four platforms whose ids build a URL (Instagram's media_id is not a
+    shortcode, so those rows stay unlinked rather than pointing somewhere wrong)."""
+    url = (item.get('url') or '').strip()
+    if url.startswith('http'):
+        return url
+    tpl, iid = _ITEM_URL_TPL.get(key), (item.get('id') or '').strip()
+    return tpl.format(id=iid) if (tpl and iid) else ''
+
+
 def _display_title(item):
     """headline_of already drops the credit an item's reporter came from, but it
     runs at extract. Repeating it here means a credit added later — a new
@@ -1567,6 +1680,7 @@ def content_to_context(content, thumbstyle='portrait'):
     """deck_content.json -> template context. Pure/deterministic: no network,
     no sheets, no Gemini. Images are inlined from the thumbs cache here."""
     window = content['window']
+    pmap = load_programs_map()
     plats_raw = {p['key']: p for p in content['platforms']}
     ordered = sorted(content['platforms'], key=lambda p: (-p.get('weekly_views', 0),
                                                           PLATFORM_ORDER.index(p['key'])))
@@ -1580,17 +1694,24 @@ def content_to_context(content, thumbstyle='portrait'):
         meds = _typical_rates(p)
         for n, it in enumerate(p.get('top', []), start=1):
             rows.append(dict(rank=n, title=_display_title(it), reporter=it.get('reporter', '') or '',
+                             program=_row_program(it, pmap),
+                             url=_row_url(key, it),
                              views_fmt=fmt_num(it.get('views', 0)),
                              eng_str=f"{float(it.get('engagement', 0) or 0):.1f}%",
                              highlight=(n <= 3), anomaly=_anomaly_of(it, meds),
                              thumb=thumb_data_uri(it.get('thumb'))))
         _cap_anomalies(rows, p.get('key', ''))
+        # An almost-empty column is worse than no column: it reads as missing
+        # data on every row instead of as extra information on a few. The
+        # programme column only appears once a slide has a few of them.
+        show_program = sum(1 for r in rows if r['program']) >= 2
 
         top3 = []
         for n, it in enumerate(p.get('top', [])[:3]):
             top3.append(dict(medal=medals[n], title=clean_title(_display_title(it), 110),
                              views_fmt=fmt_num(it.get('views', 0)),
                              reporter=it.get('reporter', '') or '',
+                             url=_row_url(key, it),
                              thumb=thumb_data_uri(it.get('thumb'))))
 
         ff = p.get('fun_fact') or {}
@@ -1610,7 +1731,8 @@ def content_to_context(content, thumbstyle='portrait'):
             delta_str=dl['str_signed'], delta_color=dl['color'], has_delta=dl['has_delta'],
             has_data=bool(p.get('top')),
             text_cards=(key in NO_THUMBS),
-            top3=top3, top10=rows,
+            top3=top3, top10=rows, show_program=show_program,
+            has_links=any(r['url'] for r in rows),
             has_anomaly=any(r['anomaly'] for r in rows),
             fun_fact=(dict(value=chosen['value'], suffix=chosen.get('suffix', ''),
                            text=chosen.get('text', '')) if chosen else None),
@@ -1692,10 +1814,16 @@ def build_mock_content():
                "",                                                # genuinely uncredited
                "| רובי המרשלג"]                                   # known Hebrew name
 
+    # Kan tags the source programme at the very end of the caption, past the
+    # credit. Only some items carry one — which is exactly the case the
+    # conditional programme column has to handle, so the mock mirrors it.
+    programs = ["#כאןבשלוש", "", "#בחציהיום", "", "", "#כאןבשש", "", "", "#מונטנגרו", ""]
+
     def rows(specs):
         out = []
         for i, (title, views, likes, comments, shares, eng, extra) in enumerate(specs):
-            caption = f"{title}. {tail} {credits[i % len(credits)]}".strip()
+            caption = (f"{title}. {tail} {credits[i % len(credits)]} "
+                       f"{programs[i % len(programs)]}").strip()
             r = dict(title=caption, caption=caption, text=caption, views=views, likes=likes,
                      comments=comments, shares=shares, engagement_rate=eng,
                      date=days[i % 7], published_at=days[i % 7] + "T10:00:00Z")
@@ -1765,8 +1893,10 @@ def build_mock_content():
     ])
     sheets = dict(youtube=yt, tiktok=tk, instagram=ig, facebook=fb, x=x)
     rmap = load_reporters_map()
+    pmap = load_programs_map()
 
-    plats = [extract_platform(k, sheets[k], window, False, '', '', rmap) for k in PLATFORM_ORDER]
+    plats = [extract_platform(k, sheets[k], window, False, '', '', rmap, pmap)
+             for k in PLATFORM_ORDER]
 
     # synthesize prior-week deltas + followers (real runs read these from sheets)
     prev = dict(youtube=22.0, tiktok=52.0, instagram=8.0, facebook=-5.0, x=12.0)
