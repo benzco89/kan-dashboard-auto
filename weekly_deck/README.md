@@ -111,22 +111,23 @@ Kan captions are long and run past the headline. `--extract` stores both: the
 rendered `title` is the **headline only** and `caption` keeps the first 400
 chars of the original for reference while editing.
 
-The headline is cut at the first 👇, line break or sentence end, then **trimmed
-to its first self-sufficient clause** (`trim_to_clause`). Kan writes
-`<hook>: <elaboration>` and the hook is usually the whole headline — over a real
-week this took the median title from 76 chars to 51. The naive "cut at the
-colon" rule made several headlines worse, so it is fenced by four guards, each
-of which earned its place on that data:
+The headline is cut at the first 👇, line break or sentence end, then **capped**
+at 62 chars — the width the table column can actually show, measured against the
+render, not guessed.
 
-| guard | why |
-|---|---|
-| a title already inside the cap is left alone | shortening a 45-char headline only loses information |
-| a head that is **only a quotation** is dropped for the tail | `"הרגשה של נטישה"` identifies no story; what follows it does |
-| a **quoted tail** stops the cut | in `X: "…"` the quote *is* the news |
-| a head that is a **lead-in label** (`פרסום ראשון`) or ends in an **announcing verb** (`אישרה:`, `חושפת -`) is skipped | it announces the elaboration instead of replacing it |
+**Nothing is dropped.** An earlier version cut at the first clause boundary, on
+the theory that Kan writes `<hook>: <elaboration>` and the hook is the headline.
+On real captions it removed the *stronger* half more often than not —
+`הטרנד החדש שכובש את חטיבות הביניים` without `בני נוער משקיעים עשרות אלפי דולרים`,
+or a family's quote dropped from the story it belongs to. In Kan's style the part
+before the colon is usually a **teaser** and the news sits after it, so the deck
+keeps both and elides only what does not fit.
 
-With nothing to cut at, it prefers a comma near the cap over slicing mid-clause.
-Cap is 62 chars (`headline_of(..., cap=)`).
+The cut is placed on the last clause boundary (comma, semicolon, dash, pipe)
+inside the cap, so it never lands mid-phrase, and always ends in `…` because text
+really was dropped. `--extract` then lists every elided headline so the editorial
+pass can rewrite the few where the important half fell off — that judgement is
+the editor's, not a regex's.
 
 Re-derive every headline in an existing `deck_content.json` — useful when these
 rules change — with `--retitle`. It is opt-in because it **overwrites
@@ -183,10 +184,31 @@ the headline), in this order:
    (`… | https://bit.ly/x Vered Pelman Haim Goldich`). Latin runs are accepted
    structurally and the FIRST name is taken (Kan lists reporter then
    photographer); the second is reported so you can check it;
-6. YouTube only: the credit is in the video **description**, so one batched
-   Data API call (`YOUTUBE_API_KEY`, up to 50 ids) fetches descriptions for the
-   items still missing a credit. Best-effort — no key or a failed call never
-   breaks the extract.
+6. the **possessive** form, which carries no colon and so is invisible to rule 1
+   — `כתבתו של X`, `בכתבתה של X`, `מתוך תחקירו של X`. This is how Kan credits in
+   YouTube descriptions and at the end of reels.
+
+### The full-text second pass
+
+The daily collectors store a **truncated** copy of every caption — Facebook at
+700 chars, Instagram and TikTok at 500 — because a sheet cell is not an archive.
+Kan credits the reporter at the very END of the caption, so on a long post **the
+credit is already gone before the deck ever reads the sheet**. Measured on a real
+week: all 3 uncredited Facebook items were long-text items.
+
+So `--extract` re-fetches the original text for the ~10 items per platform that
+actually reach the deck, and re-resolves the credit, the programme and the
+headline against it:
+
+| platform | source | why |
+|---|---|---|
+| Facebook | Graph `?ids=…&fields=message` | sheet cuts at 700 |
+| Instagram | Graph `?ids=…&fields=caption` | sheet cuts at 500 |
+| YouTube | Data API `videos?part=snippet` | the sheet holds the **title**, and a title never carries a byline — the credit is in the description |
+| TikTok, X | — | short enough that the 500-char store never cuts them |
+
+One batched call per platform per week. Best-effort throughout: no token, a
+failed call or a missing id just leaves that item on the sheet text it had.
 
 A camera or clapper emoji (📸 📷 🎥 🎬) opens a **media credit that runs to the
 end of the caption** — everything from the marker on is cut before any search,

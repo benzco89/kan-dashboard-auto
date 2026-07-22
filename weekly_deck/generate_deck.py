@@ -384,7 +384,14 @@ _NAME_RE = re.compile(r"^[֐-׿]+(?:[ ׳״'\"\-][֐-׿]+){1,2}$")
 _NOT_REPORTER = ('צילום', 'עריכה', 'עיבוד', 'גרפיקה', 'הפקה', 'תרגום', 'אנימציה')
 # "כתב: X" / "כתבת: X" / "תחקיר: X" style credits.
 _CREDIT_PREFIX_RE = re.compile(
-    r"(?:כתב/ת|כתבת|כתבנו|כתב|תחקיר|דיווח)\s*:\s*([^\n,|)\]]{2,40})")
+    r"(?:כתב/ת|כתבת|כתבנו|כתב|תחקיר|דיווח)\s*:\s*([^\n,|)\]#]{2,40})")
+# The possessive form, which carries NO colon and so was invisible to the rule
+# above: "כתבתו של X", "בכתבתה של X", "מתוך תחקירו של X". This is how Kan credits
+# in YouTube descriptions and at the end of reels — the single most common shape
+# among items the extractor used to miss.
+_CREDIT_POSSESSIVE_RE = re.compile(
+    r"(?:כתבת[והםן]?|כתבה|תחקיר[והםן]?|דיווח[והםן]?|ראיון|ריאיון)\s+של\s+"
+    r"([^\n,|)\]#]{2,40})")
 
 
 _LATIN_FULLNAME_RE = re.compile(r"^[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+){1,2}$")
@@ -402,6 +409,13 @@ def _looks_like_person(s):
     return bool(_NAME_RE.match(s)) or bool(_LATIN_FULLNAME_RE.match(s))
 
 
+# Generic references that fit the shape of a name but are not a person. The
+# possessive credit form makes these reachable — "כתבתו של הכתב שלנו" would
+# otherwise resolve to "הכתב שלנו".
+_GENERIC_REF = {'הכתב', 'הכתבת', 'הכתבים', 'שלנו', 'שלהם', 'המערכת', 'הצוות',
+                'העיתון', 'הערוץ', 'התוכנית', 'הסוכנות', 'הכתבה'}
+
+
 def _looks_like_name(s):
     s = (s or "").strip()
     if not s or any(ch.isdigit() for ch in s):
@@ -409,6 +423,8 @@ def _looks_like_name(s):
     if ':' in s or '@' in s:
         return False
     if any(w in s for w in _NOT_REPORTER):
+        return False
+    if any(w in _GENERIC_REF for w in s.split()):
         return False
     return bool(_NAME_RE.match(s))
 
@@ -431,10 +447,18 @@ def reporter_fallback(text):
     Never invents: returns '' when nothing credible is present."""
     text = str(text or "")
 
-    for m in _CREDIT_PREFIX_RE.finditer(text):
-        cand = m.group(1).strip().strip('.,;')
-        if _looks_like_name(cand):
-            return cand
+    for rx in (_CREDIT_PREFIX_RE, _CREDIT_POSSESSIVE_RE):
+        for m in rx.finditer(text):
+            cand = m.group(1).strip().strip('.,;')
+            # The capture runs to the next comma/newline, which in the possessive
+            # form ("תחקירה של גילי כהן ששודר אמש") keeps going past the name.
+            # SHORTEST first: Hebrew bylines are two words almost without
+            # exception, and three words would happily swallow the next one.
+            words = cand.split()
+            for n in (2, 3, len(words)):
+                part = " ".join(words[:n]).strip('.,;')
+                if part and _looks_like_name(part):
+                    return part
 
     found = [m.group(1).strip() for m in re.finditer(r"\(([^)]{2,40})\)", text)]
     named = [c for c in found if _looks_like_name(c)]
@@ -453,63 +477,44 @@ def reporter_fallback(text):
 _HEADLINE_STOP_RE = re.compile(r"[.!?](?=\s|$)")
 _HEADLINE_CUT_CHARS = ('👇', '⬇️', '⬇', '🔗')
 
-# --- clause trimming ------------------------------------------------------
-# Kan headlines are built as <hook>: <elaboration>, and the hook alone is
-# usually the headline. Measured over a real week, cutting at the first
-# self-sufficient clause takes the median title from 76 chars to 51 — but only
-# with the guards below, each of which exists because the unguarded rule
-# produced a worse headline on this data.
-_CLAUSE_RE = re.compile(r"\s*(?::| [-–—] | \| )\s*")
+# --- headline shortening ---------------------------------------------------
+# An earlier version cut a headline at its first clause boundary, on the theory
+# that Kan writes <hook>: <elaboration> and the hook is the headline. On real
+# captions it removed the strongest half more often than not — "הטרנד החדש שכובש
+# את חטיבות הביניים" without "בני נוער משקיעים עשרות אלפי דולרים בבורסה", or a
+# family's quote dropped from the story it belongs to. In Kan's style the part
+# before the colon is usually a TEASER and the news sits after it.
+#
+# So nothing is dropped any more. The headline is only capped to what the table
+# column can show, and the cut is placed at the nearest clause or comma boundary
+# so it never lands mid-phrase. Truncated headlines are listed after an extract
+# and rewritten in the editorial pass, where a human can see which half matters.
+_BOUNDARY_RE = re.compile(r"[,;]| [-–—] | \| ")
 _QUOTE_CHARS = "\"“”״‘’'"
-# a head that is only a label ("פרסום ראשון") is not a headline
-_LEAD_IN = {
-    'פרסום ראשון', 'פרסום', 'בלעדי', 'מבזק', 'דיווח', 'עדכון', 'תיעוד', 'ראיון',
-    'לראשונה', 'תחקיר', 'חשיפה', 'פרשנות', 'דעה', 'כתבה', 'צפו', 'האזינו',
-    'חדש', 'דחוף', 'חשד', 'סיכום',
-}
-# "...הוועדה אישרה:" / "...משפחתו חושפת -" announce something; the announcement
-# is the elaboration, so the head on its own says nothing
-_ANNOUNCES_RE = re.compile(
-    r"(?:אישר|הודיע|חושפ|חשפ|מגל|מסר|טוע|אמר|סיפר|מזהיר|קובע|מכריז|מתריע"
-    r"|מבהיר|מודיע|הכריז|דיווח|מספר|מתכנן|החליט|הורה|הורת)(?:ה|ת|ים|ות|נו)?$")
-_MIN_CLAUSE = 25
-
-
-def _is_bare_quote(s):
-    s = s.strip()
-    return len(s) > 1 and s[0] in _QUOTE_CHARS and s[-1] in _QUOTE_CHARS
 
 
 def trim_to_clause(s, cap):
-    """Shorten a headline to its first self-sufficient clause, else cap it."""
+    """Cap a headline at `cap` chars, breaking at the last clause boundary that
+    still leaves a substantial headline. Never drops a leading or trailing part
+    of the text: what fits, fits, and the rest is elided."""
     s = " ".join(str(s or "").split()).strip().rstrip(" -–—|:,")
     if len(s) <= cap:
-        return s                                  # short enough already: hands off
-    for m in _CLAUSE_RE.finditer(s):
-        head, tail = s[:m.start()].strip(), s[m.end():].strip()
-        if not head or not tail:
-            continue
-        if _is_bare_quote(head):
-            return trim_to_clause(tail, cap)      # a quote alone identifies nothing
-        if tail[0] in _QUOTE_CHARS:
-            break                                 # 'X said: "…"' — the quote IS the news
-        # A clause is only an improvement if it is SHORTER than the cap — a long
-        # first clause (which happens once the leading quote is dropped and the
-        # rest of the caption runs on) would otherwise be returned uncapped.
-        if (not _MIN_CLAUSE <= len(head) <= cap
-                or head.strip('.,:!?" ') in _LEAD_IN
-                or _ANNOUNCES_RE.search(head)):
-            continue
-        return head
-    # nothing to cut at: prefer a comma near the cap over slicing mid-clause.
-    # The window reaches a little PAST the cap on purpose — a clause that ends
-    # just beyond it is better kept whole than sliced and given an ellipsis.
-    comma = s.rfind(",", int(cap * 0.6), cap + 8)
-    if comma != -1:
-        return s[:comma].rstrip()
+        return s
+    # last boundary comfortably inside the cap — a slightly short headline that
+    # ends on a phrase reads far better than a full-width one cut mid-phrase
+    best = -1
+    for m in _BOUNDARY_RE.finditer(s):
+        if m.start() > cap:
+            break
+        if m.start() >= cap * 0.55:
+            best = m.start()
+    if best != -1:
+        # the ellipsis is not decoration: text WAS dropped, and without it a
+        # headline that stops on a clause boundary reads as a complete thought
+        return s[:best].rstrip(" -–—|,;") + "…"
     cut = s[:cap]
     sp = cut.rfind(" ")
-    return (cut[:sp] if sp > cap * 0.6 else cut).rstrip(" -–—|,:") + "…"
+    return (cut[:sp] if sp > cap * 0.6 else cut).rstrip(" -–—|,:;") + "…"
 
 
 def headline_of(text, reporter="", cap=62):
@@ -803,7 +808,14 @@ def _resolve_detailed(text, rmap):
                      text, re.IGNORECASE):
             return dict(name=name, source='map', others=[])
 
-    tail = _strip_urls(text).rstrip('.,;:!?*•·–—- \t')
+    # The bare-trailing-name rules below only fire at the very END of the text,
+    # so anything Kan appends AFTER the credit hides it. Programme hashtags and
+    # the radio sign-off are exactly that, and they are appended often enough to
+    # cost real credits — so they come off first.
+    tail = _strip_urls(text)
+    tail = re.sub(r"(?:\s*(?:#[\w֐-׿]{2,40}|🎙️|\|))+\s*$", '', tail)
+    tail = _RESHETB_RE.sub('', tail)
+    tail = tail.rstrip('.,;:!?*•·–—-| \t')
 
     latin = _trailing_latin_names(tail)
     if latin:
@@ -847,6 +859,88 @@ def youtube_descriptions(video_ids, api_key):
     except Exception as e:
         print(f"      youtube descriptions unavailable: {e}")
     return out
+
+
+def graph_full_text(ids, token, field):
+    """Full, untruncated caption for the deck's own items, straight from the
+    Graph API. The daily collectors store a CUT copy — Facebook at 700 chars,
+    Instagram at 500 — because a sheet cell is not an archive. Kan credits the
+    reporter at the very END of the caption, so on a long post the credit is
+    already gone before the deck ever reads the sheet. Re-fetching the ~10 items
+    per platform that actually reach the deck costs one batched call a week and
+    puts the credit back.
+
+    Best-effort by design: no token, a failed call or a missing id just leaves
+    that item on the sheet text it already had."""
+    out = {}
+    ids = [str(i) for i in ids if i]
+    if not token or not ids:
+        return out
+    try:
+        from utils import http_get_json
+        for i in range(0, len(ids), 25):       # the Graph ?ids= batch limit is 50
+            chunk = ids[i:i + 25]
+            data = http_get_json(f"https://graph.facebook.com/{FB_API_VERSION}/",
+                                 params={'ids': ','.join(chunk), 'fields': field,
+                                         'access_token': token},
+                                 timeout=20, max_retries=2)
+            for oid, obj in (data or {}).items():
+                text = (obj or {}).get(field) or ''
+                if text:
+                    out[str(oid)] = text
+    except Exception as e:
+        print(f"      full {field} unavailable: {e}")
+    return out
+
+
+def enrich_full_text(key, items, fb_token, yt_key, rmap, pmap):
+    """Replace each item's sheet text with the full original where we can get it,
+    and re-resolve everything that is parsed out of the text. Returns how many
+    items gained a credit, so the extract can say whether the round trip paid."""
+    full = {}
+    if key == 'facebook':
+        full = graph_full_text([i['id'] for i in items], fb_token, 'message')
+    elif key == 'instagram':
+        full = graph_full_text([i['id'] for i in items], fb_token, 'caption')
+    elif key == 'youtube':
+        # a YouTube "caption" is the video TITLE, which never carries a byline —
+        # the credit lives in the description, so this is not a longer copy of
+        # the same text but the only text that can hold a credit at all
+        full = youtube_descriptions([i['id'] for i in items], yt_key)
+    # TikTok and X captions are short enough that the 500-char store never cuts
+    # them, so neither is worth a round trip.
+    if not full:
+        return 0, 0
+    gained = grew = 0
+    for it in items:
+        text = full.get(it['id'])
+        if not text:
+            continue
+        if key == 'youtube':
+            # keep the title as the headline; the description is only searched
+            it['_raw'] = (it.get('_raw') or '') + "\n" + text
+        elif len(text) > len(it.get('_raw') or ''):
+            it['_raw'] = text
+            grew += 1
+        else:
+            continue
+        if not it.get('reporter'):
+            res = resolve_reporter_detailed(it['_raw'], rmap)
+            if res['name']:
+                it['reporter'] = res['name']
+                it['reporter_source'] = res['source'] + '+full'
+                it['_others'] = res['others']
+                gained += 1
+                # the headline drops the credit it came from, so it has to be
+                # re-derived now that the credit is finally known
+                it['title'] = headline_of(it['_raw'], res['name'])
+        if not it.get('program'):
+            name, src = resolve_program(it['_raw'], pmap)
+            if name:
+                it['program'] = name
+                it['_prog_src'] = src + '+full'
+        it['_tags'] = unmapped_hashtags(it['_raw'], pmap)
+    return gained, grew
 
 
 # ---------------------------------------------------------------- per platform
@@ -1045,20 +1139,13 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
                           engagement=round(float(r['_eng']), 1),
                           thumb=None))
 
-    # YouTube titles are short and never carry the credit — it lives in the
-    # video description. One batched API call covers the whole top-10.
-    if key == 'youtube':
-        need = [it['id'] for it in items if not it['reporter']]
-        descs = youtube_descriptions(need, os.environ.get('YOUTUBE_API_KEY', ''))
-        for it in items:
-            if not it['reporter'] and descs.get(it['id']):
-                res = resolve_reporter_detailed(descs[it['id']], rmap)
-                if res['name']:
-                    it['reporter'] = res['name']
-                    it['reporter_source'] = 'yt-description'
-                    it['_raw'] = descs[it['id']]
-        if need:
-            print(f"      youtube: {sum(1 for i in items if i['reporter'])}/{len(items)} credited after description lookup")
+    # Second pass over the deck's own items against the ORIGINAL text, because
+    # the sheet holds a truncated copy and Kan credits at the end of the caption.
+    gained, grew = enrich_full_text(key, items, fb_token,
+                                    os.environ.get('YOUTUBE_API_KEY', ''), rmap, pmap)
+    if gained or grew:
+        print(f"      {key}: full text recovered for {grew} items, "
+              f"+{gained} credits ({sum(1 for i in items if i['reporter'])}/{len(items)} now)")
 
     # Typical RATES (interactions per view) for the week. Comparing absolute
     # counts would just re-flag the biggest posts - which the views column
@@ -1294,6 +1381,8 @@ def report_reporters(content):
         print("  -> paste-ready block written to %s" % TODO_PATH)
         write_reporters_todo(missing, sugg)
     print("")
+    report_long_headlines(content)
+    print("")
     report_programs(content)
     print(bar)
     print("")
@@ -1359,6 +1448,21 @@ def reporter_suggestions(items, floor=0.35):
             hits.sort(reverse=True, key=lambda h: h[0])
             out[(k, n)] = hits[:3]
     return out
+
+
+def report_long_headlines(content):
+    """Headlines the cap had to elide. Nothing was thrown away — the text is
+    still in `caption` — but these are the ones where a human should decide which
+    half matters, so the editorial pass gets a list instead of hunting for them."""
+    cut = [(pl['key'], n, it) for pl in content['platforms']
+           for n, it in enumerate(pl.get('top', []), start=1)
+           if (it.get('title') or '').endswith('…')]
+    if not cut:
+        return
+    print("  HEADLINES CUT (%d) - rewrite these in deck_content.json if the "
+          "important half is missing:" % len(cut))
+    for k, n, it in cut:
+        print("    %-10s #%-3d %s" % (k, n, it['title']))
 
 
 def report_programs(content):

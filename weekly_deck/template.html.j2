@@ -150,7 +150,7 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 {%- endmacro %}
 
 {% macro table_block(p) -%}
-{%- set cols = "46px 1fr 150px " + ("150px " if p.show_program else "") + "104px 92px 158px" -%}
+{%- set cols = "46px 1fr 150px " + ("124px " if p.show_program else "") + "104px 92px 158px" -%}
 <div style="display:grid;grid-template-columns:{{ cols }};gap:14px;padding:0 18px 6px;font-size:20px;font-weight:700;color:#808080;letter-spacing:.03em"><div>#</div><div>כותרת</div><div>כתב/ת</div>{% if p.show_program %}<div>תוכנית</div>{% endif %}<div style="text-align:left">צפיות</div><div style="text-align:left">מעורבות</div><div style="text-align:left">חריג</div></div>
 <div style="display:flex;flex-direction:column;gap:4px;flex:1">
   {% for row in p.top10 %}{{ table_row(p, row, cols) }}{% endfor %}

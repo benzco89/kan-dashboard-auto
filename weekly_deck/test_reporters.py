@@ -41,6 +41,20 @@ CASES = [
 
     # --- explicit credits -------------------------------------------------
     ("דיווח מהשטח על הפינוי. כתב: רועי קייס", mapped('רועי קייס', 'רועי קייס'), "כתב: credit"),
+    # Kan appends the programme hashtag straight after the credit; it used to be
+    # swallowed into the captured name, which then failed the name test
+    ("דיווח מהשטח. כתב: רועי קייס #כאןבשלוש", mapped('רועי קייס', 'רועי קייס'),
+     "a programme hashtag right after a credit does not swallow the name"),
+    # the possessive form carries no colon — how YouTube descriptions credit
+    ("הכתבה ששודרה הערב. כתבתו של מואב ורדי", mapped('מואב ורדי', 'מואב ורדי'),
+     "possessive credit: כתבתו של X"),
+    ("מתוך תחקירה של גילי כהן ששודר אמש", mapped('גילי כהן', 'גילי כהן'),
+     "possessive credit: תחקירה של X"),
+    ("כתבתו של הכתב שלנו מהשטח", "",
+     "a generic reference is not a person, even in the possessive form"),
+    # the trailing-name rules fire at the END, so an appended tag used to hide them
+    ("ועו״ד מטעם ארגון חננו מסייע להן בייעוץ משפטי | דנה שרון #בחציהיום", "דנה שרון",
+     "a trailing name is still found behind an appended programme hashtag"),
     ("תיעוד: רגע הפגיעה בעוטף (יואב לימור)", "יואב לימור", "trailing parens name"),
     ("הרגע שבו נעצר החשוד (צילום: דוד לוי) (איתי בלומנטל)", "איתי בלומנטל",
      "reporter after a photo credit — do not truncate at צילום:"),
@@ -101,8 +115,8 @@ CASES = [
 HEADLINES = [
     ("הטרנד החדש שכובש את חטיבות הביניים: בני נוער משקיעים עשרות אלפי דולרים בבורסה, "
      "מוחקים את החסכונות. כתבה מיוחדת (יותם ווקס)",
-     "הטרנד החדש שכובש את חטיבות הביניים",
-     "long headline trimmed to the hook before the colon"),
+     "הטרנד החדש שכובש את חטיבות הביניים: בני נוער משקיעים עשרות…",
+     "long headline capped, cut on a clause boundary"),
     ("פרסום ראשון: המסמך שחושף הכל \U0001F447 קישור בתגובות", "פרסום ראשון: המסמך שחושף הכל",
      "cut at the pointer emoji"),
     ("שר הביטחון הגיש בקשה למחיקת הרישום\nפרטים נוספים בהמשך",
@@ -130,36 +144,25 @@ HEADLINES_CREDITED = [
 ]
 
 
-# trim_to_clause(s, cap) — each guard here exists because the unguarded rule
-# produced a worse headline on a real week of Kan captions.
+# trim_to_clause(s, cap) — nothing is dropped any more; the headline is only
+# capped, and the cut lands on a clause boundary rather than mid-phrase.
 CLAUSES = [
-    ("קרס דיג ננעץ בצוואר של יוליה בזמן הצלילה: \"הרופא אמר - 'בחרת' את המיקום\"",
-     "קרס דיג ננעץ בצוואר של יוליה בזמן הצלילה: \"הרופא אמר - 'בחרת'…",
-     "a quoted tail is the news — do not cut the hook off it"),
     ("הטרנד החדש שכובש את חטיבות הביניים: בני נוער משקיעים עשרות אלפי דולרים בבורסה",
-     "הטרנד החדש שכובש את חטיבות הביניים",
-     "hook before the colon is the headline"),
-    ("\"הרגשה של נטישה\": כרם ונפתלי בני ה-18 רק רצו לחגוג את סיום התיכון בחופשה",
-     "כרם ונפתלי בני ה-18 רק רצו לחגוג את סיום התיכון בחופשה",
-     "a head that is only a quotation is dropped for the half that identifies the story"),
-    ("ועדת השרים לענייני שב\"כ אישרה: נתניהו יקבל אבטחה למשך כל החיים, רעייתו שרה",
-     "ועדת השרים לענייני שב\"כ אישרה: נתניהו יקבל אבטחה למשך כל החיים",
-     "an announcing head ('אישרה') is not a headline on its own"),
-    ("פרסום ראשון: רשות שדות התעופה הורתה שלא לאפשר מתדלקים אמריקניים לנחות בנתב\"ג",
-     "פרסום ראשון: רשות שדות התעופה הורתה שלא לאפשר מתדלקים…",
-     "a lead-in label is never the whole headline"),
+     "הטרנד החדש שכובש את חטיבות הביניים: בני נוער משקיעים עשרות…",
+     "the news after the colon is kept, not thrown away for the teaser"),
     ("רצח הצעיר בירושלים: משפחתו חושפת - \"הכתובת הייתה על הקיר\"",
      "רצח הצעיר בירושלים: משפחתו חושפת - \"הכתובת הייתה על הקיר\"",
      "already inside the cap — left alone"),
     ("יוליה בת ה-33 יצאה לצלילה חופשית באילת, כשלפתע הרגישה מכה חזקה בצוואר ומשיכה",
-     "יוליה בת ה-33 יצאה לצלילה חופשית באילת",
-     "no clause break: falls back to a comma rather than slicing mid-sentence"),
-    # regression: dropping the quote left a 126-char first clause, which was
-    # returned whole because the cap was only applied on the fallback path
+     "יוליה בת ה-33 יצאה לצלילה חופשית באילת…",
+     "cut placed on a comma rather than mid-phrase"),
     ("\"הרגשה של נטישה\": כרם ונפתלי בני ה-18 רק רצו לחגוג את סיום התיכון בחופשה "
-     "במונטנגרו יחד עם חבריהם, אבל הותקפו באלימות קשה - אחרי שסיפרו שהם ישראלים",
-     "כרם ונפתלי בני ה-18 רק רצו לחגוג את סיום התיכון בחופשה…",
-     "a clause LONGER than the cap is not an improvement — never returned whole"),
+     "במונטנגרו יחד עם חבריהם, אבל הותקפו באלימות קשה",
+     "\"הרגשה של נטישה\": כרם ונפתלי בני ה-18 רק רצו לחגוג את סיום…",
+     "the opening quote stays — it is part of the story, not noise"),
+    ("אחרי שצוות CNN טען שהותקף על ידי פורעים יהודים - תיעוד מתוך האירוע התפרסם",
+     "אחרי שצוות CNN טען שהותקף על ידי פורעים יהודים…",
+     "a dash boundary inside the cap is a clean place to stop"),
 ]
 
 
