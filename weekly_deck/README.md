@@ -31,6 +31,10 @@ python weekly_deck/generate_deck.py --extract
 
 # 3. RENDER — offline, instant, deterministic. Re-run this after every edit.
 python weekly_deck/generate_deck.py --render
+
+# Re-running --extract KEEPS the hand-written layer (learnings, story of the
+# week, closing note, chosen fun-facts) as long as the window is unchanged, and
+# then checks every number in it against the fresh data.
 ```
 
 `--extract` and `--render` with no flag at all = both, in order. `--mock` runs

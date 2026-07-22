@@ -1635,6 +1635,52 @@ def write_reporters_todo(missing, suggestions=None):
         f.write("\n".join(lines) + "\n")
 
 
+def carry_editorial_layer(content):
+    """Re-running --extract used to wipe the hand-written layer, so every real
+    run cost a re-authoring of the learnings and the story of the week. They are
+    carried over from the previous deck_content.json instead — but ONLY when the
+    window is identical, because the same sentences about a different week would
+    be worse than an empty slide. The numbers inside them are still checked
+    against the fresh data straight afterwards; carrying text over is exactly
+    when a figure goes stale."""
+    if not os.path.exists(CONTENT_PATH):
+        return
+    try:
+        with open(CONTENT_PATH, encoding='utf-8') as f:
+            old = json.load(f)
+    except Exception as e:
+        print(f"   ⚠️ could not read the previous deck_content.json: {e}")
+        return
+    ow, nw = old.get('window') or {}, content.get('window') or {}
+    if (ow.get('start'), ow.get('end')) != (nw.get('start'), nw.get('end')):
+        print("   (previous deck_content.json is a different week — starting the "
+              "editorial layer fresh)")
+        return
+
+    kept = []
+    if old.get('learnings'):
+        content['learnings'] = old['learnings']
+        kept.append("%d כרטיסים" % len(old['learnings']))
+    if old.get('story_of_the_week'):
+        content['story_of_the_week'] = old['story_of_the_week']
+        kept.append("סיפור השבוע")
+    note = (old.get('closing') or {}).get('note')
+    if note:
+        content.setdefault('closing', {})['note'] = note
+
+    # the chosen fun-fact is an editorial pick too, but only survives if the
+    # candidate it names is still one this week's data produced
+    old_pick = {p.get('key'): (p.get('fun_fact') or {}).get('chosen')
+                for p in old.get('platforms', [])}
+    for p in content.get('platforms', []):
+        pick = old_pick.get(p.get('key'))
+        ff = p.get('fun_fact') or {}
+        if pick and any(c.get('label') == pick for c in ff.get('candidates', [])):
+            ff['chosen'] = pick
+    if kept:
+        print("   ♻️  נשמרה השכבה העריכותית מההרצה הקודמת: " + ", ".join(kept))
+
+
 def save_content(content):
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(CONTENT_PATH, 'w', encoding='utf-8') as f:
@@ -2251,7 +2297,8 @@ def main():
             print("📥 Extracting from Google Sheets...")
             content = build_deck_content(get_client(), thumbs_enabled=not args.no_thumbs,
                                          use_gemini=args.gemini)
-        report_reporters(content)
+        carry_editorial_layer(content)     # before the report, so the number
+        report_reporters(content)          # check runs against what was carried
         save_content(content)
         print("   ✏️  edit weekly_deck/out/deck_content.json, then re-run with --render")
 
@@ -2261,7 +2308,8 @@ def main():
         filled, vetoed = apply_reporter_overrides(content)
         if filled or vetoed:
             print(f"   ✍️  reporters_overrides: {filled} credited, {vetoed} marked uncredited")
-        check_editorial_numbers(content)
+        if not do_extract:          # an extract in the same run already checked
+            check_editorial_numbers(content)
         context = content_to_context(content, thumbstyle=args.thumbstyle)
         html_path = render(context)
         print("🖨️  Rendering PDF (Playwright)...")
