@@ -31,6 +31,36 @@ SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1WB0cFc2RgR1Z-crjhtkSq
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
 
+# metrics.py holds the one definition of "an interaction", shared with the deck
+# and the dashboard. It lives under social_dashboard/ because the VPS deploy
+# rsyncs only that folder.
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "social_dashboard"))
+import metrics  # noqa: E402
+
+
+def _rates(df, platform):
+    """(social engagement %, click rate %) over VIEWS, for a day's posts.
+
+    NOT the sheet's engagement_rate. On Facebook that column is
+    (clicks + reactions + comments + shares) / reach and clicks are 88% of it,
+    so it buried the social signal and could not be compared with Instagram,
+    whose column divides by reach and counts saves. Both numbers here use views,
+    which is the only denominator every platform has — and using the same one
+    for both lets a reader read them side by side.
+
+    Clicks are a real signal (opening a long caption is interest), they are just
+    a different one, and only Facebook has them.
+    """
+    if df.empty:
+        return 0.0, 0.0
+    views = sum(float(r.get("views") or 0) for r in df.to_dict("records"))
+    if views <= 0:
+        return 0.0, 0.0
+    social = sum(metrics.total(platform, r) for r in df.to_dict("records"))
+    clicks = sum(float(r.get("clicks") or 0) for r in df.to_dict("records"))
+    return round(social / views * 100, 2), round(clicks / views * 100, 2)
+
+
 def get_sheet_client():
     creds_json = json.loads(os.environ['GCP_SERVICE_ACCOUNT'])
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, SCOPES)
@@ -214,10 +244,8 @@ def summarize_facebook(df, yesterday_date):
     total_shares = int(new_yesterday['shares'].sum()) if 'shares' in new_yesterday.columns and not new_yesterday.empty else 0
     total_clicks = int(new_yesterday['clicks'].sum()) if 'clicks' in new_yesterday.columns and not new_yesterday.empty else 0
     
-    # ממוצע engagement rate
-    avg_engagement = 0
-    if 'engagement_rate' in new_yesterday.columns and not new_yesterday.empty:
-        avg_engagement = round(new_yesterday['engagement_rate'].mean(), 2)
+    # שני שיעורים נפרדים במקום אחד מעורבב - ראה _rates
+    avg_engagement, avg_click = _rates(new_yesterday, 'facebook')
     
     # טופ 5 לפי reach - עם מטריקות מעורבות לניתוח
     top_posts = ""
@@ -228,15 +256,17 @@ def summarize_facebook(df, yesterday_date):
             likes = int(row.get('likes', 0))
             comments = int(row.get('comments', 0))
             shares = int(row.get('shares', 0))
-            eng_rate = round(row.get('engagement_rate', 0), 1)
+            _v = float(row.get('views') or 0)
+            eng_rate = round(metrics.total('facebook', row) / _v * 100, 1) if _v else 0
+            click_rate = round(float(row.get('clicks') or 0) / _v * 100, 1) if _v else 0
             # פורמט מורחב לניתוח AI
             permalink = row.get('permalink', '')
-            top_posts += f"• {title} | {row.get('type', '')} | {int(row['reach']):,} reach | {int(row['views']):,} views | לייקים: {likes:,} | תגובות: {comments} | שיתופים: {shares} | מעורבות: {eng_rate}% | LINK: {permalink}\n"
+            top_posts += f"• {title} | {row.get('type', '')} | {int(row['reach']):,} reach | {int(row['views']):,} views | ריאקציות: {likes:,} | תגובות: {comments} | שיתופים: {shares} | מעורבות: {eng_rate}% | הקלקה: {click_rate}% | LINK: {permalink}\n"
     
     return f"""פוסטים חדשים: {new_count}
 סה"כ Reach: {total_reach:,} | צפיות וידאו: {total_views:,}
-מעורבות: {total_likes:,} לייקים | {total_comments:,} תגובות | {total_shares:,} שיתופים | {total_clicks:,} קליקים
-ממוצע engagement rate: {avg_engagement}%
+מעורבות: {total_likes:,} ריאקציות | {total_comments:,} תגובות | {total_shares:,} שיתופים | {total_clicks:,} קליקים
+מעורבות חברתית: {avg_engagement}% מהצפיות | שיעור הקלקה: {avg_click}% מהצפיות
 
 טופ פוסטים (כולל מעורבות):
 {top_posts if top_posts else "אין פוסטים חדשים"}"""
@@ -259,10 +289,9 @@ def summarize_instagram(df, yesterday_date):
     total_saved = int(new_yesterday['saved'].sum()) if 'saved' in new_yesterday.columns and not new_yesterday.empty else 0
     total_shares = int(new_yesterday['shares'].sum()) if 'shares' in new_yesterday.columns and not new_yesterday.empty else 0
     
-    # ממוצע engagement rate
-    avg_engagement = 0
-    if 'engagement_rate' in new_yesterday.columns and not new_yesterday.empty:
-        avg_engagement = round(new_yesterday['engagement_rate'].mean(), 2)
+    # אותה הגדרה כמו בפייסבוק ובדק: אינטראקציות חלקי צפיות. שמירות אינן בפנים
+    # (אין להן מקבילה בפייסבוק, ב-X וביוטיוב) והן מדווחות בנפרד ממילא.
+    avg_engagement, _ = _rates(new_yesterday, 'instagram')
     
     # טופ 5 לפי views - עם מטריקות מעורבות לניתוח
     top_posts = ""
@@ -274,7 +303,8 @@ def summarize_instagram(df, yesterday_date):
             comments = int(row.get('comments', 0))
             saved = int(row.get('saved', 0))
             shares = int(row.get('shares', 0))
-            eng_rate = round(row.get('engagement_rate', 0), 1)
+            _v = float(row.get('views') or 0)
+            eng_rate = round(metrics.total('instagram', row) / _v * 100, 1) if _v else 0
             # מדדי v25 לרילס: הוק (skip ב-3 שניות) + צפיות מפייסבוק דרך crosspost
             extra = ""
             skip = row.get('skip_rate', 0) or 0
@@ -290,7 +320,7 @@ def summarize_instagram(df, yesterday_date):
     return f"""פוסטים חדשים: {new_count}
 סה"כ צפיות: {total_views:,} | Reach: {total_reach:,}
 מעורבות: {total_likes:,} לייקים | {total_comments:,} תגובות | {total_saved:,} שמירות | {total_shares:,} שיתופים
-ממוצע engagement rate: {avg_engagement}%
+מעורבות חברתית: {avg_engagement}% מהצפיות
 
 טופ פוסטים (כולל מעורבות):
 {top_posts if top_posts else "אין פוסטים חדשים"}"""
@@ -310,9 +340,8 @@ def summarize_tiktok(df, yesterday_date):
     total_wa = int(new_yesterday['whatsapp_shares'].sum()) if 'whatsapp_shares' in new_yesterday.columns and not new_yesterday.empty else 0
     total_saves = int(new_yesterday['saves'].sum()) if 'saves' in new_yesterday.columns and not new_yesterday.empty else 0
 
-    avg_engagement = 0
-    if 'engagement_rate' in new_yesterday.columns and not new_yesterday.empty:
-        avg_engagement = round(new_yesterday['engagement_rate'].mean(), 2)
+    # אותה הגדרה בכל הפלטפורמות (שמירות בחוץ, ראה _rates)
+    avg_engagement, _ = _rates(new_yesterday, 'tiktok')
 
     # טופ 5 לפי views - עם מטריקות מעורבות לניתוח
     top_posts = ""
@@ -325,7 +354,8 @@ def summarize_tiktok(df, yesterday_date):
             shares = int(row.get('shares', 0))
             wa = int(row.get('whatsapp_shares', 0))
             saves = int(row.get('saves', 0))
-            eng_rate = round(row.get('engagement_rate', 0), 1)
+            _v = float(row.get('views') or 0)
+            eng_rate = round(metrics.total('tiktok', row) / _v * 100, 1) if _v else 0
             permalink = row.get('permalink', '')
             top_posts += f"• {title} | {int(row['views']):,} views | לייקים: {likes:,} | תגובות: {comments} | שיתופים: {shares} (מתוכם {wa} לוואטסאפ) | שמירות: {saves} | מעורבות: {eng_rate}% | LINK: {permalink}\n"
 
@@ -346,7 +376,7 @@ def summarize_tiktok(df, yesterday_date):
     return f"""סרטונים חדשים: {new_count}
 סה"כ צפיות: {total_views:,}
 מעורבות: {total_likes:,} לייקים | {total_comments:,} תגובות | {total_shares:,} שיתופים (מתוכם {total_wa:,} לוואטסאפ) | {total_saves:,} שמירות
-ממוצע engagement rate: {avg_engagement}%
+מעורבות חברתית: {avg_engagement}% מהצפיות
 
 טופ סרטונים (כולל מעורבות):
 {top_posts if top_posts else "אין סרטונים חדשים"}
@@ -416,6 +446,9 @@ def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagr
 === 📝 מבנה הדוח ===
 
 **כתוב דוח תמציתי וקריא.** הנתונים שקיבלת כוללים מטריקות מעורבות (לייקים, תגובות, שיתופים) - השתמש בהם לתובנות, אבל **אל תציג את כולם** ברשימת המובילים.
+
+**שני שיעורים שונים בפייסבוק, אל תערבב ביניהם:**
+"מעורבות" = ריאקציות+תגובות+שיתופים חלקי צפיות. "הקלקה" = קליקים חלקי צפיות, כלומר גם פתיחת "ראה עוד" וגם פתיחת תמונה - עניין אמיתי, אבל לא הדהוד. פוסט עם הקלקה גבוהה ומעורבות נמוכה = הרבה פתחו, מעטים הגיבו, וזו תובנה בפני עצמה. באינסטגרם ובטיקטוק אין הקלקה בכלל.
 
 🏆 ההצלחה של היום
 ━━━━━━━━━━━━━━━━━
