@@ -1413,6 +1413,75 @@ def _alert(kind, severity, p, metric_label, value, baseline, note, impact):
     }
 
 
+_ALERT_URL_RE = re.compile(r"https?://\S+|www\.\S+")
+
+
+def _clean_alert_title(text):
+    """Alert titles come straight off the sheet, so an X one arrives with the
+    tweet's t.co link and trailing handle in it. Neither is a headline."""
+    t = _ALERT_URL_RE.sub(" ", str(text or ""))
+    t = re.sub(r"\s*[@#][^\s@#]{2,40}\s*$", "", t)
+    return re.sub(r"\s{2,}", " ", t).strip(" -–—|·,")
+
+
+def _vanished_alerts(items, plat):
+    """A post that stopped being returned by the API while it was still inside
+    the collector's window — deleted, unpublished, or set private.
+
+    There is no field for this and no extra call is needed: `pulled_at` is
+    already a last-seen stamp, because the collector's merge lets the fresh row
+    win, so anything the API still returns gets a new timestamp every morning
+    and anything that vanished keeps the date it was last seen.
+
+    Two conditions, both load-bearing:
+      * published inside the last 7 days — outside the collector's window every
+        post stops being refreshed anyway, so absence means nothing there;
+      * last seen at least 2 days before the newest stamp in the sheet — one
+        miss is an API hiccup (which is why backfill_zero_metrics exists at
+        all), two consecutive daily runs is not.
+    """
+    date_key, title_key, url_key = _ALERT_PLATFORMS[plat][:3]
+    stamps = [str(it.get("pulled_at") or "")[:10] for it in items]
+    stamps = [x for x in stamps if len(x) == 10]
+    if not stamps:
+        return []
+    last_run = max(stamps)
+    try:
+        last_dt = date.fromisoformat(last_run)
+    except ValueError:
+        return []
+    window_start = (last_dt - timedelta(days=6)).isoformat()
+    missed_before = (last_dt - timedelta(days=1)).isoformat()
+
+    out = []
+    for it in items:
+        published = str(it.get(date_key) or "")[:10]
+        seen = str(it.get("pulled_at") or "")[:10]
+        if not (window_start <= published <= last_run) or len(seen) != 10:
+            continue
+        if seen >= missed_before:
+            continue
+        gap = (last_dt - date.fromisoformat(seen)).days
+        out.append({
+            "kind": "vanished", "severity": "high", "platform": plat,
+            "title": _clean_alert_title(it.get(title_key, "")), "url": it.get(url_key, ""),
+            "date": published, "type": _type_label(plat, it.get("type") or it.get("video_type") or ""),
+            "metric_label": "נראה לאחרונה", "value": seen[5:].replace("-", "/"),
+            "baseline": 0, "ratio": 0,
+            # "published on the 21st and not returned since the 21st" reads like a
+            # typo; when it went the same day it went up, say that instead
+            # no Latin word next to a digit: "מה-API 5 ימים" is the bidi trap that
+            # keeps biting us — the number surfaces on the wrong side of it
+            "note": (f"עלה ב-{published[5:]} ונעלם באותו יום — {gap} ימים בלי סימן חיים"
+                     if published == seen else
+                     f"עלה ב-{published[5:]}, נראה לאחרונה ב-{seen[5:]} — נעלם {gap} ימים"),
+            # the longer it has been gone the more certain it is, and a post with
+            # more views mattered more when it went
+            "_impact": gap * 10 + min(_num(it.get("views")) / 10000, 9),
+        })
+    return out
+
+
 def _post_alerts(posts, plat):
     """Hit / spread / flop rules. Thresholds are per-platform; impact is stored
     as "x over the firing bar" so different kinds rank comparably in the feed."""
@@ -1527,6 +1596,9 @@ def build_alerts(data, days):
     for plat in _ALERT_PLATFORMS:
         posts = _norm_posts(data[plat], plat, start, end)
         alerts.extend(_post_alerts(posts, plat))
+        # not from `posts`: _norm_posts drops anything with 0 views, and a post
+        # that vanished hours after publishing is exactly the case that has none
+        alerts.extend(_vanished_alerts(data[plat], plat))
         if plat == "instagram":
             alerts.extend(_ig_extra_alerts(posts))
     alerts.extend(_follower_alerts(data["followers"], days))
@@ -1559,6 +1631,7 @@ def build_alerts(data, days):
         "flops": _count("flop"),
         "hooks": _count("weak_hook"),
         "followers": _count("follower_spike") + _count("follower_drop"),
+        "vanished": _count("vanished"),
     }
     # intraday hot-sniffer alert log (hot_alerts tab; may not exist yet)
     hot_history = []

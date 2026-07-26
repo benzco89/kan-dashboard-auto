@@ -64,7 +64,10 @@
     flop:           { emoji: "📉", label: "תת-ביצוע", tone: "bad", unit: "pct" },
     weak_hook:      { emoji: "⏭️", label: "הוק חלש", tone: "bad", unit: "pct0" },
     follower_spike: { emoji: "📈", label: "זינוק עוקבים", tone: "good", unit: "signed" },
-    follower_drop:  { emoji: "📉", label: "צניחת עוקבים", tone: "bad", unit: "signed" }
+    follower_drop:  { emoji: "📉", label: "צניחת עוקבים", tone: "bad", unit: "signed" },
+    // no metric of its own: the whole alert IS the disappearance, so the
+    // value column shows the day it was last seen instead of a number
+    vanished:       { emoji: "🚫", label: "ירד מהאוויר", tone: "bad", unit: "none" }
   };
 
   function fmtVal(unit, v) {
@@ -72,9 +75,11 @@
     if (unit === "pct") return Number(v).toFixed(1) + "%";
     if (unit === "pct0") return Math.round(v) + "%";
     if (unit === "signed") return KS.signed(v);
+    if (unit === "none") return KS.esc(String(v || ""));
     return "" + v;
   }
   function baseLabel(a, k) {
+    if (a.kind === "vanished") return "";
     if (a.kind === "follower_spike" || a.kind === "follower_drop") return "רגיל ±" + KS.fmt(a.baseline);
     return "חציון " + (k.unit === "num" ? KS.fmt(a.baseline) : (k.unit === "pct0" ? Math.round(a.baseline) + "%" : Number(a.baseline).toFixed(1) + "%"));
   }
@@ -111,7 +116,8 @@
     high_saves: ["high_saves"],
     flop: ["flop"],
     weak_hook: ["weak_hook"],
-    follower: ["follower_spike", "follower_drop"]
+    follower: ["follower_spike", "follower_drop"],
+    vanished: ["vanished"]
   };
 
   function render(data, app) {
@@ -123,7 +129,8 @@
       { v: s.total, l: "סה״כ התראות", c: "var(--text)" },
       { v: s.high, l: "חריגות חזקות", c: s.high ? "var(--bad)" : "var(--muted)" },
       { v: s.hits + s.spread + s.saves, l: "חיוביות 🚀", c: "var(--ok)" },
-      { v: s.flops + s.hooks, l: "לתשומת לב 📉", c: "var(--amber)" }
+      { v: s.flops + s.hooks, l: "לתשומת לב 📉", c: "var(--amber)" },
+      { v: s.vanished || 0, l: "ירדו מהאוויר 🚫", c: (s.vanished ? "var(--bad)" : "var(--muted)") }
     ].map(function (x) {
       return '<div class="al-stat"><div class="v" style="color:' + x.c + ';">' + x.v + '</div><div class="l">' + x.l + "</div></div>";
     }).join("");
@@ -135,7 +142,8 @@
       { key: "high_saves", label: "💾 שמירות", n: s.saves },
       { key: "flop", label: "📉 תת-ביצוע", n: s.flops },
       { key: "weak_hook", label: "⏭️ הוק חלש", n: s.hooks },
-      { key: "follower", label: "📈 עוקבים", n: s.followers }
+      { key: "follower", label: "📈 עוקבים", n: s.followers },
+      { key: "vanished", label: "🚫 ירד מהאוויר", n: s.vanished || 0 }
     ].filter(function (c) { return c.key === "all" || c.n > 0; });
     var chips = chipDefs.map(function (c) {
       return '<button class="al-chip' + (c.key === "all" ? " active" : "") + '" data-filter="' + c.key + '">' +
