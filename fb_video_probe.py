@@ -126,13 +126,16 @@ def main():
     if not posts:
         raise SystemExit("no posts with a video object were returned")
 
-    seen_names = {}
+    seen_names, real_videos = {}, []
     for post_id, video_id, media, day in posts:
         print(f"\n--- {day} · {media} · post {post_id} · video {video_id}")
         avail, err = all_metrics(video_id)
         if err:
+            # a photo post carries a target.id too and it is NOT a video object;
+            # the named-candidate pass below must not be aimed at one
             print(f"    video_insights enumeration failed: {err}")
         else:
+            real_videos.append(video_id)
             print(f"    {len(avail)} metrics available:")
             for k in sorted(avail):
                 v = json.dumps(avail[k], ensure_ascii=False)
@@ -142,16 +145,16 @@ def main():
     print("\n" + "=" * 66)
     print("NAMED CANDIDATES on the newest video object")
     print("=" * 66)
-    newest = posts[0][1]
+    newest = real_videos[0] if real_videos else posts[0][1]
     for m in CANDIDATES:
         print(f"  {m:<42} {probe_one(newest, m)}")
 
     print("\n" + "=" * 66)
-    print(f"AVAILABLE ON ALL {len(posts)} SAMPLED OBJECTS")
+    print(f"AVAILABLE ACROSS {len(real_videos)} VIDEO OBJECTS ({len(posts)} posts sampled)")
     print("=" * 66)
     for k, c in sorted(seen_names.items(), key=lambda kv: (-kv[1], kv[0])):
-        mark = "*" if c == len(posts) else " "
-        print(f"  {mark} {k:<42} {c}/{len(posts)}")
+        mark = "*" if c == len(real_videos) else " "
+        print(f"  {mark} {k:<42} {c}/{len(real_videos)}")
     print("\n* = present on every sampled object. Anything naming completion,")
     print("  retention or a play-percentage is the replacement we are after.")
 
