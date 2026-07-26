@@ -301,7 +301,10 @@ def fetch_facebook_data():
             clicks = base['clicks']
 
             # 2. מדדי וידאו/רילז (watch-time) מאובייקט הוידאו
-            video = {'plays': 0, 'avg_watch_sec': 0, 'views_30s': 0, 'total_watch_min': 0}
+            # פוסט שאינו וידאו - אותן מפתחות בדיוק, כדי שהשורה תיבנה תמיד.
+            # שני מקומות שמייצרים את אותו דיקט הם בדיוק הסוג של הכפילות
+            # שנשברת כשמוסיפים שדה, ולכן ברירת המחדל נלקחת מהפונקציה עצמה.
+            video = get_video_insights(None)
             if media_type in ['Video', 'Reel']:
                 video = get_video_insights(get_video_id(post))
                 # אם post_media_view לא החזיר צפיות לריל, ניפול למספר ה-plays
