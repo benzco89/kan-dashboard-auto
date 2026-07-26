@@ -45,6 +45,22 @@ if os.path.isdir(STATIC):
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 _ALLOWED_RANGES = {7, 14, 30, 90}
+# Which tabs each page reads — measured by instrumenting the builders, not
+# guessed. A platform page needs 2-5 of the 14 and used to wait for all of them.
+# A wrong entry here costs one extra fetch (SheetData loads on demand), never a
+# blank section, so this stays a performance hint rather than a correctness one.
+_PAGE_SHEETS = {
+    "overview": ("facebook", "instagram", "youtube", "twitter", "tiktok", "followers", "insights", "top_combined"),
+    "youtube": ("youtube", "followers", "comment_analysis"),
+    "facebook": ("facebook", "followers", "comment_analysis"),
+    "instagram": ("instagram", "stories", "followers", "comment_analysis", "demographics"),
+    "twitter": ("twitter", "followers"),
+    "tiktok": ("tiktok", "followers", "comment_analysis"),
+    "viral": ("facebook", "instagram", "youtube", "twitter", "tiktok", "followers", "comment_analysis"),
+    "competitors": ("competitors", "competitor_posts", "facebook", "instagram", "youtube", "twitter", "followers"),
+    "alerts": ("facebook", "instagram", "youtube", "twitter", "tiktok", "followers", "hot_alerts"),
+}
+
 _BUILDERS = {
     "overview": aggregate.build_overview,
     "youtube": aggregate.build_youtube,
@@ -123,7 +139,7 @@ def api_page(page: str, days: int = Query(7), refresh: int = Query(0)):
     if days not in _ALLOWED_RANGES:
         days = 7
     try:
-        data = gsheets.get_data(force=bool(refresh))
+        data = gsheets.get_data(force=bool(refresh), keys=_PAGE_SHEETS.get(page))
         payload = builder(data, days)
         payload["pushstat_url"] = PUSHSTAT_URL
         return JSONResponse(payload)
@@ -134,7 +150,7 @@ def api_page(page: str, days: int = Query(7), refresh: int = Query(0)):
 @app.get("/health")
 def health():
     try:
-        data = gsheets.get_data()
+        data = gsheets.get_data(keys=("followers",))
         ok = bool(data.get("followers"))
         return {"ok": ok, "last_date": aggregate._last_data_date(data)}
     except Exception as exc:

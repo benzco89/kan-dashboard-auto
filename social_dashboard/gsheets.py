@@ -43,10 +43,14 @@ LAZY_SHEETS = {
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
+ALL_SHEETS = {**SHEETS, **LAZY_SHEETS}
+
 _CACHE_TTL = int(os.environ.get("CACHE_TTL_SECONDS", "600"))
 
 _lock = threading.Lock()
-_cache = {"data": None, "ts": 0.0}
+# per-TAB cache: {key: (rows, fetched_at)}. One blob meant any page
+# refetched all 14 tabs the moment the oldest one expired.
+_cache = {}
 
 
 def _credentials():
@@ -85,73 +89,103 @@ def _rows_to_dicts(values):
     return out
 
 
-def _fetch_all():
-    """One batched read of every tab we use."""
-    creds = _credentials()
-    service = build("sheets", "v4", credentials=creds, cache_discovery=False)
-    ranges = list(SHEETS.values())
-    resp = (
-        service.spreadsheets()
-        .values()
-        .batchGet(spreadsheetId=SPREADSHEET_ID, ranges=ranges)
-        .execute()
-    )
-    value_ranges = resp.get("valueRanges", [])
+def _parse(key, values):
+    """Raw value matrix -> rows. Top Combined has no header row."""
+    if key != "top_combined":
+        return _rows_to_dicts(values)
+    return [{"title": r[0], "type": r[1], "views": r[2], "platform": r[3]}
+            for r in values if len(r) >= 4]
 
-    # The API echoes ranges back in request order, so map by index.
-    result = {}
-    for idx, key in enumerate(SHEETS.keys()):
-        result[key] = value_ranges[idx].get("values", []) if idx < len(value_ranges) else []
 
-    # Top Combined has no header row: [title, type, views, platform]
-    top = []
-    for r in result.get("top_combined", []):
-        if len(r) >= 4:
-            top.append({
-                "title": r[0],
-                "type": r[1],
-                "views": r[2],
-                "platform": r[3],
-            })
+def _service():
+    return build("sheets", "v4", credentials=_credentials(), cache_discovery=False)
 
-    lazy = {}
-    for key, sheet_name in LAZY_SHEETS.items():
-        lazy[key] = []
+
+def _fetch(keys):
+    """Fetch exactly these sheet keys, in ONE call when possible.
+
+    The lazy tabs used to be fetched one at a time, outside the batch, because
+    they are created on demand by other scripts and a missing range 400s the
+    whole batch. That cost ~2 of the original 6.3 seconds. They are all present
+    now, so they join the batch and the whole read is a single round trip — with
+    a per-sheet fallback for the day one of them does not exist yet.
+
+    Deliberately NOT threaded: a googleapiclient service is not thread-safe, and
+    sharing one across a pool segfaulted the process outright.
+    """
+    svc = _service()
+    ranges = [ALL_SHEETS[k] for k in keys if k in ALL_SHEETS]
+    if not ranges:
+        return {}
+    ordered = [k for k in keys if k in ALL_SHEETS]
+    try:
+        resp = (svc.spreadsheets().values()
+                .batchGet(spreadsheetId=SPREADSHEET_ID, ranges=ranges).execute())
+        vrs = resp.get("valueRanges", [])
+        return {k: _parse(k, vrs[i].get("values", []) if i < len(vrs) else [])
+                for i, k in enumerate(ordered)}
+    except Exception:
+        pass
+
+    # one tab does not exist yet -> ask for them one by one so the rest survive
+    out = {}
+    for k in ordered:
         try:
-            resp = (
-                service.spreadsheets()
-                .values()
-                .get(spreadsheetId=SPREADSHEET_ID, range=sheet_name)
-                .execute()
-            )
-            lazy[key] = _rows_to_dicts(resp.get("values", []))
+            r = (svc.spreadsheets().values()
+                 .get(spreadsheetId=SPREADSHEET_ID, range=ALL_SHEETS[k]).execute())
+            out[k] = _parse(k, r.get("values", []))
         except Exception:
-            pass
-
-    return {
-        "youtube": _rows_to_dicts(result.get("youtube", [])),
-        "facebook": _rows_to_dicts(result.get("facebook", [])),
-        "instagram": _rows_to_dicts(result.get("instagram", [])),
-        "stories": _rows_to_dicts(result.get("stories", [])),
-        "twitter": _rows_to_dicts(result.get("twitter", [])),
-        "tiktok": _rows_to_dicts(result.get("tiktok", [])),
-        "followers": _rows_to_dicts(result.get("followers", [])),
-        "insights": _rows_to_dicts(result.get("insights", [])),
-        "top_combined": top,
-        **lazy,
-    }
+            out[k] = []
+    return out
 
 
-def get_data(force=False):
-    """Return all parsed sheet data, using the TTL cache unless forced."""
+def _fresh(key, now):
+    hit = _cache.get(key)
+    return hit is not None and (now - hit[1]) < _CACHE_TTL
+
+
+def _load(keys, force=False):
+    """Make sure every key is in the cache, fetching only what is missing."""
     now = time.time()
     with _lock:
-        fresh = _cache["data"] is not None and (now - _cache["ts"]) < _CACHE_TTL
-        if fresh and not force:
-            return _cache["data"]
-    # fetch outside the lock so concurrent requests don't serialize on the network
-    data = _fetch_all()
+        need = [k for k in keys if force or not _fresh(k, now)]
+    if need:
+        fetched = _fetch(need)
+        stamp = time.time()
+        with _lock:
+            for k, rows in fetched.items():
+                _cache[k] = (rows, stamp)
     with _lock:
-        _cache["data"] = data
-        _cache["ts"] = time.time()
-    return data
+        return {k: _cache[k][0] for k in keys if k in _cache}
+
+
+class SheetData(dict):
+    """Sheet rows by key, which fetches a sheet nobody asked for on demand.
+
+    Each page declares the tabs it needs so they arrive in one round trip — a
+    platform page needs 2-5 of the 14 and used to pay for all of them. But a
+    declaration that turns out to be wrong must not render an empty section: an
+    unexpected key costs one extra call here instead of silently being blank,
+    which is the failure mode this whole shape could otherwise introduce.
+    """
+
+    def get(self, key, default=None):
+        if key not in self and key in ALL_SHEETS:
+            self.update(_load([key]))
+        return super().get(key, default)
+
+    def __getitem__(self, key):
+        if key not in self and key in ALL_SHEETS:
+            self.update(_load([key]))
+        return super().__getitem__(key)
+
+
+def get_data(force=False, keys=None):
+    """Sheet data for the tabs in `keys` (default: all of them).
+
+    Returns a SheetData, so a caller that reaches for a tab outside `keys` still
+    gets it. Cache is per-tab: opening Facebook and then Instagram pays only for
+    what the second page adds.
+    """
+    wanted = list(keys) if keys else list(ALL_SHEETS)
+    return SheetData(_load(wanted, force=force))
