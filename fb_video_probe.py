@@ -37,9 +37,9 @@ except ImportError:
     pass
 
 TOKEN = os.environ.get("FACEBOOK_TOKEN")
-PAGE_ID = os.environ.get("FACEBOOK_PAGE_ID", "220634478361516")
-API_VERSION = os.environ.get("FB_API_VERSION", "v25.0")
-SAMPLE = int(os.environ.get("PROBE_POSTS", "6"))
+PAGE_ID = os.environ.get("FACEBOOK_PAGE_ID") or "220634478361516"
+API_VERSION = os.environ.get("FB_API_VERSION") or "v25.0"
+SAMPLE = int(os.environ.get("PROBE_POSTS") or "6")
 BASE = f"https://graph.facebook.com/{API_VERSION}"
 
 # Named candidates, tried one at a time so a single invalid name cannot fail the
