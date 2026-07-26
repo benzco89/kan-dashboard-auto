@@ -246,6 +246,13 @@ h1{ margin:0; font-weight:900; letter-spacing:-.7px; }
 .km-cell .l{ font-size:11px; color:var(--muted); }
 .km-cell .v{ font-size:15px; font-weight:700; color:var(--text); font-family:'SimplerPro',sans-serif; margin-top:2px; }
 .km-cell .v .unit{ font-size:.62em; font-weight:600; color:var(--muted); margin-inline-start:1px; }
+.km-ret{ background:var(--console); border:1px solid var(--line); border-radius:8px; padding:10px 12px 8px; }
+.km-ret svg{ display:block; width:100%; height:96px; }
+.km-ret path.a{ fill:color-mix(in srgb, var(--pf) 18%, transparent); }
+.km-ret path.l{ fill:none; stroke:var(--pf); stroke-width:2; vector-effect:non-scaling-stroke;
+  stroke-linejoin:round; stroke-linecap:round; }
+.km-ret-x{ display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--muted);
+  font-family:ui-monospace,monospace; }
 .km-cmp{ display:flex; flex-wrap:wrap; gap:8px; }
 .km-chip{ display:inline-flex; align-items:center; gap:6px; background:var(--console); border:1px solid var(--line);
   border-radius:999px; padding:6px 12px; font-size:12.5px; }

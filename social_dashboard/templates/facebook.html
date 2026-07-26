@@ -68,10 +68,10 @@
     var posts = data.posts;
     var meanV = posts.length ? posts.reduce(function (a, v) { return a + v.views; }, 0) / posts.length : 0;
     var meanR = posts.length ? posts.reduce(function (a, v) { return a + v.reach; }, 0) / posts.length : 0;
-    var cols = "40px 1fr 78px 88px 88px 80px 84px 74px 78px";
+    var cols = "40px 1fr 78px 88px 88px 80px 84px 74px 76px 78px";
     var thd = function (key, label) { return '<span class="center th-sort" data-sk="' + key + '" style="cursor:pointer;user-select:none;">' + label + '<span class="sk-ar"></span></span>'; };
     var thead = '<div class="thead" id="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span class="center">#</span><span>כותרת</span>' +
-      thd("type", "סוג") + thd("views", "צפיות") + thd("reach", "חשיפה") + thd("likes", "לייקים") + thd("shares", "שיתופים") + thd("avg_watch", "צפייה") + thd("engagement", "% מעורבות") + '</div>';
+      thd("type", "סוג") + thd("views", "צפיות") + thd("reach", "חשיפה") + thd("likes", "לייקים") + thd("shares", "שיתופים") + thd("avg_watch", "צפייה") + thd("retention_end", "עד הסוף") + thd("engagement", "% מעורבות") + '</div>';
     var LIMIT = 40;
     var rowOf = function (p, idx) {
       var rank = idx + 1;
@@ -87,6 +87,7 @@
         '<span class="cell">' + KS.fmt(p.likes) + '</span>' +
         '<span class="cell">' + KS.fmt(p.shares) + '</span>' +
         '<span class="cell">' + (p.avg_watch ? p.avg_watch.toFixed(1) + ' שנ׳' : '—') + '</span>' +
+        '<span class="cell">' + (p.retention_end ? p.retention_end.toFixed(0) + '%' : '—') + '</span>' +
         '<span class="cell strong">' + p.engagement.toFixed(1) + '%</span></a>';
     };
     var ENG_KEY = "engagement";
@@ -125,9 +126,18 @@
         KS.kmCell("תגובות", KS.fmtFull(p.comments)) +
         KS.kmCell("שיתופים", KS.fmtFull(p.shares)) +
         (p.clicks ? KS.kmCell("קליקים", KS.fmtFull(p.clicks)) : "") + '</div>';
+      // retention_3s is 0 on anything but a reel — a bucket wider than three
+      // seconds cannot be read, and that is "not measured", not "nobody stayed"
       var watch = p.avg_watch ? (KS.kmSection("צפייה בווידאו") + '<div class="km-grid">' +
         KS.kmCell("צפייה ממוצעת", p.avg_watch.toFixed(1), "שנ׳") +
-        (p.total_watch_min ? KS.kmCell("סה״כ דקות צפייה", KS.fmtFull(p.total_watch_min)) : "") + '</div>') : "";
+        (p.duration_sec ? KS.kmCell("אורך", p.duration_sec.toFixed(0), "שנ׳") : "") +
+        (p.retention_3s ? KS.kmCell("נשארו אחרי 3 שנ׳", p.retention_3s.toFixed(0) + "%") : "") +
+        (p.retention_end ? KS.kmCell("נשארו עד הסוף", p.retention_end.toFixed(0) + "%") : "") +
+        (p.replay_share ? KS.kmCell("צפיות חוזרות", p.replay_share.toFixed(0) + "%") : "") +
+        (p.total_watch_min ? KS.kmCell("סה״כ דקות צפייה", KS.fmtFull(p.total_watch_min)) : "") + '</div>' +
+        ((p.retention_curve && p.retention_curve.length > 1)
+          ? KS.kmSection("איפה עזבו") + KS.kmRetention(p.retention_curve, p.duration_sec)
+          : "")) : "";
       var rates = KS.kmSection("שיעורים") + '<div class="km-grid">' +
         KS.kmCell("שיעור שיתוף", p.share_rate.toFixed(2) + "%") +
         KS.kmCell("% מעורבות", p.engagement.toFixed(1) + "%") + '</div>';
