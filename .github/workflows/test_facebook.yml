@@ -28,10 +28,16 @@ jobs:
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: python facebook_collector.py
 
-      # הרצת מעקב עוקבים (YouTube + Facebook)
+      # הרצת מעקב עוקבים - כל הפלטפורמות.
+      # GETXAPI_KEY ו-TIKHUB_TOKEN חסרו כאן, והקולקטור כותב שורה אחת ליום
+      # ומעדכן אותה במקום - כלומר כל הרצה ידנית של ה-workflow הזה מחקה את
+      # מספרי העוקבים של X וטיקטוק מהשורה של אותו יום, בשקט. הריצות של היום
+      # עשו בדיוק את זה.
       - name: Run Followers Tracker
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}
+          TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}
         run: python followers_tracker.py
