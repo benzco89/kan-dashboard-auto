@@ -1843,18 +1843,17 @@ def story_clusters(items, floor=0.40):
 
     out = []
     for members in groups.values():
-        # one item per platform — the biggest, since that is the one a reader saw
-        best = {}
-        for i in members:
-            k, n, it = items[i]
-            cur = best.get(k)
-            if cur is None or (it.get('views') or 0) > (items[cur][2].get('views') or 0):
-                best[k] = i
-        if len(best) < 2:
+        # EVERY item in the cluster, not the biggest one per platform. When Kan
+        # runs a story three times on Instagram, three posts are what the story
+        # did there — keeping only the largest understated it and hid the very
+        # thing that makes a story big. The block records which items it is
+        # about, so an item that does not belong is one line to delete.
+        plats = {items[i][0] for i in members}
+        if len(plats) < 2:
             continue
-        picked = list(best.values())
+        picked = sorted(members, key=lambda i: -(items[i][2].get('views') or 0))
         out.append(dict(members=[(items[i][0], items[i][1]) for i in picked],
-                        platforms=len(best),
+                        platforms=len(plats),
                         views=sum(items[i][2].get('views') or 0 for i in picked)))
     out.sort(key=lambda c: (-c['platforms'], -c['views']))
     return out
@@ -1887,15 +1886,24 @@ def resolve_story_numbers(content):
         return
     index = {"%s:%s" % (p['key'], it.get('id', '')): (p, it)
              for p in content.get('platforms', []) for it in p.get('top', [])}
-    rows = []
+    # one tile per PLATFORM, not per item: several posts about the same story on
+    # the same platform are that story's reach there, and adding them up is what
+    # shows a story ran and ran rather than appeared once
+    rows = {}
     for k in keys:
         hit = index.get(k)
-        if hit:
-            rows.append(dict(key=hit[0].get('key', ''),
-                             name=hit[0].get('name', ''),
-                             views=int(hit[1].get('views') or 0)))
+        if not hit:
+            continue
+        p, it = hit
+        row = rows.setdefault(p.get('key', ''), dict(key=p.get('key', ''),
+                                                     name=p.get('name', ''),
+                                                     views=0, item_count=0))
+        row['views'] += int(it.get('views') or 0)
+        # NOT "items": in Jinja `s.items` resolves to the dict METHOD, so the
+        # template silently compared a bound method to an int
+        row['item_count'] += 1
     if rows:
-        story['platforms'] = sorted(rows, key=lambda r: -r['views'])
+        story['platforms'] = sorted(rows.values(), key=lambda r: -r['views'])
 
 
 def report_story(content):
@@ -1917,7 +1925,13 @@ def report_story(content):
            for n, it in enumerate(p.get('top', []), start=1)}
     for c in clusters:
         top = max(c['members'], key=lambda m: pos[m][1].get('views') or 0)
-        where = ", ".join(pos[m][0].get('name', '') for m in c['members'])
+        # a cluster can now hold several items per platform — say so, or the
+        # line reads "אינסטגרם, אינסטגרם, אינסטגרם"
+        seen = {}
+        for m in c['members']:
+            nm = pos[m][0].get('name', '')
+            seen[nm] = seen.get(nm, 0) + 1
+        where = ", ".join(n if k == 1 else f"{n} ({k})" for n, k in seen.items())
         print("    %d פלטפורמות · %s צפיות  %s" % (
             c['platforms'], fmt_num(c['views']),
             clean_title(pos[top][1].get('title', ''), 52)))
@@ -2625,6 +2639,7 @@ def content_to_context(content, thumbstyle='portrait'):
     if story:
         story = dict(title=story.get('title', ''), sentence=story.get('sentence', ''),
                      platforms=[dict(name=s.get('name', ''), views_fmt=fmt_num(s.get('views', 0)),
+                                     item_count=int(s.get('item_count') or 1),
                                      icon=icon_svg(s.get('key', ''), 30) if s.get('key') else '',
                                      accent=PLATFORMS.get(s.get('key', ''), {}).get('colors', {}).get('accent', '#111'))
                                 for s in story.get('platforms', [])])

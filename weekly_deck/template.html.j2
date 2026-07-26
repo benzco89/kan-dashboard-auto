@@ -269,7 +269,7 @@ html,body{margin:0;padding:0;background:#f4f4f4}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px"><div style="font-size:22px;font-weight:700;color:#404040">{{ s.name }}</div>{% if s.icon %}<div style="line-height:0;flex-shrink:0">{{ s.icon }}</div>{% endif %}</div>
         <div style="height:3px;background:{{ s.accent }};border-radius:2px;margin-bottom:12px"></div>
         <div class="mono" style="font-size:54px;font-weight:700;line-height:1;letter-spacing:-.02em">{{ s.views_fmt }}</div>
-        <div style="font-size:19px;color:#909090;margin-top:6px">צפיות</div>
+        <div style="font-size:19px;color:#909090;margin-top:6px">צפיות{% if s.item_count > 1 %} · {{ s.item_count }} פריטים{% endif %}</div>
       </div>{% endfor %}
     </div>{% endif %}
   </div>
