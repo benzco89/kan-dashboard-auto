@@ -1366,6 +1366,10 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
                           _others=res['others'], _raw=raw,
                           _prog_src=prog_src,
                           _tags=unmapped_hashtags(raw, pmap),
+                          # radio items have no field of their own — the caption
+                          # signature is the only marker, so it is resolved here
+                          # against the FULL text, not the stored 400-char cut
+                          reshetb=content_tags.is_reshet_bet(raw),
                           views=int(r['views']),
                           likes=int(r['_likes']),
                           comments=int(r['_comments']),
@@ -2454,6 +2458,15 @@ def _row_program(item, pmap):
     return resolve_program(item.get('caption') or item.get('title') or '', pmap)[0]
 
 
+def _row_reshetb(item):
+    """Was this a Reshet Bet item. Trusts the flag stored at extract (resolved
+    against the untruncated caption); falls back to the stored caption so a deck
+    extracted before the flag existed still marks what it can see."""
+    if 'reshetb' in item:
+        return bool(item.get('reshetb'))
+    return content_tags.is_reshet_bet(item.get('caption') or item.get('title') or '')
+
+
 def _row_url(key, item):
     """Where a row points. Prefers the permalink stored at extract; falls back to
     the id, so a deck_content.json produced before links existed still gets them
@@ -2516,6 +2529,7 @@ def content_to_context(content, thumbstyle='portrait'):
                              url=_row_url(key, it),
                              views_fmt=fmt_num(it.get('views', 0)),
                              cells=[fmt_count(it.get(f, 0)) for f, _i, _l in int_cols],
+                             radio=_row_reshetb(it),
                              highlight=(n <= 3), anomaly=_anomaly_of(it, meds, key),
                              thumb=thumb_data_uri(it.get('thumb'))))
         _cap_anomalies(rows, p.get('key', ''))
@@ -2538,7 +2552,7 @@ def content_to_context(content, thumbstyle='portrait'):
         for n, it in enumerate(p.get('top', [])[:3]):
             # the card is four lines tall and gets the LONG headline; the row's
             # cut is a table constraint and has no business here
-            top3.append(dict(medal=medals[n],
+            top3.append(dict(medal=medals[n], radio=_row_reshetb(it),
                              title=clean_title(_card_title(it), card_cap(key)),
                              views_fmt=fmt_num(it.get('views', 0)),
                              reporter=it.get('reporter', '') or '',
@@ -2609,6 +2623,8 @@ def content_to_context(content, thumbstyle='portrait'):
         thumbstyle=thumbstyle,
         # the legend must never drift from the constant it explains
         anomaly_min=("%g" % ANOMALY_MIN),
+        # the 🎙 line is explained only on a week that actually has radio in it
+        has_radio=any(r['radio'] for p in platforms for r in p['top10']),
         week=dict(range_str=window.get('range_str', ''), range_short=window.get('range_short', '')),
         hero=dict(total_fmt=fmt_num(hero.get('total_views', 0)), total_main=tmain,
                   total_suffix=tsuf, has_delta=hd['has_delta'], delta_str=hd['str_signed'],
