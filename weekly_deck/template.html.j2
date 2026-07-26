@@ -48,8 +48,13 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 
 {# Table title cell: square (1:1) leading thumb degrades gracefully for any
    source aspect ratio at this size. #}
+{# The 🎙 sits AFTER the headline, not before it: leading it pushed every radio
+   row's text out of line with the rest of the column. As a flex sibling of the
+   (shrinkable) text span it lands immediately after the last word — or after the
+   ellipsis when the headline is cut — instead of being swallowed by the overflow
+   or drifting to the far edge of the cell. #}
 {% macro title_cell(row, fs, fw) -%}
-<div style="display:flex;align-items:center;gap:10px;min-width:0">{% if row.thumb %}<img src="{{ row.thumb }}" alt="" style="width:34px;height:34px;object-fit:cover;object-position:center top;border-radius:6px;flex-shrink:0;background:#e8e8e8">{% endif %}{% if row.radio %}<span title="רשת ב׳" style="flex-shrink:0;font-size:19px;line-height:1">🎙</span>{% endif %}<span style="font-size:{{ fs }};{% if fw %}font-weight:{{ fw }};{% endif %}white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.title }}</span></div>
+<div style="display:flex;align-items:center;gap:10px;min-width:0">{% if row.thumb %}<img src="{{ row.thumb }}" alt="" style="width:34px;height:34px;object-fit:cover;object-position:center top;border-radius:6px;flex-shrink:0;background:#e8e8e8">{% endif %}<span style="font-size:{{ fs }};{% if fw %}font-weight:{{ fw }};{% endif %}white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.title }}</span>{% if row.radio %}<span title="שודר בכאן רשת ב׳" style="flex-shrink:0;font-size:19px;line-height:1;margin-inline-start:-2px">🎙</span>{% endif %}</div>
 {%- endmacro %}
 
 {# --- highlight card variants ------------------------------------------- #}
