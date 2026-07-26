@@ -64,14 +64,15 @@ def get(url, params):
 
 
 def ig_user_id():
-    res = get(f"{BASE}/me/accounts", {"access_token": TOKEN,
-                                      "fields": "instagram_business_account,name"})
-    for page in res.get("data", []):
-        acc = (page.get("instagram_business_account") or {}).get("id")
-        if acc:
-            print(f"  IG business account {acc} (via page '{page.get('name', '')}')")
-            return acc
-    print(f"  could not resolve the IG account: {json.dumps(res)[:200]}")
+    """The token is a PAGE token, so /me IS the page — /me/accounts does not
+    exist for it. Same resolution the collector uses."""
+    res = get(f"{BASE}/me", {"access_token": TOKEN,
+                             "fields": "id,name,instagram_business_account"})
+    acc = (res.get("instagram_business_account") or {}).get("id")
+    if acc:
+        print(f"  IG business account {acc} (page '{res.get('name', '')}')")
+        return acc
+    print(f"  could not resolve the IG account: {json.dumps(res, ensure_ascii=False)[:200]}")
     return None
 
 
