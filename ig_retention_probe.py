@@ -50,6 +50,16 @@ CANDIDATES = [
     "plays",
     "replays",
     "total_interactions",                   # collected today -> the control
+    # from the enumeration the API itself returned — these EXIST and we do not
+    # collect them. link_clicks in particular is the only referral metric
+    # Instagram offers, and "how many people did social send to kan.org.il" has
+    # been an open gap in the whole product.
+    "link_clicks",
+    "navigation",
+    "profile_activity",
+    "reels_skip_rate",                      # collected today as skip_rate
+    "reposts",
+    "crossposted_views",
 ]
 
 # The name has to be invalid but harmless; the error lists what IS valid.
