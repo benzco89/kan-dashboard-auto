@@ -77,6 +77,28 @@ def _insight(obj_id, metric, endpoint="insights"):
         return 0
 
 
+def _insight_raw(obj_id, metric, endpoint="insights"):
+    """כמו _insight, אבל מחזיר את הערך כמות שהוא.
+
+    _insight מפעיל _flatten_value, שמסכם דיקט לסכום אחד - נכון ל-paid/organic
+    ולא נכון לעקומת נטישה, שהיא דיקט של מקטע->אחוז. בלי זה הקריאה הראשונה
+    להריץ החזירה 0 בכל שורה.
+    """
+    params = {'access_token': ACCESS_TOKEN, 'metric': metric}
+    if endpoint == "insights":
+        params['period'] = 'lifetime'
+    try:
+        res = http_get_json(f"https://graph.facebook.com/{API_VERSION}/{obj_id}/{endpoint}",
+                            params=params, timeout=15, max_retries=2)
+        if 'error' in res:
+            return None
+        data = res.get('data', [])
+        values = data[0].get('values', []) if data else []
+        return values[0].get('value') if values else None
+    except Exception:
+        return None
+
+
 def get_video_id(post):
     """Extract the underlying video object id from a post's attachment (for video_insights)."""
     try:
@@ -150,7 +172,7 @@ def get_video_insights(video_id):
     length = _video_length(video_id)
     result['duration_sec'] = round(length, 1) if length else 0
 
-    curve = _insight(video_id, 'post_video_retention_graph', endpoint='video_insights')
+    curve = _insight_raw(video_id, 'post_video_retention_graph', endpoint='video_insights')
     if isinstance(curve, dict) and curve:
         r3, rend = _retention_points(curve, length)
         result['retention_3s'] = r3
