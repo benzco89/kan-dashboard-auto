@@ -1,0 +1,32 @@
+name: Probe Instagram reel retention (read-only)
+
+# Does Instagram expose anything like Facebook's post_video_retention_graph?
+# Read-only: does NOT write to Google Sheets or touch the collectors.
+on:
+  workflow_dispatch:
+    inputs:
+      media:
+        description: 'How many recent media items to sample'
+        required: false
+        default: '4'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Run Instagram retention probe
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          PROBE_MEDIA: ${{ github.event.inputs.media }}
+        run: python ig_retention_probe.py
