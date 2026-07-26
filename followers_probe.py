@@ -111,6 +111,51 @@ def section(title, obj_id, metrics, extra=None):
             print(f"  {m:<32} OK -> {val}")
 
 
+def ig_param_hunt(ig_id):
+    """`reach` came back OK -> null, which is a valid metric with no value —
+    almost always the period/window combination rather than the metric. Try the
+    shapes Meta actually documents until one returns a number.
+    """
+    import datetime as dt
+    today = dt.date.today()
+    y = today - dt.timedelta(days=1)
+    shapes = [
+        ("date_preset=yesterday + total_value",
+         {"period": "day", "date_preset": "yesterday", "metric_type": "total_value"}),
+        ("since/until yesterday + total_value",
+         {"period": "day", "since": y.isoformat(), "until": today.isoformat(),
+          "metric_type": "total_value"}),
+        ("since/until yesterday, no metric_type",
+         {"period": "day", "since": y.isoformat(), "until": today.isoformat()}),
+        ("last 7 days + total_value",
+         {"period": "day", "since": (today - dt.timedelta(days=7)).isoformat(),
+          "until": today.isoformat(), "metric_type": "total_value"}),
+    ]
+    print("\n" + "=" * 68)
+    print("INSTAGRAM: which parameter shape actually returns a number")
+    print("=" * 68)
+    for label, extra in shapes:
+        print(f"\n  {label}")
+        for m in ("reach", "views", "accounts_engaged", "website_clicks", "profile_links_taps"):
+            params = {"access_token": TOKEN, "metric": m}
+            params.update(extra)
+            res = get(f"{BASE}/{ig_id}/insights", params)
+            if "error" in res:
+                print(f"      {m:<20} ERROR: {res['error'].get('message','')[:56]}")
+                continue
+            data = res.get("data") or []
+            if not data:
+                print(f"      {m:<20} (no data)")
+                continue
+            row = data[0]
+            v = row.get("total_value") or {}
+            if v:
+                print(f"      {m:<20} total_value -> {json.dumps(v, ensure_ascii=False)[:56]}")
+            else:
+                vals = row.get("values") or []
+                print(f"      {m:<20} values -> {json.dumps(vals[:3], ensure_ascii=False)[:70]}")
+
+
 def main():
     if not TOKEN:
         raise SystemExit("FACEBOOK_TOKEN is missing")
@@ -127,6 +172,7 @@ def main():
     if ig:
         section(f"INSTAGRAM ACCOUNT INSIGHTS ({ig})", ig, IG_METRICS,
                 extra={"metric_type": "total_value"})
+        ig_param_hunt(ig)
     else:
         print("\n  could not resolve the Instagram account")
 
