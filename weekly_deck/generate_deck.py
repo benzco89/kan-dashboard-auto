@@ -1891,7 +1891,8 @@ def resolve_story_numbers(content):
     for k in keys:
         hit = index.get(k)
         if hit:
-            rows.append(dict(name=hit[0].get('name', ''),
+            rows.append(dict(key=hit[0].get('key', ''),
+                             name=hit[0].get('name', ''),
                              views=int(hit[1].get('views') or 0)))
     if rows:
         story['platforms'] = sorted(rows, key=lambda r: -r['views'])
@@ -2623,7 +2624,9 @@ def content_to_context(content, thumbstyle='portrait'):
     story = content.get('story_of_the_week')
     if story:
         story = dict(title=story.get('title', ''), sentence=story.get('sentence', ''),
-                     platforms=[dict(name=s.get('name', ''), views_fmt=fmt_num(s.get('views', 0)))
+                     platforms=[dict(name=s.get('name', ''), views_fmt=fmt_num(s.get('views', 0)),
+                                     icon=icon_svg(s.get('key', ''), 30) if s.get('key') else '',
+                                     accent=PLATFORMS.get(s.get('key', ''), {}).get('colors', {}).get('accent', '#111'))
                                 for s in story.get('platforms', [])])
 
     return dict(
