@@ -194,18 +194,22 @@ def _video_length(video_id):
 
 
 def _pack_curve(curve):
-    """העקומה כמחרוזת אחת, פרומיל למקטע: '998,999,915,...'.
+    """העקומה כמחרוזת אחת, פרומיל למקטע: '998|999|915|...'.
 
     שני המספרים הנגזרים עונים "האם נשארו"; רק העקומה עונה "איפה עזבו", וזו
     השאלה שכתב שואל על פריט ספציפי. פרומילים שלמים ולא JSON: 83 תווים במקום
     260, ובגיליון שכבר מחזיק כותרת של 700 תווים זה זניח.
+
+    המפריד הוא '|' ולא ',' כי worksheet.update כותב כ-USER_ENTERED, וגוגל שיטס
+    פירש '998,999,915' כמספר עם מפרידי אלפים - בלע את הפסיקים והשאיר מספר ענק
+    אחד. זה קרה בכל 67 השורות של ההרצה הראשונה.
     """
     try:
         keys = sorted(curve, key=lambda k: int(k))
     except (TypeError, ValueError):
         return ''
     try:
-        return ','.join(str(int(round(float(curve[k] or 0) * 1000))) for k in keys)
+        return '|'.join(str(int(round(float(curve[k] or 0) * 1000))) for k in keys)
     except (TypeError, ValueError):
         return ''
 

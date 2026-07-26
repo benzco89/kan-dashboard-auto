@@ -65,8 +65,11 @@ check("single bucket", fbc._retention_points(curve(.5), 20), (0, 50.0))
 check("garbage keys do not raise", fbc._retention_points({"a": .5}, 20), (0, 0))
 
 print("\nthe stored curve — two numbers say whether they stayed, only the curve says where they left")
-check("packs as per-mille integers", fbc._pack_curve(curve(.998, .915, .608)), "998,915,608")
-check("keeps every bucket", len(fbc._pack_curve(KOGAN).split(",")), 21)
+# '|' and not ',': Sheets read a comma-separated run of digits as a number
+# with thousands separators and swallowed every separator, on all 67 rows.
+check("packs as per-mille integers", fbc._pack_curve(curve(.998, .915, .608)), "998|915|608")
+check("no commas — Sheets would eat them", "," in fbc._pack_curve(KOGAN), False)
+check("keeps every bucket", len(fbc._pack_curve(KOGAN).split("|")), 21)
 check("empty curve stores nothing", fbc._pack_curve({}), "")
 check("garbage keys store nothing", fbc._pack_curve({"a": 1}), "")
 check("a non-video post still carries every key",
