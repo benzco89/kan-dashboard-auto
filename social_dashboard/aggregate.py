@@ -13,6 +13,7 @@ import re
 from datetime import date, datetime, timedelta
 
 import content_tags
+import metrics
 
 try:
     from zoneinfo import ZoneInfo
@@ -355,7 +356,7 @@ def build_youtube(data, days):
 
     # engagement rate - one definition across all platforms: interactions / views
     total_views = sum(_num(v.get("views")) for v in cur)
-    total_inter = sum(_num(v.get("likes")) + _num(v.get("comments")) for v in cur)
+    total_inter = sum(metrics.total("youtube", v) for v in cur)
     avg_eng = (total_inter / total_views * 100) if total_views else 0
 
     yt_analyses = _comment_analyses(data, "youtube")
@@ -374,7 +375,7 @@ def build_youtube(data, days):
             "likes": likes,
             "comments": comments,
             "like_rate": round(_num(v.get("like_rate")), 2),
-            "engagement": round((likes + comments) / views * 100, 1) if views else 0,
+            "engagement": round(metrics.rate("youtube", v), 1),
             "url": v.get("video_url", ""),
             # extra depth for the drill-down card
             "comment_rate": round(_num(v.get("comment_rate")), 2),
@@ -443,18 +444,23 @@ def build_facebook(data, days):
         types[t]["reach"] += _num(p.get("reach"))
         types[t]["count"] += 1
 
-    # engagement rate - one definition across all platforms: interactions / views
-    # (interactions = likes + comments + shares; clicks excluded so FB is
-    # comparable to the other platforms)
+    # engagement rate - ONE definition for the whole product, from metrics.py.
+    # Clicks are excluded: they are 88% of what the sheet calls engagement on
+    # Facebook, and no other platform has anything like them.
     total_views = sum(_num(p.get("views")) for p in cur)
     total_reach = sum(_num(p.get("reach")) for p in cur)
     total_shares = sum(_num(p.get("shares")) for p in cur)
-    total_inter = sum(_num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("shares")) for p in cur)
+    total_inter = sum(metrics.total("facebook", p) for p in cur)
     avg_eng = (total_inter / total_views * 100) if total_views else 0
     virality = (total_shares / total_views * 100) if total_views else 0
     # reach comes only from Meta insights and has broken before (v25); when the
     # whole column is zero the page should say so instead of drawing zeros
     reach_ok = (not cur) or any(_num(p.get("reach")) > 0 for p in cur)
+
+    # avg_watch existed per post but only inside the drill-down; a video page
+    # should say how long people stayed without being asked
+    fb_watches = [_num(p.get("avg_watch_sec")) for p in cur if _num(p.get("avg_watch_sec")) > 0]
+    fb_avg_watch = (sum(fb_watches) / len(fb_watches)) if fb_watches else 0
 
     analyses = _comment_analyses(data, "facebook")
 
@@ -477,7 +483,7 @@ def build_facebook(data, days):
             "reach": _int(p.get("reach")),
             "likes": likes,
             "shares": shares,
-            "engagement": round((likes + comments + shares) / views * 100, 1) if views else 0,
+            "engagement": round(metrics.rate("facebook", p), 1),
             "url": p.get("permalink", ""),
             # extra depth for the drill-down card. `likes` is TOTAL reactions;
             # the breakdown columns are the non-like reactions (love/haha/...),
@@ -517,6 +523,7 @@ def build_facebook(data, days):
             "images": types["Images"]["count"],
             "virality": round(virality, 2),
             "avg_engagement": round(avg_eng, 2),
+            "avg_watch": round(fb_avg_watch, 1),
         },
         "posts": posts,
     }
@@ -538,12 +545,13 @@ def build_instagram(data, days):
     bar_start = end - timedelta(days=13)
     bar_dates, bar_series = _daily(ig, "date", ["saved", "shares"], bar_start, end)
 
-    # engagement rate - one definition across all platforms: interactions / views
-    # (interactions = likes + comments + saves + shares, same set the overview sums)
+    # engagement rate - ONE definition for the whole product, from metrics.py.
+    # Saves are deliberately not in it (Facebook, X and YouTube have no
+    # equivalent); save_rate below reports them on their own.
     total_views = sum(_num(p.get("views")) for p in cur)
     total_shares = sum(_num(p.get("shares")) for p in cur)
     total_saved = sum(_num(p.get("saved")) for p in cur)
-    total_inter = sum(_num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("saved")) + _num(p.get("shares")) for p in cur)
+    total_inter = sum(metrics.total("instagram", p) for p in cur)
     avg_eng = (total_inter / total_views * 100) if total_views else 0
     virality = (total_shares / total_views * 100) if total_views else 0
     save_rate = (total_saved / total_views * 100) if total_views else 0
@@ -554,6 +562,16 @@ def build_instagram(data, days):
     avg_skip = (sum(skip_rates) / len(skip_rates)) if skip_rates else 0
     total_fb_views = sum(_num(p.get("fb_views")) for p in cur)
     fb_share = (total_fb_views / (total_views + total_fb_views) * 100) if (total_views + total_fb_views) else 0
+
+    # Watch time and conversion were both collected and shown nowhere: avg_watch
+    # only inside the per-post drill-down, follows/profile_visits not at all.
+    # For a news video "how long did they stay" is the metric that says whether
+    # the item worked, and "how many followed because of it" is the only outcome
+    # on this page that is not an impression.
+    watches = [_num(p.get("avg_watch_sec")) for p in cur if _num(p.get("avg_watch_sec")) > 0]
+    avg_watch = (sum(watches) / len(watches)) if watches else 0
+    total_follows = sum(_num(p.get("follows")) for p in cur)
+    total_visits = sum(_num(p.get("profile_visits")) for p in cur)
 
     analyses = _comment_analyses(data, "instagram")
 
@@ -575,7 +593,7 @@ def build_instagram(data, days):
             "saved": saved,
             "shares": shares,
             "skip_rate": round(_num(p.get("skip_rate")), 1),
-            "engagement": round((likes + comments + saved + shares) / views * 100, 1) if views else 0,
+            "engagement": round(metrics.rate("instagram", p), 1),
             "url": p.get("permalink", ""),
             # extra depth for the drill-down card (collected but not shown in the table)
             "likes": likes,
@@ -618,6 +636,9 @@ def build_instagram(data, days):
             "avg_engagement": round(avg_eng, 2),
             "avg_skip_rate": round(avg_skip, 1),
             "fb_views_share": round(fb_share, 1),
+            "avg_watch": round(avg_watch, 1),
+            "follows": int(round(total_follows)),
+            "profile_visits": int(round(total_visits)),
         },
         "stories": build_stories(data, days),
         "demographics": _demographics(data),
@@ -642,7 +663,7 @@ def build_twitter(data, days):
     bar_dates, bar_series = _daily(tw, "date", ["likes", "retweets"], bar_start, end)
 
     total_views = sum(_num(p.get("views")) for p in cur)
-    total_eng = sum(_num(p.get("likes")) + _num(p.get("retweets")) + _num(p.get("replies")) + _num(p.get("quotes")) for p in cur)
+    total_eng = sum(metrics.total("x", p) for p in cur)
     total_rt = sum(_num(p.get("retweets")) for p in cur)
     avg_eng = (total_eng / total_views * 100) if total_views else 0
     virality = (total_rt / total_views * 100) if total_views else 0
@@ -654,7 +675,7 @@ def build_twitter(data, days):
         rts = _int(p.get("retweets"))
         replies = _int(p.get("replies"))
         quotes = _int(p.get("quotes"))
-        eng = ((likes + rts + replies + quotes) / views * 100) if views else 0
+        eng = metrics.rate("x", p)
         posts.append({
             "title": p.get("text", ""),
             "date": (_parse_date(p.get("date")) or "").__str__() if p.get("date") else "",
@@ -713,7 +734,7 @@ def build_tiktok(data, days):
     bar_dates, bar_series = _daily(tt, "date", ["likes", "shares"], bar_start, end)
 
     total_views = sum(_num(p.get("views")) for p in cur)
-    total_eng = sum(_num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("shares")) + _num(p.get("saves")) for p in cur)
+    total_eng = sum(metrics.total("tiktok", p) for p in cur)
     total_shares = sum(_num(p.get("shares")) for p in cur)
     total_saves = sum(_num(p.get("saves")) for p in cur)
     total_wa = sum(_num(p.get("whatsapp_shares")) for p in cur)
@@ -729,7 +750,7 @@ def build_tiktok(data, days):
         comments = _int(p.get("comments"))
         shares = _int(p.get("shares"))
         saves = _int(p.get("saves"))
-        eng = ((likes + comments + shares + saves) / views * 100) if views else 0
+        eng = metrics.rate("tiktok", p)
         posts.append({
             "title": p.get("title", ""),
             "date": (_parse_date(p.get("date")) or "").__str__() if p.get("date") else "",

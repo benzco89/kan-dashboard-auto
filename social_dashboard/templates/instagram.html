@@ -70,22 +70,23 @@
 
     var s = data.summary;
     var summary = [
-      stat("" + s.total, "סה״כ פוסטים"),
       stat("" + s.reels, "Reels"),
       stat(s.avg_engagement.toFixed(2) + "%", "ממוצע מעורבות"),
       stat(s.virality.toFixed(2) + "%", "ויראליות"),
       stat(s.save_rate.toFixed(2) + "%", "שיעור שמירה"),
       stat(s.avg_skip_rate ? s.avg_skip_rate.toFixed(1) + "%" : "—", "Skip% ממוצע (הוק)"),
+      stat(s.avg_watch ? s.avg_watch.toFixed(1) + " שנ׳" : "—", "צפייה ממוצעת"),
+      stat(s.follows ? KS.fmt(s.follows) : "—", "עוקבים חדשים מפוסטים"),
       stat(s.fb_views_share ? s.fb_views_share.toFixed(1) + "%" : "—", "צפיות רילס מפייסבוק")
     ].join("");
 
     var posts = data.posts;
     var meanV = posts.length ? posts.reduce(function (a, v) { return a + v.views; }, 0) / posts.length : 0;
     var meanR = posts.length ? posts.reduce(function (a, v) { return a + v.reach; }, 0) / posts.length : 0;
-    var cols = "40px 1fr 80px 88px 88px 80px 84px 70px 78px";
+    var cols = "40px 1fr 80px 88px 88px 80px 84px 70px 74px 78px";
     var thd = function (key, label) { return '<span class="center th-sort" data-sk="' + key + '" style="cursor:pointer;user-select:none;">' + label + '<span class="sk-ar"></span></span>'; };
     var thead = '<div class="thead" id="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span class="center">#</span><span>תיאור</span>' +
-      thd("type", "סוג") + thd("views", "צפיות") + thd("reach", "חשיפה") + thd("saved", "שמירות") + thd("shares", "שיתופים") + thd("skip_rate", "Skip%") + thd("engagement", "% מעורבות") + '</div>';
+      thd("type", "סוג") + thd("views", "צפיות") + thd("reach", "חשיפה") + thd("saved", "שמירות") + thd("shares", "שיתופים") + thd("skip_rate", "Skip%") + thd("avg_watch", "צפייה") + thd("engagement", "% מעורבות") + '</div>';
     var LIMIT = 40;
     var rowOf = function (p, idx) {
       var rank = idx + 1;
@@ -101,6 +102,7 @@
         '<span class="cell">' + KS.fmt(p.saved) + '</span>' +
         '<span class="cell">' + KS.fmt(p.shares) + '</span>' +
         '<span class="cell">' + (p.skip_rate ? p.skip_rate.toFixed(1) + '%' : '—') + '</span>' +
+        '<span class="cell">' + (p.avg_watch ? p.avg_watch.toFixed(1) + ' שנ׳' : '—') + '</span>' +
         '<span class="cell strong">' + p.engagement.toFixed(1) + '%</span></a>';
     };
     var ENG_KEY = "engagement";
