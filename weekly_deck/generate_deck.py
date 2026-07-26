@@ -1887,10 +1887,24 @@ def _today():
     return datetime.now(IL_TZ).strftime('%Y-%m-%d')
 
 
+_HEBREW_RE = re.compile(r'[֐-׿]')
+
+
+def unresolved_credit(reporter):
+    """A credit the deck could show but has not turned into a Hebrew name: a raw
+    @handle, or a byline parsed straight out of a Latin caption run. Both put a
+    person in the deck twice — 'Ittai Shickman' on the slide where the caption
+    signed in Latin, 'איתי שיקמן' on the one where a mapped handle signed it."""
+    r = (reporter or '').strip()
+    if not r:
+        return ''
+    return r if (r.startswith('@') or not _HEBREW_RE.search(r)) else ''
+
+
 def enqueue_unresolved_handles(content, suggestions=None):
-    """Every @handle still sitting in a כתב/ת column goes into the queue, so a
+    """Every unresolved credit in a כתב/ת column goes into the queue, so a
     week's leftovers survive to the next run instead of scrolling past in a
-    terminal. Already-answered handles (approved or rejected) are skipped."""
+    terminal. Already-answered ones (approved or rejected) are skipped."""
     data = load_map_raw()
     pending = dict(data.get('_pending') or {})
     known = {k.lstrip('@').lower() for k in data if not k.startswith('_')}
@@ -1898,8 +1912,8 @@ def enqueue_unresolved_handles(content, suggestions=None):
     added = 0
     for pl in content.get('platforms', []):
         for it in pl.get('top', []):
-            h = (it.get('reporter') or '').strip()
-            if not h.startswith('@') or h.lstrip('@').lower() in known:
+            h = unresolved_credit(it.get('reporter'))
+            if not h or h.lstrip('@').lower() in known:
                 continue
             row = pending.get(h) or dict(suggest=(suggestions or {}).get(h, ''),
                                          first_seen=_today(), seen=0,
@@ -1929,8 +1943,8 @@ def apply_map_to_content():
     n = 0
     for p in content.get('platforms', []):
         for it in p.get('top', []):
-            h = (it.get('reporter') or '').strip()
-            name = rmap.get(h.lstrip('@').lower()) if h.startswith('@') else None
+            h = unresolved_credit(it.get('reporter'))
+            name = rmap.get(h.lstrip('@').lower()) if h else None
             if name:
                 it['reporter'] = name
                 it['reporter_source'] = 'credits'
@@ -1966,9 +1980,11 @@ def credits_command(argv):
             print("  ✅ אין קרדיטים שממתינים לאישור")
         return
 
+    # a target is @handle, "anything=name", 'all', or a queued key quoted as-is;
+    # anything else is the reason text for a rejection
     targets, reason = [], ''
     for a in argv[1:]:
-        if a.startswith('@') or a == 'all':
+        if a.startswith('@') or a == 'all' or '=' in a or a in pending:
             targets.append(a)
         else:
             reason = a
