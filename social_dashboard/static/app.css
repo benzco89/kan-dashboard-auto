@@ -251,7 +251,10 @@ h1{ margin:0; font-weight:900; letter-spacing:-.7px; }
 .km-ret path.a{ fill:color-mix(in srgb, var(--pf) 18%, transparent); }
 .km-ret path.l{ fill:none; stroke:var(--pf); stroke-width:2; vector-effect:non-scaling-stroke;
   stroke-linejoin:round; stroke-linecap:round; }
-.km-ret-x{ display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--muted);
+/* time runs left-to-right here, like every other chart on the dashboard, so the
+   labels must NOT be reversed with the page — only each label is isolated so a
+   Hebrew unit does not reorder inside it. */
+.km-ret-x{ display:flex; justify-content:space-between; direction:ltr; margin-top:6px; font-size:11px; color:var(--muted);
   font-family:ui-monospace,monospace; }
 .km-cmp{ display:flex; flex-wrap:wrap; gap:8px; }
 .km-chip{ display:inline-flex; align-items:center; gap:6px; background:var(--console); border:1px solid var(--line);

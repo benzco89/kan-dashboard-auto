@@ -241,14 +241,20 @@
     // clock, and the labels are placed to match rather than mirrored with it.
     var end = pts[pts.length - 1], mid = pts[Math.floor(n / 2)];
     var secs = durationSec ? (durationSec / (n - 1)) : 0;
-    var midLabel = secs ? Math.round(secs * Math.floor(n / 2)) + " שנ׳" : "אמצע";
-    return '<div class="km-ret" dir="ltr">' +
-      '<svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="עקומת נטישה">' +
+    // The SVG must run left-to-right (time does), but the labels under it are
+    // Hebrew: inside a dir=ltr box "7 שנ׳" reorders to "שנ׳ 7". Only the chart
+    // is forced LTR; each label is isolated so it reads as written.
+    var lab = function (secs, pct) {
+      return '<span><bdi>' + (secs === null ? "סוף" : secs + " שנ׳") + '</bdi> · ' +
+        '<span dir="ltr">' + pct.toFixed(0) + '%</span></span>';
+    };
+    return '<div class="km-ret">' +
+      '<div dir="ltr"><svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="עקומת נטישה">' +
       '<path class="a" d="' + area + '"></path><path class="l" d="' + line + '"></path>' +
-      '</svg>' +
-      '<div class="km-ret-x"><span>0 שנ׳ · ' + pts[0].toFixed(0) + '%</span>' +
-      '<span>' + midLabel + " · " + mid.toFixed(0) + '%</span>' +
-      '<span>' + (durationSec ? Math.round(durationSec) + " שנ׳" : "סוף") + " · " + end.toFixed(0) + '%</span></div></div>';
+      '</svg></div>' +
+      '<div class="km-ret-x">' + lab(0, pts[0]) +
+      lab(secs ? Math.round(secs * Math.floor(n / 2)) : null, mid) +
+      lab(durationSec ? Math.round(durationSec) : null, end) + '</div></div>';
   }
   function kmCmp(label, ratio) {
     // ratio >= 1 shown as "×N", colored by whether higher is good (up) — caller

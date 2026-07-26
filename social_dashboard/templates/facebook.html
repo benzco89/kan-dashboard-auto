@@ -114,7 +114,7 @@
         '<div><div class="v">' + p.engagement.toFixed(1) + '%</div><div class="l">מעורבות</div></div></div>';
       var breakdown = p.love + p.haha + p.wow + p.sad + p.angry;
       var thumbs = Math.max(0, p.likes - breakdown);
-      var react = breakdown > 0 ? (KS.kmSection("פילוח רגשות · " + KS.fmtFull(p.likes) + " תגובות") + '<div class="km-grid">' +
+      var react = breakdown > 0 ? (KS.kmSection("פילוח רגשות · " + p.likes.toLocaleString("en-US") + " ריאקציות") + '<div class="km-grid">' +
         KS.kmCell("👍 לייק", KS.fmtFull(thumbs)) +
         KS.kmCell("❤️ אהבתי", KS.fmtFull(p.love)) +
         KS.kmCell("😆 חחח", KS.fmtFull(p.haha)) +
