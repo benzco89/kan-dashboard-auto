@@ -2020,10 +2020,18 @@ def unresolved_credit(reporter):
     return r if (r.startswith('@') or not _HEBREW_RE.search(r)) else ''
 
 
+MOCK_RUN = False        # set by --mock; the QA gate must not touch tracked files
+
+
 def enqueue_unresolved_handles(content, suggestions=None):
     """Every unresolved credit in a כתב/ת column goes into the queue, so a
     week's leftovers survive to the next run instead of scrolling past in a
-    terminal. Already-answered ones (approved or rejected) are skipped."""
+    terminal. Already-answered ones (approved or rejected) are skipped.
+
+    Never on a --mock run: its reporters are invented, and they were quietly
+    accumulating in the repo-tracked map every time the QA gate ran."""
+    if MOCK_RUN:
+        return 0, len(load_map_raw().get('_pending') or {})
     data = load_map_raw()
     pending = dict(data.get('_pending') or {})
     known = {k.lstrip('@').lower() for k in data if not k.startswith('_')}
@@ -2895,6 +2903,7 @@ def main():
     if args.week:
         use_out_dir(args.week)
     elif args.mock:
+        globals()['MOCK_RUN'] = True
         use_out_dir('mock')
     elif not args.extract:
         latest_out_dir()
