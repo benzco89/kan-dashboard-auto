@@ -12,6 +12,7 @@
   "@hadasgrinberg": "הדס גרינברג",
   "@haimgoldich": "חיים גולדיטש",
   "@ifatglick": "יפעת גליק",
+  "@ifatglick1": "יפעת גליק",
   "@itamar.margalit": "איתמר מרגלית",
   "@itamargalit": "איתמר מרגלית",
   "@itsik_z": "איציק זוארץ",
@@ -31,6 +32,7 @@
   "Ayala Hasson": "איילה חסון",
   "Haim Goldich": "חיים גולדיטש",
   "Ittai Shickman": "איתי שיקמן",
+  "Liran Kogahinoff": "לירן כוג'הינוף",
   "Vered Pelman": "ורד פלמן",
   "איציק זוארץ": "איציק זוארץ",
   "איתי בלומנטל": "איתי בלומנטל",
@@ -59,18 +61,11 @@
   "שחר גליק": "שחר גליק",
   "תמר אלמוג": "תמר אלמוג",
   "_pending": {
-    "Liran Kogahinoff": {
-      "suggest": "",
-      "first_seen": "2026-07-26",
-      "seen": 1,
-      "example": "חניכים בצופים התעללו בנער עם צרכים מיוחדים: \"השתינו…"
-    },
     "Dana Levi": {
       "suggest": "",
       "first_seen": "2026-07-26",
-      "seen": 5,
+      "seen": 10,
       "example": "הטור השבועי של הפרשן הצבאי"
     }
-  },
-  "_rejected": {}
+  }
 }

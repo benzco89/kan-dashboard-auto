@@ -57,7 +57,14 @@ sys.path.append(os.path.join(os.path.dirname(HERE), "social_dashboard"))
 import metrics  # noqa: E402
 FONTS_DIR = os.path.join(HERE, "design", "fonts")
 ASSETS_DIR = os.path.join(HERE, "design", "assets")
-OUT_DIR = os.path.join(HERE, "out")
+# Every run writes into a folder of its own — out/2026-07-19_25 for a real week,
+# out/mock for --mock. Weeks stop overwriting each other, last week's deck stays
+# readable next to this one, and the QA gate can no longer flatten a real deck
+# (it did, twice, and each time the editorial layer had to be typed again).
+# These are rebound by use_out_dir() once the window is known; the module-level
+# values are the fallback for anything that runs before that.
+OUT_ROOT = os.path.join(HERE, "out")
+OUT_DIR = OUT_ROOT
 THUMBS_DIR = os.path.join(OUT_DIR, "thumbs")
 CONTENT_PATH = os.path.join(OUT_DIR, "deck_content.json")
 REPORTERS_MAP_PATH = os.path.join(HERE, "reporters_map.json")
@@ -65,6 +72,38 @@ REPORTERS_OVERRIDES_PATH = os.path.join(HERE, "reporters_overrides.json")
 PROGRAMS_MAP_PATH = os.path.join(HERE, "programs_map.json")
 TODO_PATH = os.path.join(OUT_DIR, "reporters_todo.txt")
 TEMPLATE = "template.html.j2"
+
+
+def week_slug(window):
+    """2026-07-19..2026-07-25 -> '2026-07-19_25'. Sorts chronologically as text,
+    which is what 'the latest week' relies on."""
+    start, end = window['this']
+    return f"{start}_{end[-2:]}" if start[:7] == end[:7] else f"{start}_{end}"
+
+
+def use_out_dir(name):
+    """Point every output path at out/<name>/ and create it."""
+    global OUT_DIR, THUMBS_DIR, CONTENT_PATH, TODO_PATH
+    OUT_DIR = os.path.join(OUT_ROOT, name)
+    THUMBS_DIR = os.path.join(OUT_DIR, "thumbs")
+    CONTENT_PATH = os.path.join(OUT_DIR, "deck_content.json")
+    TODO_PATH = os.path.join(OUT_DIR, "reporters_todo.txt")
+    os.makedirs(THUMBS_DIR, exist_ok=True)
+    return OUT_DIR
+
+
+def latest_out_dir():
+    """The newest week folder that actually holds a deck. Falls back to out/
+    itself, so a deck_content.json left there by an older version still works."""
+    try:
+        weeks = sorted(d for d in os.listdir(OUT_ROOT)
+                       if re.match(r'^\d{4}-\d{2}-\d{2}_', d)
+                       and os.path.exists(os.path.join(OUT_ROOT, d, "deck_content.json")))
+    except FileNotFoundError:
+        weeks = []
+    if weeks:
+        return use_out_dir(weeks[-1])
+    return OUT_DIR
 
 HEB_MONTHS = ['', 'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי',
               'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
@@ -584,15 +623,45 @@ def title_budget_px(key, n_int_cols, wide_table=True, show_program=True):
     return w - (0 if key in NO_THUMBS else _THUMB)
 
 
+# X's table is the narrow one and its rows are tweets, so it trades type size
+# for words: 22px instead of 25px buys ~14% more characters on every row.
+ROW_FONT = {'x': (22, 23)}          # (normal, highlight); default (25, 26)
+ROW_FONT_DEFAULT = (25, 26)
+# A highlight card is text-forward and four lines tall — it can hold far more
+# than a table row. It used to show the row's headline because both read the
+# same stored `title`, which is why an X card said 30 characters of a tweet.
+CARD_CAP = {'x': 150}
+CARD_CAP_DEFAULT = 110
+
+
+def row_font(key):
+    return ROW_FONT.get(key, ROW_FONT_DEFAULT)
+
+
+def card_cap(key):
+    return CARD_CAP.get(key, CARD_CAP_DEFAULT)
+
+
 def headline_cap(key, thumbstyle='portrait'):
-    """Assumes the תוכנית column IS showing: it appears per slide and only at
-    render, so sizing for the narrower case can only ever leave room to spare —
-    never clip. X pays the most (its table shares the row with the נתון מעניין
-    panel), which is why X headlines were already being clipped before the
-    interaction columns existed."""
+    """Assumes the תוכנית column shows only where it is affordable — which is
+    the same rule the render applies, so the cap and the layout agree. Sizing
+    for the narrower case can only ever leave room to spare, never clip."""
     wide = (key not in NO_THUMBS) and thumbstyle == 'portrait'
-    px = title_budget_px(key, len(metrics.display_columns(key)), wide)
-    return max(28, int(px / _PX_PER_CHAR))
+    px = title_budget_px(key, len(metrics.display_columns(key)), wide,
+                         show_program=wide)
+    return max(28, int(px / (_PX_PER_CHAR * row_font(key)[1] / ROW_FONT_DEFAULT[1])))
+
+
+# A caption ends in machinery: a t.co/bit.ly link, the programme hashtag, the
+# reporter's handle. The row headline never showed them only because it was cut
+# long before it got there — the moment the card asked for 150 characters, a
+# card read 'תיעוד: רגעי חטיפת הנשק בפיגוע ליד חוות גלעד @HGoldich https://t.co/…'.
+# None of it is the headline, at any length.
+# Hashtags only, never handles: with no reporter resolved, a trailing @handle
+# STAYS on purpose — it is the visible hint that reporters_map is missing a line.
+# A handle whose credit IS known is removed a few lines below, as it always was.
+_URL_RE = re.compile(r'https?://\S+|www\.\S+')
+_META_TAIL_RE = re.compile(r'(?:\s*(?:#[^\s#@]{2,40}|[|·•\-–—;:]))+\s*$')
 
 
 def headline_of(text, reporter="", cap=62):
@@ -600,7 +669,7 @@ def headline_of(text, reporter="", cap=62):
     Deliberately does NOT cut at ':' unconditionally — in Kan headlines the colon
     is often part of the headline ('פרסום ראשון: ...'); see trim_to_clause."""
     lines = [l for l in _strip_bidi(text).replace("\r", "\n").split("\n") if l.strip()]
-    s = lines[0] if lines else ""
+    s = _URL_RE.sub(' ', lines[0] if lines else "")
     for ch in _HEADLINE_CUT_CHARS:
         i = s.find(ch)
         if i != -1:
@@ -620,6 +689,9 @@ def headline_of(text, reporter="", cap=62):
         s = re.sub(r"\s*@[A-Za-z0-9._]{2,30}[.,;:!?]*\s*$", "", s).rstrip()
         if s.endswith(reporter):
             s = s[:-len(reporter)].rstrip(" -–—|·,")
+    # hashtags and handles that survived are trailing machinery, not headline —
+    # they only ever surfaced once a card asked for the long version
+    s = _META_TAIL_RE.sub('', " ".join(s.split())).strip()
     return trim_to_clause(s, cap).strip()
 
 
@@ -882,10 +954,24 @@ _MEDIA_TAIL_RE = re.compile(r'[\U0001F4F8\U0001F4F7\U0001F3A5\U0001F3AC].*$', re
 # A role phrase right after the name is the strongest byline signal Kan uses:
 # "איציק זוארץ, כתב כאן11 בדרום" / "Ketty Dor, כתבת כאן חדשות".
 _ROLE_WORDS = r'(?:כתב/ת|כתבת|כתבנו|כתבתנו|כתב|פרשנית|פרשן|עורכת|עורך)'
+# ...but כתב/כתבה/עורך are also ordinary VERBS, and a verb takes a direct object:
+# "הגיע לאולפן שלנו ביום שישי, כתב את הנבואה" is not a byline — it read as one
+# and put "שלנו ביום שישי" in the כתב/ת column. A role noun is never followed
+# by "את".
+_NOT_A_ROLE = r'\b(?!\s*את\b)'
 _ROLE_SUFFIX_HEB_RE = re.compile(
-    r'((?:' + _HEB_W + r'\s+){1,2}' + _HEB_W + r')\s*[,،]\s*' + _ROLE_WORDS + r'\b')
+    r'((?:' + _HEB_W + r'\s+){1,2}' + _HEB_W + r')\s*[,،]\s*' + _ROLE_WORDS + _NOT_A_ROLE)
 _ROLE_SUFFIX_LATIN_RE = re.compile(
-    r'((?:' + _LATIN_NAME_W + r'\s+){1,2}' + _LATIN_NAME_W + r')\s*[,،]\s*' + _ROLE_WORDS + r'\b')
+    r'((?:' + _LATIN_NAME_W + r'\s+){1,2}' + _LATIN_NAME_W + r')\s*[,،]\s*' + _ROLE_WORDS + _NOT_A_ROLE)
+
+# Words that can sit in the shape of a name but never inside one. The role-suffix
+# rule reads backwards from a comma, so without this it happily takes the tail of
+# any sentence that happens to end before ", כתב".
+_NOT_NAME_WORDS = {
+    'שלנו', 'שלי', 'שלו', 'שלה', 'שלהם', 'שלכם', 'שלך',
+    'ביום', 'בשבוע', 'בשעה', 'בערב', 'בבוקר', 'אתמול', 'היום', 'הערב',
+    'ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת',
+}
 
 
 def _strip_media_tail(text):
@@ -900,6 +986,8 @@ def _role_suffix_name(text):
             while len(words) > 2 and words[0] in _HEB_STOP:
                 words.pop(0)                      # "מאת רן כהן" -> "רן כהן"
             cand = " ".join(words)
+            if any(w in _NOT_NAME_WORDS for w in words):
+                continue
             if _looks_like_person(cand):
                 return cand
     return None
@@ -1260,6 +1348,7 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
         program, prog_src = resolve_program(raw, pmap)
         items.append(dict(id=str(r.get(idc, '')),
                           title=headline_of(raw, reporter, cap=headline_cap(key)),
+                          title_long=headline_of(raw, reporter, cap=card_cap(key)),
                           caption=clean_title(raw, 400),
                           reporter=reporter,
                           reporter_source=res['source'],
@@ -1399,6 +1488,8 @@ def default_learnings(platforms):
 
 def build_deck_content(gc, thumbs_enabled, use_gemini=False):
     window = compute_window()
+    # the window names the folder, so thumbnails and the JSON land together
+    print(f"   📁 {use_out_dir(week_slug(window))}")
     fb_token = os.environ.get('FACEBOOK_TOKEN', '')
     tikhub_token = os.environ.get('TIKHUB_TOKEN', '')
     rmap = load_reporters_map()
@@ -1928,17 +2019,20 @@ def enqueue_unresolved_handles(content, suggestions=None):
     return added, len(pending)
 
 
-def apply_map_to_content():
+def apply_map_to_content(content=None):
     """Push newly approved names into the week that is already extracted.
 
     The map is read at --extract, so without this an approval given after the
     data was pulled would sit in the file while the deck kept printing the raw
     @handle until next week's run — which is exactly when nobody would think to
-    look at it again."""
-    try:
-        content = load_content()
-    except Exception:
-        return 0
+    look at it again. Called with a loaded `content` it edits in place (render);
+    called with none it loads, edits and saves (the --credits path)."""
+    save = content is None
+    if save:
+        try:
+            content = load_content()
+        except Exception:
+            return 0
     rmap = load_reporters_map()
     n = 0
     for p in content.get('platforms', []):
@@ -1949,7 +2043,7 @@ def apply_map_to_content():
                 it['reporter'] = name
                 it['reporter_source'] = 'credits'
                 n += 1
-    if n:
+    if n and save:
         save_content(content)
     return n
 
@@ -2358,6 +2452,18 @@ def _row_url(key, item):
     return tpl.format(id=iid) if (tpl and iid) else ''
 
 
+def _card_title(item):
+    """The headline for a highlight card. Prefers `title_long` — the same
+    headline cut at the card's budget instead of the table's — and falls back to
+    the row headline for content extracted before that field existed."""
+    long = _strip_bidi(item.get('title_long', '') or '').strip()
+    if not long:
+        return _display_title(item)
+    if (item.get('reporter') or '').strip():
+        long = re.sub(r"\s*@[A-Za-z0-9._]{2,30}[.,;:!?]*\s*$", "", long).rstrip()
+    return long
+
+
 def _display_title(item):
     """headline_of already drops the credit an item's reporter came from, but it
     runs at extract. Repeating it here means a credit added later — a new
@@ -2404,12 +2510,22 @@ def content_to_context(content, thumbstyle='portrait'):
         # programme column waits until a slide has a few. But the threshold is
         # there for sparse AUTO-detection; a programme an editor typed in by hand
         # is a deliberate statement and is never hidden by it.
-        show_program = (sum(1 for r in rows if r['program']) >= 2
-                        or any(r['prog_stated'] for r in rows))
+        # On a narrow table — X, or any slide in --thumbstyle blur, where the
+        # table shares its row with the נתון מעניין panel — the תוכנית column
+        # costs 172px, about 15 characters off EVERY headline, to label a few
+        # rows. On X those headlines are the tweets themselves, so the words win.
+        # (A programme an editor typed by hand is still never hidden; on a narrow
+        # slide that is the one case where a headline can reach the ellipsis.)
+        narrow = (key in NO_THUMBS) or thumbstyle != 'portrait'
+        show_program = any(r['prog_stated'] for r in rows) or (
+            not narrow and sum(1 for r in rows if r['program']) >= 2)
 
         top3 = []
         for n, it in enumerate(p.get('top', [])[:3]):
-            top3.append(dict(medal=medals[n], title=clean_title(_display_title(it), 110),
+            # the card is four lines tall and gets the LONG headline; the row's
+            # cut is a table constraint and has no business here
+            top3.append(dict(medal=medals[n],
+                             title=clean_title(_card_title(it), card_cap(key)),
                              views_fmt=fmt_num(it.get('views', 0)),
                              reporter=it.get('reporter', '') or '',
                              url=_row_url(key, it),
@@ -2434,6 +2550,8 @@ def content_to_context(content, thumbstyle='portrait'):
             text_cards=(key in NO_THUMBS),
             top3=top3, top10=rows, show_program=show_program,
             int_cols=[dict(icon=i, label=l) for _f, i, l in int_cols],
+            title_fs=f"{row_font(key)[0]}px", title_fs_hi=f"{row_font(key)[1]}px",
+            cell_fs=f"{min(23, row_font(key)[0] + 1)}px",
             has_links=any(r['url'] for r in rows),
             has_anomaly=any(r['anomaly'] for r in rows),
             fun_fact=(dict(value=chosen['value'], suffix=chosen.get('suffix', ''),
@@ -2711,7 +2829,19 @@ def main():
                     help="the credit approval queue. No args = show it. "
                          "'ok @handle' / 'ok \"@handle=שם\"' / 'ok all' approve into "
                          "reporters_map.json; 'no @handle \"סיבה\"' refuses it for good.")
+    ap.add_argument('--week', metavar='FOLDER',
+                    help="work on a specific out/<folder> (default: the newest week). "
+                         "--extract always writes the week it just pulled.")
     args = ap.parse_args()
+
+    # Which folder under out/ this run reads and writes. An extract names its own
+    # (it knows the window); everything else continues the newest one.
+    if args.week:
+        use_out_dir(args.week)
+    elif args.mock:
+        use_out_dir('mock')
+    elif not args.extract:
+        latest_out_dir()
 
     if args.credits is not None:
         credits_command(args.credits)
@@ -2728,9 +2858,16 @@ def main():
                 # would merge two lines the extract had correctly split. The
                 # stored title is already that first line — this only re-applies
                 # the shortening rules on top of it.
+                key = p.get('key', '')
+                # the LONG one first, and from the caption: it is the only stored
+                # text with more characters than the row headline already has
+                src_long = it.get('caption') or it.get('title') or ''
+                long = headline_of(src_long, it.get('reporter') or '', cap=card_cap(key))
+                if long and long != it.get('title_long'):
+                    it['title_long'] = long
+                    changed += 1
                 new = headline_of(it.get('title', '') or it.get('caption') or '',
-                                  it.get('reporter') or '',
-                                  cap=headline_cap(p.get('key', '')))
+                                  it.get('reporter') or '', cap=headline_cap(key))
                 if new and new != it.get('title'):
                     it['title'] = new
                     changed += 1
@@ -2768,6 +2905,12 @@ def main():
         filled, vetoed = apply_reporter_overrides(content)
         if filled or vetoed:
             print(f"   ✍️  reporters_overrides: {filled} credited, {vetoed} marked uncredited")
+        # the map is read at extract, so a credit approved afterwards would only
+        # land on the next pull. Applying it here too means a name is never one
+        # step behind the deck that is being rendered right now.
+        mapped = apply_map_to_content(content)
+        if mapped:
+            print(f"   ✍️  reporters_map: {mapped} handles/Latin bylines resolved to names")
         resolve_story_numbers(content)
         if not do_extract:          # an extract in the same run already checked
             check_editorial_numbers(content)

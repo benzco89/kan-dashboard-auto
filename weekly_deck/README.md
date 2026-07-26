@@ -40,7 +40,19 @@ python weekly_deck/generate_deck.py --render
 `--extract` and `--render` with no flag at all = both, in order. `--mock` runs
 the whole loop on hardcoded data with no creds and no network (the QA gate).
 
-Outputs: `out/deck.html`, `out/deck.pdf`, `out/slide_1.png` / `slide_2.png`
+## Every run gets its own folder
+
+`--extract` names the folder after the window it just pulled —
+`out/2026-07-19_25/` — and writes `deck_content.json`, `thumbs/`, `deck.html`,
+`deck.pdf`, `reporters_todo.txt` and the QA screenshots into it. `--mock` writes
+to `out/mock/`. Every other flag continues **the newest week folder** unless
+`--week 2026-07-12_18` says otherwise.
+
+Weeks therefore stop overwriting each other, last week's deck stays readable
+next to this one, and the QA gate can no longer flatten a real deck — which it
+did twice, and each time the hand-written editorial layer had to be typed again.
+
+Outputs: `out/<week>/deck.html`, `deck.pdf`, `slide_1.png` / `slide_2.png`
 (`--qa-all` screenshots every slide).
 
 Flags: `--thumbstyle portrait|blur` (see below) · `--no-thumbs` (skip downloads)
@@ -215,9 +227,37 @@ be cut a second time by the browser — mid-word, which is exactly what the cap
 exists to prevent — and the max would shorten every row by 8 characters to
 protect 3% of them.
 
-The cap assumes the **תוכנית column is showing**, since that is decided per
-slide at render and the headline was cut at extract: sizing for the narrower
-case can only leave room to spare, never clip.
+### The narrow table (X) buys its words back
+
+X's table shares its row with the `נתון מעניין` panel, so it is ~320px narrower
+than the rest. Two things give the tweets their text back there:
+
+- **no תוכנית column on a narrow table.** It cost 172px — about 15 characters
+  off every headline — to label the two or three rows that carry a programme.
+  On X those headlines *are* the tweets. (A programme an editor typed by hand is
+  still never hidden; on a narrow slide that is the one case where a headline can
+  reach the browser ellipsis.)
+- **22px rows instead of 25px**, which buys another ~14%.
+
+Together: 30 characters → **49**.
+
+Elsewhere the cap assumes the תוכנית column IS showing, since that is decided
+per slide at render and the headline was cut at extract — sizing for the
+narrower case can only leave room to spare, never clip.
+
+### Cards get their own, longer headline
+
+A highlight card is five lines tall and holds ~150 characters; a table row holds
+49. They used to show the same string, so an X card displayed 30 characters of a
+tweet and stopped. `--extract` now stores **`title_long`** beside `title` — the
+same headline rules at the card's budget — and the cards read that.
+
+That length is also what exposed the trailing machinery every caption ends in: a
+`t.co` link, the programme hashtag, the reporter's handle. The row cut simply
+never reached them. URLs are stripped anywhere in a headline and trailing
+hashtags at the end of one; a trailing **handle** is removed only once its
+credit is known, because with no reporter resolved that handle is the visible
+hint that `reporters_map.json` is missing a line.
 
 Measured over a real week, end to end: 4 of 50 rows still reach the browser
 ellipsis, by at most 37px (≈3 characters). Before the interaction columns
@@ -301,7 +341,12 @@ deterministically **from the full caption** (the credit sits at the end, past
 the headline), in this order:
 
 0. a **role phrase right after the name** — `איציק זוארץ, כתב כאן11 בדרום` —
-   the strongest byline signal Kan uses, so it outranks everything below;
+   the strongest byline signal Kan uses, so it outranks everything below.
+   `כתב` is also the *verb* "wrote", and a verb takes a direct object: the rule
+   ignores `כתב את`, and rejects a candidate containing a word that never appears
+   inside a name (`שלנו`, `ביום`, a day name). Without both,
+   `הגיע לאולפן שלנו ביום שישי, כתב את הנבואה` put **שלנו ביום שישי** in the
+   כתב/ת column of a live deck;
 1. an explicit `כתב:` / `כתבת:` / `תחקיר:` credit, **or the possessive form of
    the same thing** — `כתבתו של X`, `בכתבתה של X`, `מתוך תחקירו של X`, which
    carries no colon. This is how Kan credits in YouTube descriptions and at the

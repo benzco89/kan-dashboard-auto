@@ -100,6 +100,14 @@ CASES = [
     ("הדיווח המלא. Ketty Dor, כתבת כאן חדשות", mapped('ketty dor', 'Ketty Dor'),
      "Latin name + role suffix"),
     ("ניתוח השבוע מאת רן כהן, פרשן צבאי", "רן כהן", "leading preposition trimmed"),
+    # כתב/כתבה/עורך are verbs too, and a verb takes a direct object. This exact
+    # caption put "שלנו ביום שישי" in the כתב/ת column of a live deck.
+    ("המנטליסט הגיע לאולפן שלנו ביום שישי, כתב את הנבואה שלו והכניס למעטפה", "",
+     "'כתב את' is the verb, not a byline"),
+    ("הפרשה נחשפה אתמול בערב, כתבה את הדברים בעצמה", "",
+     "'כתבה את' likewise"),
+    ("הדיווח הגיע ביום שישי, רן כהן, כתב כאן חדשות", "רן כהן",
+     "a real byline in the same sentence still resolves"),
 
     # --- camera/clapper opens a media credit that runs to the end ----------
     ("תיעוד מהזירה בשעות הבוקר " + CAM + ": Ebrahim Noroozi", "",
