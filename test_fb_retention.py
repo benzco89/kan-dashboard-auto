@@ -69,7 +69,7 @@ print("\nthe stored curve — two numbers say whether they stayed, only the curv
 # with thousands separators and swallowed every separator, on all 67 rows.
 check("packs as per-mille integers", fbc._pack_curve(curve(.998, .915, .608)), "998|915|608")
 check("no commas — Sheets would eat them", "," in fbc._pack_curve(KOGAN), False)
-check("keeps every bucket", len(fbc._pack_curve(KOGAN).split(",")), 21)
+check("keeps every bucket", len(fbc._pack_curve(KOGAN).split("|")), 21)
 check("empty curve stores nothing", fbc._pack_curve({}), "")
 check("garbage keys store nothing", fbc._pack_curve({"a": 1}), "")
 check("a non-video post still carries every key",
