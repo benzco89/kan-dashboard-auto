@@ -158,6 +158,43 @@ def main():
     print("\n* = present on every sampled object. Anything naming completion,")
     print("  retention or a play-percentage is the replacement we are after.")
 
+    retention_report(real_videos)
+
+
+def retention_report(video_ids):
+    """The retention curve, printed next to the video's own length.
+
+    A curve is unreadable until you know what one bucket spans. One sample
+    started at 0.35 and stayed flat, another at 0.999 and collapsed to 0.10 —
+    those cannot both mean "share of viewers still watching" unless something
+    else differs between them, and length is the first suspect.
+    """
+    print("\n" + "=" * 66)
+    print("RETENTION CURVES vs VIDEO LENGTH")
+    print("=" * 66)
+    for vid in video_ids:
+        meta = get(f"{BASE}/{vid}", {"access_token": TOKEN,
+                                     "fields": "length,title,description"})
+        length = meta.get("length")
+        res = get(f"{BASE}/{vid}/video_insights",
+                  {"access_token": TOKEN, "metric": "post_video_retention_graph"})
+        try:
+            curve = res["data"][0]["values"][0]["value"]
+        except Exception:
+            print(f"\n  {vid}: no retention graph")
+            continue
+        keys = sorted(curve, key=lambda k: int(k))
+        pts = [curve[k] for k in keys]
+        title = (meta.get("description") or meta.get("title") or "")[:44].replace("\n", " ")
+        print(f"\n  video {vid} · length {length}s · {len(keys)} buckets")
+        print(f"    {title}")
+        if length and len(keys):
+            print(f"    -> {float(length) / len(keys):.2f}s per bucket")
+        print("    " + " ".join(f"{v * 100:5.1f}" for v in pts[:24]))
+        if len(pts) >= 2:
+            print(f"    hook {pts[0] * 100:.1f}% -> {pts[1] * 100:.1f}%"
+                  f"   |  still watching at the end: {pts[-1] * 100:.1f}%")
+
 
 if __name__ == "__main__":
     main()
