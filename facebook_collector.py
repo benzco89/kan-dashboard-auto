@@ -77,6 +77,28 @@ def _insight(obj_id, metric, endpoint="insights"):
         return 0
 
 
+def _insight_raw(obj_id, metric, endpoint="insights"):
+    """כמו _insight, אבל מחזיר את הערך כמות שהוא.
+
+    _insight מפעיל _flatten_value, שמסכם דיקט לסכום אחד - נכון ל-paid/organic
+    ולא נכון לעקומת נטישה, שהיא דיקט של מקטע->אחוז. בלי זה הקריאה הראשונה
+    להריץ החזירה 0 בכל שורה.
+    """
+    params = {'access_token': ACCESS_TOKEN, 'metric': metric}
+    if endpoint == "insights":
+        params['period'] = 'lifetime'
+    try:
+        res = http_get_json(f"https://graph.facebook.com/{API_VERSION}/{obj_id}/{endpoint}",
+                            params=params, timeout=15, max_retries=2)
+        if 'error' in res:
+            return None
+        data = res.get('data', [])
+        values = data[0].get('values', []) if data else []
+        return values[0].get('value') if values else None
+    except Exception:
+        return None
+
+
 def get_video_id(post):
     """Extract the underlying video object id from a post's attachment (for video_insights)."""
     try:
@@ -109,9 +131,24 @@ def get_video_insights(video_id):
       plays           = blue_reels_play_count  (fallback: total_video_views לוידאו רגיל)
       avg_watch_sec   = post_video_avg_time_watched  (ms -> sec)
       total_watch_min = post_video_view_time          (ms -> min)
-      views_30s       = total_video_30s_views (זמין לוידאו רגיל; לרילז מוחזר 0)
+      views_30s       = total_video_30s_views — הוסר מ-v25, נשאר 0 לתאימות עמודות
+
+    נוסף 26.7.2026 אחרי probe (fb_video_probe.py) שמנה את כל מה ש-video_insights
+    מחזיר היום לרילז. total_video_30s_views אינו קיים יותר, ולכן completion_rate
+    היה 0 בכל שורה מאז 6.12.2025 - אבל במקומו יש משהו טוב יותר:
+      retention       = post_video_retention_graph — עקומת נטישה מלאה
+      replays         = fb_reels_replay_count      — צפיות חוזרות
+      total_plays     = fb_reels_total_plays       — כולל חוזרות
+      duration_sec    = length של אובייקט הוידאו
+
+    העקומה מחולקת למקטעים של ~0.9 שניות, עד תקרה של 41 - כלומר רילס של 20 שניות
+    מקבל מקטע לשנייה וסרטון של 14 דקות מקבל מקטע ל-21 שניות. לכן "ההפרש בין
+    המקטע הראשון לשני" מודד אורך ולא איכות (בכל הרילסים הקצרים הוא 99.7->99.8),
+    והמדדים הנגזרים דוגמים בשנייה קבועה: retention_3s ו-retention_end.
     """
-    result = {'plays': 0, 'avg_watch_sec': 0, 'views_30s': 0, 'total_watch_min': 0}
+    result = {'plays': 0, 'avg_watch_sec': 0, 'views_30s': 0, 'total_watch_min': 0,
+              'replays': 0, 'total_plays': 0, 'duration_sec': 0,
+              'retention_3s': 0, 'retention_end': 0}
     if not video_id:
         return result
 
@@ -126,9 +163,59 @@ def get_video_insights(video_id):
     total_ms = _insight(video_id, 'post_video_view_time', endpoint='video_insights')
     result['total_watch_min'] = round(total_ms / 60000, 1) if total_ms else 0
 
-    result['views_30s'] = _insight(video_id, 'total_video_30s_views', endpoint='video_insights')
+    # total_video_30s_views לא קיים יותר ב-v25 - הקריאה הוסרה, העמודה נשארת 0
+    # כדי לא לשנות את מבנה הגיליון ההיסטורי
+
+    result['replays'] = _insight(video_id, 'fb_reels_replay_count', endpoint='video_insights')
+    result['total_plays'] = _insight(video_id, 'fb_reels_total_plays', endpoint='video_insights')
+
+    length = _video_length(video_id)
+    result['duration_sec'] = round(length, 1) if length else 0
+
+    curve = _insight_raw(video_id, 'post_video_retention_graph', endpoint='video_insights')
+    if isinstance(curve, dict) and curve:
+        r3, rend = _retention_points(curve, length)
+        result['retention_3s'] = r3
+        result['retention_end'] = rend
 
     return result
+
+
+def _video_length(video_id):
+    """אורך הוידאו בשניות. נדרש כדי לדעת כמה שניות יש במקטע של העקומה."""
+    try:
+        res = http_get_json(f"https://graph.facebook.com/{API_VERSION}/{video_id}",
+                            params={'access_token': ACCESS_TOKEN, 'fields': 'length'},
+                            timeout=15, max_retries=2)
+        return float(res.get('length') or 0)
+    except Exception:
+        return 0
+
+
+def _retention_points(curve, length):
+    """(אחוז שעדיין צפו בשנייה ה-3, אחוז שנשארו עד הסוף).
+
+    השנייה ה-3 ולא "המקטע השני": רוחב המקטע תלוי באורך הסרטון, ולכן השוואה לפי
+    מקטע היא השוואת אורכים. בלי אורך ידוע מחזירים 0 ל-3 השניות במקום לנחש.
+    """
+    try:
+        keys = sorted(curve, key=lambda k: int(k))
+    except (TypeError, ValueError):
+        return 0, 0
+    pts = [float(curve[k] or 0) for k in keys]
+    if not pts:
+        return 0, 0
+    end = round(pts[-1] * 100, 1)
+    if not length or len(pts) < 2:
+        return 0, end
+    per_bucket = length / len(pts)
+    # ברזולוציה גסה מ-3 שניות, השנייה השלישית נופלת בתוך המקטע הראשון ואי אפשר
+    # לקרוא אותה - מחזירים 0 ("לא נמדד") ולא 99.8% מטעה. בפועל המקטע הוא ~0.9
+    # שניות בכל סרטון קצר מ-37 שניות, כלומר בכל הרילז.
+    if per_bucket > 3.0:
+        return 0, end
+    idx = min(len(pts) - 1, max(0, int(round(3.0 / per_bucket))))
+    return round(pts[idx] * 100, 1), end
 
 
 REACTION_TYPES = ['LOVE', 'HAHA', 'WOW', 'SAD', 'ANGRY']
@@ -236,7 +323,10 @@ def fetch_facebook_data():
             clicks = base['clicks']
 
             # 2. מדדי וידאו/רילז (watch-time) מאובייקט הוידאו
-            video = {'plays': 0, 'avg_watch_sec': 0, 'views_30s': 0, 'total_watch_min': 0}
+            # פוסט שאינו וידאו - אותן מפתחות בדיוק, כדי שהשורה תיבנה תמיד.
+            # שני מקומות שמייצרים את אותו דיקט הם בדיוק הסוג של הכפילות
+            # שנשברת כשמוסיפים שדה, ולכן ברירת המחדל נלקחת מהפונקציה עצמה.
+            video = get_video_insights(None)
             if media_type in ['Video', 'Reel']:
                 video = get_video_insights(get_video_id(post))
                 # אם post_media_view לא החזיר צפיות לריל, ניפול למספר ה-plays
@@ -276,6 +366,11 @@ def fetch_facebook_data():
                 'total_watch_min': video['total_watch_min'],
                 'avg_watch_sec': video['avg_watch_sec'],
                 'completion_rate': completion_rate,
+                'duration_sec': video['duration_sec'],
+                'retention_3s': video['retention_3s'],
+                'retention_end': video['retention_end'],
+                'replays': video['replays'],
+                'total_plays': video['total_plays'],
                 'likes': public['likes'],
                 'love': public['love'],
                 'haha': public['haha'],
@@ -341,7 +436,9 @@ def save_to_sheets(new_df):
             cols=['reach', 'clicks', 'views', 'views_30s', 'total_watch_min',
                   'avg_watch_sec', 'completion_rate', 'likes', 'comments',
                   'shares', 'total_engagement', 'engagement_rate',
-                  'love', 'haha', 'wow', 'sad', 'angry']
+                  'love', 'haha', 'wow', 'sad', 'angry',
+                  'duration_sec', 'retention_3s', 'retention_end',
+                  'replays', 'total_plays']
         )
 
         # חישוב דלתא לצפיות
