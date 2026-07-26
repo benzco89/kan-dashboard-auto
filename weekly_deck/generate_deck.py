@@ -2544,9 +2544,17 @@ def content_to_context(content, thumbstyle='portrait'):
         # rows. On X those headlines are the tweets themselves, so the words win.
         # (A programme an editor typed by hand is still never hidden; on a narrow
         # slide that is the one case where a headline can reach the ellipsis.)
+        # On a WIDE table the column is free: headline_cap already reserves its
+        # 172px, so hiding it does not lengthen a single headline — it only
+        # throws away a programme we know. One row is enough there.
+        # On a narrow table (X, or any slide in --thumbstyle blur) it costs ~15
+        # characters off EVERY headline to label a few rows, and on X those
+        # headlines are the tweets themselves. (A programme an editor typed by
+        # hand is never hidden anywhere — on a narrow slide that is the one case
+        # where a headline can reach the browser ellipsis.)
         narrow = (key in NO_THUMBS) or thumbstyle != 'portrait'
         show_program = any(r['prog_stated'] for r in rows) or (
-            not narrow and sum(1 for r in rows if r['program']) >= 2)
+            not narrow and any(r['program'] for r in rows))
 
         top3 = []
         for n, it in enumerate(p.get('top', [])[:3]):

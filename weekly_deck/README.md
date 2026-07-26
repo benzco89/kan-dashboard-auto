@@ -107,7 +107,7 @@ prior Sun–Sat is the baseline for week-over-week deltas. Running Tue 2026-07-2
   (see *Interactions, not an engagement %* below) + its own **חריג column** saying
   *what* is unusual about an item — shares, comments, likes or engagement at
   3x or more of a normal post's **rate** that week, shown as e.g.
-  `🔁 שיתופים פי 3.4` (empty on most rows, and capped at 4 badges per slide). Rates, not absolute counts: the top-10
+  `🔁 פי 3.4 שיתופים` (empty on most rows, and capped at 4 badges per slide). Rates, not absolute counts: the top-10
   are the week's biggest posts by definition, so comparing raw counts would flag
   almost every row and only restate the views column. Comparing
   interactions-per-view instead surfaces the post that punched above its own
@@ -237,6 +237,10 @@ than the rest. Two things give the tweets their text back there:
   On X those headlines *are* the tweets. (A programme an editor typed by hand is
   still never hidden; on a narrow slide that is the one case where a headline can
   reach the browser ellipsis.)
+
+  On a **wide** table the column is free — `headline_cap` reserves its 172px
+  either way — so there one tagged row is enough to show it. Hiding it would
+  throw away a programme we know and lengthen nothing.
 - **22px rows instead of 25px**, which buys another ~14%.
 
 Together: 30 characters → **49**.
