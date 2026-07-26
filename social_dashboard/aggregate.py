@@ -39,17 +39,27 @@ def _num(x):
 
 
 def _curve(raw):
-    """'998,915,608' -> [99.8, 91.5, 60.8]. The collector stores per-mille
-    integers to keep the cell short; the browser wants percentages."""
+    """'998|915|608' -> [99.8, 91.5, 60.8]. Per-mille integers keep the cell
+    short; the browser wants percentages.
+
+    Pipe-separated, not comma: worksheet.update writes USER_ENTERED and Sheets
+    read '998,915,608' as a number with thousands separators, swallowing the
+    commas. Commas are still accepted so a row written before that is at least
+    parsed rather than mis-parsed — and any bucket over 100% is rejected
+    outright, which is exactly what a collapsed value looks like."""
+    text = str(raw or "").replace(",", "|")
     out = []
-    for part in str(raw or "").split(","):
+    for part in text.split("|"):
         part = part.strip()
         if not part:
             continue
         try:
-            out.append(round(int(part) / 10, 1))
+            v = int(part) / 10
         except ValueError:
             return []
+        if v > 100:          # a retention share cannot exceed 100%
+            return []
+        out.append(round(v, 1))
     return out
 
 
