@@ -51,6 +51,26 @@ python weekly_reporter.py
 
 **Warning**: Running collectors locally will add duplicate rows to the Google Sheets and interfere with daily reports.
 
+## Verifying a collector change
+
+A green collector run proves it did not crash. It does **not** prove it wrote
+anything. On 2026-07-26 three separate changes each produced a successful run
+that had quietly written zeros, swallowed separators, or slid 230 historical
+rows one column sideways — all three were found by hand, by opening the sheet.
+
+So: snapshot before, diff after.
+
+```bash
+python verify_collector.py snap facebook       # before
+gh workflow run test_facebook.yml --ref my-branch
+python verify_collector.py check facebook      # after — exit 1 if anything looks wrong
+```
+
+It reports columns that moved position (the rows are written positionally, so a
+column inserted mid-header renames every value after it), columns that arrived
+or went empty, fill rates that dropped, and individual values that turned blank.
+`test_verify_collector.py` replays the three real incidents against it.
+
 ## Environment Variables
 
 Required secrets (configured in GitHub Actions):

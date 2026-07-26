@@ -64,3 +64,4 @@ mintty.*.png
 # Scoped to spreadsheets rather than to docs/, which holds tracked docs too.
 *.xlsx
 *.xls
+.verify/
