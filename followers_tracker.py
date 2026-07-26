@@ -55,7 +55,7 @@ HEADERS = [
     'ig_followers',
     'ig_followers_change',
     'ig_daily_reach',
-    'ig_daily_impressions',
+    'ig_daily_views',
     # Twitter / X
     'tw_followers',
     'tw_followers_change',
@@ -64,6 +64,9 @@ HEADERS = [
     'tt_followers',
     'tt_followers_change',
     'tt_video_count',
+    # חדשות נכנסות רק בסוף: השורות נכתבות לפי מיקום, אז עמודה
+    # שנדחפת באמצע מזיזה את כל הנתונים ההיסטוריים לכותרת השכנה.
+    'ig_website_clicks',
 ]
 
 # --- Helper Functions ---
@@ -158,59 +161,63 @@ def get_facebook_stats():
 
     return None
 
-def get_facebook_daily_insights():
-    """משיכת נתונים יומיים ברמת הדף"""
-    access_token = os.environ.get('FACEBOOK_TOKEN')
-    if not access_token:
-        return None
+def _one_insight(obj_id, metric, extra=None):
+    """Fetch ONE insight metric. Returns 0 on any error.
 
+    The whole point: this function used to ask for five metrics in a single
+    call, and Meta fails the entire request when one name is no longer valid.
+    page_impressions_unique was removed on 2026-06-15 and took page_fan_adds,
+    page_fan_removes, page_post_engagements and page_video_views down with it —
+    four columns empty in all 230 rows of the sheet, for eight months, with no
+    error anywhere. facebook_collector already fetches one metric at a time for
+    exactly this reason; this is the same fix, applied where it was missing.
+    """
+    token = os.environ.get('FACEBOOK_TOKEN')
+    if not token:
+        return 0
+    params = {'access_token': token, 'metric': metric,
+              'period': 'day', 'date_preset': 'yesterday'}
+    params.update(extra or {})
     try:
-        url = f"https://graph.facebook.com/{FACEBOOK_API_VERSION}/{FACEBOOK_PAGE_ID}/insights"
-        params = {
-            'access_token': access_token,
-            'metric': ','.join([
-                'page_fan_adds',
-                'page_fan_removes',
-                'page_impressions_unique',
-                'page_post_engagements',
-                'page_video_views'
-            ]),
-            'period': 'day',
-            'date_preset': 'yesterday'
-        }
+        res = http_get_json(f"https://graph.facebook.com/{FACEBOOK_API_VERSION}/{obj_id}/insights",
+                            params=params)
+        if 'error' in res:
+            return 0
+        data = res.get('data') or []
+        if not data:
+            return 0
+        item = data[0]
+        # v25 answers account-level metrics under total_value and page-level
+        # ones under values; accept either rather than guessing per metric
+        tv = item.get('total_value')
+        if isinstance(tv, dict) and tv.get('value') is not None:
+            return tv.get('value') or 0
+        values = item.get('values') or []
+        return (values[0].get('value') or 0) if values else 0
+    except Exception:
+        return 0
 
-        res = http_get_json(url, params=params)
 
-        result = {
-            'fan_adds': 0,
-            'fan_removes': 0,
-            'daily_reach': 0,
-            'daily_engagements': 0,
-            'daily_video_views': 0
-        }
+def get_facebook_daily_insights():
+    """נתונים יומיים ברמת הדף, מטריקה-מטריקה.
 
-        if 'data' in res:
-            for item in res['data']:
-                name = item.get('name')
-                values = item.get('values', [])
-                value = values[0].get('value', 0) if values else 0
-
-                if name == 'page_fan_adds':
-                    result['fan_adds'] = value
-                elif name == 'page_fan_removes':
-                    result['fan_removes'] = value
-                elif name == 'page_impressions_unique':
-                    result['daily_reach'] = value
-                elif name == 'page_post_engagements':
-                    result['daily_engagements'] = value
-                elif name == 'page_video_views':
-                    result['daily_video_views'] = value
-
-        return result
-
-    except Exception as e:
-        print(f"❌ Facebook Daily Insights Error: {e}")
+    שמות מאומתים מול הדף ב-v25 (followers_probe.py, 26.7.2026):
+      page_daily_follows            מחליף את page_fan_adds שהוסר
+      page_total_media_view_unique  מחליף את page_impressions_unique שהוסר
+      page_post_engagements         עבד כל הזמן — נפל רק כי היה באותה קריאה
+      page_video_views              כנ"ל
+    ל-page_fan_removes לא נמצא מחליף; הסרות עוקבים כנראה כבר לא נחשפות.
+    """
+    if not os.environ.get('FACEBOOK_TOKEN'):
         return None
+    return {
+        'fan_adds': _one_insight(FACEBOOK_PAGE_ID, 'page_daily_follows'),
+        'fan_removes': 0,
+        'daily_reach': _one_insight(FACEBOOK_PAGE_ID, 'page_total_media_view_unique'),
+        'daily_engagements': _one_insight(FACEBOOK_PAGE_ID, 'page_post_engagements'),
+        'daily_video_views': _one_insight(FACEBOOK_PAGE_ID, 'page_video_views'),
+    }
+
 
 # --- Instagram Functions ---
 
@@ -281,53 +288,29 @@ def get_instagram_stats():
 
 
 def get_instagram_daily_insights():
-    """משיכת נתונים יומיים של אינסטגרם"""
-    access_token = os.environ.get('FACEBOOK_TOKEN')
-    if not access_token:
+    """נתונים יומיים ברמת החשבון, מטריקה-מטריקה.
+
+    `impressions` הוסר, וכיוון שהוא נמשך באותה קריאה עם `reach` — גם reach חזר
+    ריק. המחליף הוא `views`.
+
+    צירוף הפרמטרים אינו שרירותי: date_preset=yesterday עם metric_type=total_value
+    מחזיר מספר לכל המטריקות, בעוד since/until מחזיר רק חלק מהן (נמדד בפרוב).
+
+    website_clicks הוא היחיד שאומר כמה אנשים עברו מאינסטגרם לאתר — הוא לא קיים
+    ברמת פוסט בשום סוג מדיה, רק כאן.
+    """
+    if not os.environ.get('FACEBOOK_TOKEN'):
         return None
-    
-    ig_account_id = get_instagram_account_id()
-    if not ig_account_id:
+    ig = get_instagram_account_id()
+    if not ig:
         return None
-    
-    try:
-        url = f"https://graph.facebook.com/{FACEBOOK_API_VERSION}/{ig_account_id}/insights"
-        params = {
-            'access_token': access_token,
-            'metric': 'reach,impressions',
-            'period': 'day',
-            'metric_type': 'total_value'
-        }
-        
-        res = http_get_json(url, params=params)
-        
-        result = {
-            'daily_reach': 0,
-            'daily_impressions': 0
-        }
-        
-        if 'data' in res:
-            for item in res['data']:
-                name = item.get('name')
-                # לפי API v24+, total_value הוא בפורמט שונה
-                total_value = item.get('total_value', {})
-                value = total_value.get('value', 0) if isinstance(total_value, dict) else 0
-                
-                # אם אין total_value, ננסה את values הישן
-                if value == 0:
-                    values = item.get('values', [])
-                    value = values[-1].get('value', 0) if values else 0
-                
-                if name == 'reach':
-                    result['daily_reach'] = value
-                elif name == 'impressions':
-                    result['daily_impressions'] = value
-        
-        return result
-        
-    except Exception as e:
-        print(f"❌ Instagram Daily Insights Error: {e}")
-        return None
+    extra = {'metric_type': 'total_value'}
+    return {
+        'daily_reach': _one_insight(ig, 'reach', extra),
+        'daily_views': _one_insight(ig, 'views', extra),
+        'website_clicks': _one_insight(ig, 'website_clicks', extra),
+    }
+
 
 # --- Twitter / X Functions ---
 
@@ -512,7 +495,7 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
         instagram_stats['followers'] if instagram_stats else '',
         ig_followers_change if instagram_stats else '',
         ig_daily.get('daily_reach', ''),
-        ig_daily.get('daily_impressions', ''),
+        ig_daily.get('daily_views', ''),
         # Twitter / X
         twitter_stats['followers'] if twitter_stats else '',
         tw_followers_change if twitter_stats else '',
@@ -521,6 +504,8 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
         tiktok_stats['followers'] if tiktok_stats else '',
         tt_followers_change if tiktok_stats else '',
         tiktok_stats['video_count'] if tiktok_stats else '',
+        # בסוף השורה, בהתאמה לסוף ה-HEADERS
+        ig_daily.get('website_clicks', ''),
     ]
     
     # בדיקה אם כבר יש שורה להיום
@@ -550,7 +535,7 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
     if instagram_stats:
         print(f"📸 Instagram: {instagram_stats['followers']:,} followers ({ig_followers_change:+,})")
         if ig_daily:
-            print(f"   Daily: {ig_daily.get('daily_reach', 0):,} reach, {ig_daily.get('daily_impressions', 0):,} impressions")
+            print(f"   Daily: {ig_daily.get('daily_reach', 0):,} reach, {ig_daily.get('daily_views', 0):,} views, {ig_daily.get('website_clicks', 0):,} site clicks")
     if twitter_stats:
         print(f"🐦 Twitter: {twitter_stats['followers']:,} followers ({tw_followers_change:+,})")
     if tiktok_stats:
