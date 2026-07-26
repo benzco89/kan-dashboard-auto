@@ -134,14 +134,18 @@ html,body{margin:0;padding:0;background:#f4f4f4}
   <div style="font-size:21px;color:{{ meta_c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;unicode-bidi:plaintext">{{ row.reporter }}</div>
   {% if p.show_program %}<div style="font-size:19px;color:{{ meta_c }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;unicode-bidi:plaintext">{{ row.program }}</div>{% endif %}
   <div class="mono" style="text-align:left;font-size:{{ v_fs }};font-weight:{{ v_fw }}">{{ row.views_fmt }}</div>
-  <div style="text-align:left;font-size:25px;color:#404040">{{ row.eng_str }}</div>
+  {% for c in row.cells %}<div class="mono" style="text-align:left;font-size:23px;color:#404040">{{ c }}</div>{% endfor %}
   <div style="text-align:left">{% if row.anomaly %}<span style="display:inline-flex;align-items:center;gap:5px;font-size:18px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:3px 10px;white-space:nowrap"><span style="font-size:17px">{{ row.anomaly.icon }}</span>{{ row.anomaly.label }} {{ row.anomaly.mult }}</span>{% endif %}</div>
 </{{ "a" if row.url else "div" }}>
 {%- endmacro %}
 
 {% macro table_block(p) -%}
-{%- set cols = "46px 1fr 208px " + ("158px " if p.show_program else "") + "104px 92px 178px" -%}
-<div style="display:grid;grid-template-columns:{{ cols }};gap:14px;padding:0 18px 6px;font-size:20px;font-weight:700;color:#808080;letter-spacing:.03em"><div>#</div><div>כותרת</div><div>כתב/ת</div>{% if p.show_program %}<div>תוכנית</div>{% endif %}<div style="text-align:left">צפיות</div><div style="text-align:left">מעורבות</div><div style="text-align:left">חריג</div></div>
+{#- an emoji header is what buys the extra columns: "שיתופים" at 20px bold needs
+    ~75px, the number under it needs 78px, so a word header would have set the
+    column width and cost the כותרת column another 20px each. The icons are the
+    ones the חריג badge already uses, and the overview slide spells them out. -#}
+{%- set cols = "46px 1fr 208px " + ("158px " if p.show_program else "") + "104px " + ("78px " * (p.int_cols|length)) + "178px" -%}
+<div style="display:grid;grid-template-columns:{{ cols }};gap:14px;padding:0 18px 6px;font-size:20px;font-weight:700;color:#808080;letter-spacing:.03em"><div>#</div><div>כותרת</div><div>כתב/ת</div>{% if p.show_program %}<div>תוכנית</div>{% endif %}<div style="text-align:left">צפיות</div>{% for c in p.int_cols %}<div style="text-align:left;font-size:22px" title="{{ c.label }}">{{ c.icon }}</div>{% endfor %}<div style="text-align:left">חריג</div></div>
 <div style="display:flex;flex-direction:column;gap:4px;flex:1">
   {% for row in p.top10 %}{{ table_row(p, row, cols) }}{% endfor %}
 </div>
@@ -211,6 +215,12 @@ html,body{margin:0;padding:0;background:#f4f4f4}
   <div style="display:flex;align-items:center;gap:30px;flex-wrap:wrap;font-size:24px;color:#808080;margin-bottom:24px">
     <span style="display:inline-flex;align-items:center;gap:9px"><span style="font-size:19px;font-weight:700;color:#fff;background:#FF3300;border-radius:99px;padding:3px 12px">חריג</span> פריט שקיבל פי {{ anomaly_min }} ומעלה מהרגיל <b>ביחס לכמות הצפיות שלו</b></span>
     <span>↗ לחיצה על שורה בטבלה פותחת את הפריט המקורי</span>
+    <span style="flex-basis:100%;height:0"></span>
+    {#- no emoji inside the prose: an icon next to the Latin "X" is a neutral
+        character beside an LTR run, which is how it ends up on the wrong side
+        of the word. The icons stay in their own run, the caveats use words. -#}
+    <span>❤️ לייקים · 💬 תגובות · 🔁 שיתופים</span>
+    <span style="font-size:21px">בפייסבוק הלב סופר את כל הריאקציות · ב‑X השיתופים הם ריטוויטים וציטוטים</span>
   </div>
   <div style="display:grid;grid-template-columns:280px 1fr 155px 130px;gap:26px;padding:0 2px 16px;border-bottom:1px solid #e0e0e0;font-size:22px;font-weight:700;color:#808080;letter-spacing:.03em"><div>פלטפורמה</div><div>נתח מסך הצפיות</div><div>צפיות השבוע</div><div style="text-align:left">מגמה</div></div>
   <div style="flex:1;display:flex;flex-direction:column;justify-content:space-around;padding:10px 0">

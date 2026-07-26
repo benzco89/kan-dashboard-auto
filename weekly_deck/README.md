@@ -91,7 +91,8 @@ prior Sun–Sat is the baseline for week-over-week deltas. Running Tue 2026-07-2
 - **Cover** — hero = sum of weekly views across platforms, delta vs the prior week.
 - **Overview** — platforms ranked by weekly views; bar width = share of the top platform.
 - **Per-platform slides** (dynamic order by views) — top-3 highlight cards + a
-  top-10 table (square leading thumbnails) with its own **חריג column** saying
+  top-10 table (square leading thumbnails) with **one column per interaction**
+  (see *Interactions, not an engagement %* below) + its own **חריג column** saying
   *what* is unusual about an item — shares, comments, likes or engagement at
   3x or more of a normal post's **rate** that week, shown as e.g.
   `🔁 שיתופים פי 3.4` (empty on most rows, and capped at 4 badges per slide). Rates, not absolute counts: the top-10
@@ -134,6 +135,62 @@ when they were typed by hand. Write the words; never type the numbers.
 Platforms with no rows in the window keep their slide but show an honest empty
 state (no fabricated numbers).
 
+## Interactions, not an engagement %
+
+The table used to carry one `מעורבות` column. It was a lie of arithmetic: every
+collector had invented its own `engagement_rate`, so five slides showed five
+different measurements under one heading. Facebook divided
+(clicks + like + comments + shares) by **reach**; Instagram divided
+(likes + comments + saves + shares) by **reach**; TikTok and X divided by
+**views**. Measured over ~50 recent items per platform, **88% of Facebook's
+"engagement" was link clicks** — a published 10.6% against 1.2% of actual social
+interaction. A reader comparing the Facebook slide to the Instagram slide
+concluded the opposite of the truth.
+
+So the deck shows the counts themselves, one column each, and never a percent:
+
+| | ❤️ | 💬 | 🔁 |
+|---|---|---|---|
+| פייסבוק | **all six reactions** | תגובות | שיתופים |
+| אינסטגרם / טיקטוק | לייקים | תגובות | שיתופים |
+| X | לייקים | replies | **retweets + quotes** |
+| יוטיוב | לייקים | תגובות | — column absent |
+
+`social_dashboard/metrics.py` is the single definition, shared with the
+dashboard so the two can never drift again (it lives there because the VPS
+deploy rsyncs only `social_dashboard/`; `social_dashboard/test_metrics.py`
+locks it against real sheet rows). The **collectors are untouched** — the sheets
+keep their `engagement_rate` column, because the daily Telegram report prints it
+and the alert thresholds were calibrated on it.
+
+Facebook counts every reaction because the collector's `total_engagement` keeps
+only `likes` and drops love/haha/wow/sad/angry — a median 20% of reactions and
+up to 42% on one post. On a news page an angry reaction is not noise.
+
+Saves (Instagram, TikTok) get no column: Facebook, X and YouTube have no
+equivalent, and a number whose meaning changes between slides is the problem
+being fixed. They appear as a `נתון מעניין` instead.
+
+**The headers are emoji on purpose.** "שיתופים" at 20px bold needs ~75px, the
+number under it needs 78px — a word header would have set the column width and
+taken another 20px per column out of the כותרת column. The icons are the ones
+the חריג badge already uses, and the overview slide spells them out.
+
+**Nothing is lost by dropping the percent.** Raw counts in a table sorted by
+views mostly restate the views column — which is precisely why the חריג badge
+compares *rates* and not counts. The counts are the context; the badge is the
+signal. It still computes an engagement dimension, now defined as the sum of the
+three displayed columns over views, so no number in the deck can disagree with
+another.
+
+Cost, measured against the render rather than guessed: the כותרת column drops
+from 1042px to 872px (700px where the תוכנית column shows). No row that fitted
+before is clipped now — the three already-clipped X rows are clipped harder
+(X's table is the narrow one, sharing its row with the `נתון מעניין` panel).
+
+A `deck_content.json` extracted *before* this change still renders: its
+Facebook ❤️ figures are like-only until the next `--extract`.
+
 ## Headlines vs captions
 
 Kan captions are long and run past the headline. `--extract` stores both: the
@@ -141,8 +198,30 @@ rendered `title` is the **headline only** and `caption` keeps the first 400
 chars of the original for reference while editing.
 
 The headline is cut at the first 👇, line break or sentence end, then **capped**
-at 62 chars — the width the table column can actually show, measured against the
-render, not guessed.
+at the width the table column can actually show — derived from the grid, not
+guessed: `title_budget_px()` reproduces the column arithmetic of
+`template.html.j2` (it predicts Facebook's 656px column to the pixel) and
+`headline_cap()` divides it by a measured character width.
+
+| | budget | cap |
+|---|---|---|
+| פייסבוק / אינסטגרם / טיקטוק | 656px | 52 chars |
+| יוטיוב (two interaction columns) | 748px | 59 chars |
+| X (its table shares the row with the נתון מעניין panel) | 382px | 30 chars |
+
+The character width is the **p90** of 48 real rendered headlines (12.6px;
+median 11.6, max 13.5). The median would leave the widest tenth of headlines to
+be cut a second time by the browser — mid-word, which is exactly what the cap
+exists to prevent — and the max would shorten every row by 8 characters to
+protect 3% of them.
+
+The cap assumes the **תוכנית column is showing**, since that is decided per
+slide at render and the headline was cut at extract: sizing for the narrower
+case can only leave room to spare, never clip.
+
+Measured over a real week, end to end: 4 of 50 rows still reach the browser
+ellipsis, by at most 37px (≈3 characters). Before the interaction columns
+existed it was 8 rows and 202px, all of them on X.
 
 **Nothing is dropped.** An earlier version cut at the first clause boundary, on
 the theory that Kan writes `<hook>: <elaboration>` and the hook is the headline.
@@ -300,7 +379,34 @@ method cannot know: word overlap can tell that two posts share wording, not that
 they are the same story, and not that whoever is credited on one wrote the
 other. Showing the matched headline lets a human settle both in a glance.
 
-Rebuild that list at any time, offline, with:
+### The credit approval queue
+
+An `@handle` left in the כתב/ת column is a credit the deck could not turn into
+a name. Resolving it is a factual claim about a person, so it is never guessed
+— but it must not be re-asked every week either. `--extract` parks every such
+handle in `reporters_map.json` under `_pending` (the loader already ignores
+`_` keys), and one file then holds all three states:
+
+| | |
+|---|---|
+| `_pending` | proposed, waiting for a yes/no. `suggest` may be pre-filled |
+| top level | **approved** — the map itself, and what actually resolves names |
+| `_rejected` | answered "no". Never proposed again, and the reason is kept |
+
+```bash
+python weekly_deck/generate_deck.py --credits                  # show the queue
+python weekly_deck/generate_deck.py --credits ok @HGoldich     # take its `suggest`
+python weekly_deck/generate_deck.py --credits ok "@x=שם מלא"   # or name it here
+python weekly_deck/generate_deck.py --credits ok all
+python weekly_deck/generate_deck.py --credits no @kann_news "חשבון, לא אדם"
+```
+
+`no` also removes an existing approval, so it is how a wrong name gets undone.
+Everything is offline and needs no credentials. Because the answers live in a
+repo-tracked file, an approval given once holds for every future week — the
+queue only ever shows what is genuinely new.
+
+Rebuild the uncredited-items list at any time, offline, with:
 
 ```bash
 python weekly_deck/generate_deck.py --reporters-todo

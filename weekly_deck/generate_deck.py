@@ -51,6 +51,10 @@ FOLLOWERS_SHEET = "מעקב עוקבים"
 HERE = os.path.dirname(os.path.abspath(__file__))
 # הסקריפט יושב בתת-תיקייה; ה-utils של הריפו (http_get_json) יושב בשורש
 sys.path.insert(0, os.path.dirname(HERE))
+# metrics.py (מה נחשב אינטראקציה בכל פלטפורמה) משותף עם הדשבורד, ולכן יושב
+# תחת social_dashboard/ — הדיפלוי לשרת מסנכרן רק את התיקייה הזאת.
+sys.path.append(os.path.join(os.path.dirname(HERE), "social_dashboard"))
+import metrics  # noqa: E402
 FONTS_DIR = os.path.join(HERE, "design", "fonts")
 ASSETS_DIR = os.path.join(HERE, "design", "assets")
 OUT_DIR = os.path.join(HERE, "out")
@@ -126,6 +130,23 @@ def fmt_num(x):
     else:
         s = str(int(round(x)))
     return s
+
+
+def fmt_count(x):
+    """Interaction counts, which live in the hundreds and low thousands where
+    fmt_num destroys information: 1,624 תגובות must not print as '2K'. Views
+    keep fmt_num — nobody needs the last 400 views of 1.7M, but the difference
+    between 1,624 comments and 2,000 is the whole point of the column."""
+    try:
+        x = float(x)
+    except (TypeError, ValueError):
+        return "0"
+    n = abs(x)
+    if n >= 1_000_000:
+        return f"{x/1_000_000:.1f}M".replace(".0M", "M")
+    if n >= 10_000:
+        return f"{round(x/1000)}K"
+    return f"{int(round(x)):,}"
 
 
 def split_suffix(s):
@@ -531,6 +552,49 @@ def trim_to_clause(s, cap):
     return (cut[:sp] if sp > cap * 0.6 else cut).rstrip(" -–—|,:;") + "…"
 
 
+# --- how many characters the כותרת column can actually show -----------------
+# Every number below is the grid in template.html.j2; keep the two in step. The
+# only measured constant is the character width, taken off the rendered deck
+# over 48 real headlines: median 11.6px, p90 12.6px, max 13.5px for Hebrew in
+# the title cell at 25-26px SimplerPro. The p90 is the one used — the median
+# leaves the widest tenth of headlines to be cut a second time by the browser,
+# and the max would shorten every row by 8 characters to protect 3% of them.
+# The arithmetic was checked against the render: it predicts Facebook's 656px
+# column to the pixel.
+#
+# The cap exists so a headline that does not fit is cut ONCE, on a clause
+# boundary, with a "…" that says text was dropped. Without it the browser
+# ellipsis cuts a second time, mid-word, wherever the pixel runs out.
+_PX_PER_CHAR = 12.6
+_SLIDE_INNER = 1920 - 2 * 72      # slide padding
+_TABLE_PAD, _GAP = 2 * 18, 14
+_FUNFACT = 296 + 22               # panel beside the table (X and --thumbstyle blur)
+_THUMB = 34 + 10                  # square row thumbnail + its gap
+_COL = dict(rank=46, reporter=208, views=104, anomaly=178, program=158, interaction=78)
+
+
+def title_budget_px(key, n_int_cols, wide_table=True, show_program=True):
+    """Pixels the headline gets on one slide, from the grid that renders it."""
+    w = _SLIDE_INNER - (0 if wide_table else _FUNFACT) - _TABLE_PAD
+    cols = [_COL['rank'], _COL['reporter'], _COL['views'], _COL['anomaly']]
+    cols += [_COL['interaction']] * n_int_cols
+    if show_program:
+        cols.append(_COL['program'])
+    w -= sum(cols) + _GAP * len(cols)   # n fixed columns + the title = n gaps
+    return w - (0 if key in NO_THUMBS else _THUMB)
+
+
+def headline_cap(key, thumbstyle='portrait'):
+    """Assumes the תוכנית column IS showing: it appears per slide and only at
+    render, so sizing for the narrower case can only ever leave room to spare —
+    never clip. X pays the most (its table shares the row with the נתון מעניין
+    panel), which is why X headlines were already being clipped before the
+    interaction columns existed."""
+    wide = (key not in NO_THUMBS) and thumbstyle == 'portrait'
+    px = title_budget_px(key, len(metrics.display_columns(key)), wide)
+    return max(28, int(px / _PX_PER_CHAR))
+
+
 def headline_of(text, reporter="", cap=62):
     """The leading headline of a caption — what the table and cards show.
     Deliberately does NOT cut at ':' unconditionally — in Kan headlines the colon
@@ -619,8 +683,11 @@ def load_programs_map():
     except Exception as e:
         print(f"   ⚠️ could not read programs_map.json: {e}")
         return {}
-    return {str(k).lstrip('#').lower(): str(v) for k, v in data.items()
-            if v and not str(k).startswith('_')}
+    # An empty value is kept on purpose: like reporters_overrides.json, "" means
+    # "checked — this tag is not a programme", which stops it being reported as
+    # unmapped every single week.
+    return {str(k).lstrip('#').lower(): str(v or '') for k, v in data.items()
+            if not str(k).startswith('_')}
 
 
 def resolve_program(text, pmap):
@@ -639,7 +706,10 @@ def resolve_program(text, pmap):
     if m:
         cand = m.group(1).strip(' "\'״”')
         if cand and not any(w in cand for w in _NOT_A_PROGRAM):
-            return pmap.get(cand.lower(), cand), 'dated'
+            # a name the map explicitly marks "" is a rejected tag, not a hit
+            named = pmap.get(cand.lower(), cand)
+            if named:
+                return named, 'dated'
     for m in _PROGRAM_LOOSE_RE.finditer(s):
         cand = m.group(1).strip(' "\'״”').lower()
         if pmap.get(cand):          # undated: the name still has to be known
@@ -990,7 +1060,7 @@ def enrich_full_text(key, items, fb_token, yt_key, rmap, pmap):
                 gained += 1
                 # the headline drops the credit it came from, so it has to be
                 # re-derived now that the credit is finally known
-                it['title'] = headline_of(it['_raw'], res['name'])
+                it['title'] = headline_of(it['_raw'], res['name'], cap=headline_cap(key))
         if not it.get('program'):
             name, src = resolve_program(it['_raw'], pmap)
             if name:
@@ -1002,19 +1072,33 @@ def enrich_full_text(key, items, fb_token, yt_key, rmap, pmap):
 
 # ---------------------------------------------------------------- per platform
 
-def engagement_series(key, df):
-    """Percent engagement per row. Uses engagement_rate when present, else
-    derives it from the interaction columns the platform actually has."""
+def interaction_series(key, df, field):
+    """One interaction family for every row, summed per the shared spec in
+    metrics.py — so 'ריאקציות' on Facebook really is all six reactions, and
+    'ריטוויטים' on X is retweets plus quotes."""
     import pandas as pd
-    if 'engagement_rate' in df.columns:
-        er = to_num(df['engagement_rate'])
-        if er.sum() > 0:
-            return er
-    views = to_num(df['views']).replace(0, pd.NA)
-    inter = pd.Series(0, index=df.index, dtype='float64')
-    for col in ('likes', 'comments', 'shares', 'retweets', 'replies', 'quotes', 'saved', 'saves'):
+    out = pd.Series(0.0, index=df.index)
+    for col in metrics.columns_for(key, field):
         if col in df.columns:
-            inter = inter + to_num(df[col])
+            out = out + to_num(df[col])
+    return out
+
+
+def engagement_series(key, df):
+    """Social interactions per view, in percent.
+
+    Deliberately NOT the sheet's engagement_rate: that column means something
+    different on every platform (Facebook's is 88% link clicks, and it divides
+    by reach while TikTok and X divide by views). See social_dashboard/metrics.py.
+    This number is exactly the sum of the interaction columns the slide shows,
+    over the views column beside them — so nothing in the deck can disagree
+    with anything else in it.
+    """
+    import pandas as pd
+    views = to_num(df['views']).replace(0, pd.NA)
+    inter = pd.Series(0.0, index=df.index)
+    for field in metrics.ENGAGEMENT_FIELDS:
+        inter = inter + interaction_series(key, df, field)
     return (inter / views * 100).fillna(0)
 
 
@@ -1103,27 +1187,12 @@ def fun_fact_candidates(key, df):
     return c
 
 
-def _row_int(row, *cols):
-    """First present/non-zero of `cols` as an int (X calls them retweets/replies)."""
-    for c in cols:
-        try:
-            v = int(float(row.get(c, 0) or 0))
-        except (TypeError, ValueError):
-            v = 0
-        if v:
-            return v
-    return 0
-
-
-def _rate_median(df, views, *cols):
+def _rate_median(col, views):
     """Median interactions-per-view over the week's items that have views."""
-    for c in cols:
-        if c in df.columns:
-            col = to_num(df[c])
-            if col.sum() > 0:
-                r = col[views > 0] / views[views > 0]
-                if len(r):
-                    return round(float(r.median()), 6)
+    if col.sum() > 0:
+        r = col[views > 0] / views[views > 0]
+        if len(r):
+            return round(float(r.median()), 6)
     return 0.0
 
 
@@ -1170,6 +1239,12 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
         return out
 
     this_df = this_df.copy()
+    # every interaction family once, per the shared spec — the item rows and the
+    # week's medians must be built from the SAME numbers, or the חריג badge
+    # compares an all-reactions numerator against a like-only baseline and
+    # flags half the slide
+    for _f in metrics.ENGAGEMENT_FIELDS:
+        this_df['_' + _f] = interaction_series(key, this_df, _f)
     this_df['_eng'] = engagement_series(key, this_df)
     this_df = this_df.sort_values('views', ascending=False)
 
@@ -1184,7 +1259,7 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
         # both are resolved on the FULL raw text, never on the stored 400-char cut
         program, prog_src = resolve_program(raw, pmap)
         items.append(dict(id=str(r.get(idc, '')),
-                          title=headline_of(raw, reporter),
+                          title=headline_of(raw, reporter, cap=headline_cap(key)),
                           caption=clean_title(raw, 400),
                           reporter=reporter,
                           reporter_source=res['source'],
@@ -1194,9 +1269,9 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
                           _prog_src=prog_src,
                           _tags=unmapped_hashtags(raw, pmap),
                           views=int(r['views']),
-                          likes=_row_int(r, 'likes'),
-                          comments=_row_int(r, 'comments', 'replies'),
-                          shares=_row_int(r, 'shares', 'retweets'),
+                          likes=int(r['_likes']),
+                          comments=int(r['_comments']),
+                          shares=int(r['_shares']),
                           engagement=round(float(r['_eng']), 1),
                           thumb=None))
 
@@ -1214,9 +1289,7 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
     # post's rate instead.
     _v = to_num(this_df['views'])
     out['median_rates'] = dict(
-        likes=_rate_median(this_df, _v, 'likes'),
-        comments=_rate_median(this_df, _v, 'comments', 'replies'),
-        shares=_rate_median(this_df, _v, 'shares', 'retweets'),
+        {f: _rate_median(this_df['_' + f], _v) for f in metrics.ENGAGEMENT_FIELDS},
         engagement=round(float(this_df['_eng'].median()), 3) if len(this_df) else 0.0,
     )
 
@@ -1445,6 +1518,13 @@ def report_reporters(content):
     report_long_headlines(content)
     print("")
     report_programs(content)
+    # a handle left in the כתב/ת column is an open question, not a finished
+    # credit — park it where next week's run will still find it
+    added, waiting = enqueue_unresolved_handles(content)
+    if waiting:
+        report_credit_queue()
+        if added:
+            print(f"    ({added} חדשים נוספו לתור בהרצה הזאת)")
     print(bar)
     print("")
 
@@ -1763,6 +1843,175 @@ def report_programs(content):
             print("    #%-28s x%d" % (t, n))
 
 
+# --- the credit approval queue ----------------------------------------------
+# A handle in the כתב/ת column is a credit the deck could not turn into a name.
+# Resolving it is a factual claim about a person, so it is never guessed — but
+# it also must not be re-asked every week. The queue lives inside
+# reporters_map.json under `_pending` (the loader already skips `_` keys), so
+# one repo-tracked file holds the answer, the open questions and the refusals:
+#
+#   _pending   proposed, awaiting a yes/no. `suggest` may be pre-filled.
+#   top level  approved — this is the map itself, and it is what resolves names
+#   _rejected  answered "no". Never proposed again, and the reason is kept.
+#
+#   python weekly_deck/generate_deck.py --credits                 # show the queue
+#   python weekly_deck/generate_deck.py --credits ok @HGoldich    # take `suggest`
+#   python weekly_deck/generate_deck.py --credits ok "@x=שם מלא"  # or name it here
+#   python weekly_deck/generate_deck.py --credits ok all
+#   python weekly_deck/generate_deck.py --credits no @kann_news "חשבון, לא אדם"
+
+def load_map_raw():
+    try:
+        with open(REPORTERS_MAP_PATH, encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_map_raw(data):
+    """Names first (sorted, so a diff shows the one line that changed), then the
+    queue blocks. Any other `_` key an editor added is preserved."""
+    ordered = {k: v for k, v in sorted(data.items()) if not k.startswith('_')}
+    for meta in ('_pending', '_rejected'):
+        if data.get(meta):
+            ordered[meta] = data[meta]
+    for k, v in data.items():          # anything else an editor put here
+        if k.startswith('_') and k not in ordered:
+            ordered[k] = v
+    with open(REPORTERS_MAP_PATH, 'w', encoding='utf-8') as f:
+        json.dump(ordered, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+def _today():
+    return datetime.now(IL_TZ).strftime('%Y-%m-%d')
+
+
+def enqueue_unresolved_handles(content, suggestions=None):
+    """Every @handle still sitting in a כתב/ת column goes into the queue, so a
+    week's leftovers survive to the next run instead of scrolling past in a
+    terminal. Already-answered handles (approved or rejected) are skipped."""
+    data = load_map_raw()
+    pending = dict(data.get('_pending') or {})
+    known = {k.lstrip('@').lower() for k in data if not k.startswith('_')}
+    known |= {k.lstrip('@').lower() for k in (data.get('_rejected') or {})}
+    added = 0
+    for pl in content.get('platforms', []):
+        for it in pl.get('top', []):
+            h = (it.get('reporter') or '').strip()
+            if not h.startswith('@') or h.lstrip('@').lower() in known:
+                continue
+            row = pending.get(h) or dict(suggest=(suggestions or {}).get(h, ''),
+                                         first_seen=_today(), seen=0,
+                                         example=clean_title(it.get('title', ''), 60))
+            row['seen'] = int(row.get('seen') or 0) + 1
+            if h not in pending:
+                added += 1
+            pending[h] = row
+    if pending:
+        data['_pending'] = pending
+        save_map_raw(data)
+    return added, len(pending)
+
+
+def apply_map_to_content():
+    """Push newly approved names into the week that is already extracted.
+
+    The map is read at --extract, so without this an approval given after the
+    data was pulled would sit in the file while the deck kept printing the raw
+    @handle until next week's run — which is exactly when nobody would think to
+    look at it again."""
+    try:
+        content = load_content()
+    except Exception:
+        return 0
+    rmap = load_reporters_map()
+    n = 0
+    for p in content.get('platforms', []):
+        for it in p.get('top', []):
+            h = (it.get('reporter') or '').strip()
+            name = rmap.get(h.lstrip('@').lower()) if h.startswith('@') else None
+            if name:
+                it['reporter'] = name
+                it['reporter_source'] = 'credits'
+                n += 1
+    if n:
+        save_content(content)
+    return n
+
+
+def report_credit_queue():
+    pending = load_map_raw().get('_pending') or {}
+    if not pending:
+        return
+    print(f"\n  CREDIT QUEUE — {len(pending)} handles waiting for a yes/no:")
+    for h, row in sorted(pending.items(), key=lambda kv: -(kv[1].get('seen') or 0)):
+        sug = (row.get('suggest') or '').strip()
+        print(f"    {h:<22} {'→ ' + sug if sug else '(no suggestion yet)':<24}"
+              f" x{row.get('seen', 1)}  {row.get('example', '')}")
+    print('    approve:  --credits ok @handle   |   --credits ok "@handle=שם"')
+    print('    reject :  --credits no @handle "why"')
+
+
+def credits_command(argv):
+    """--credits [ok|no] [@handle|all ...] [reason]"""
+    data = load_map_raw()
+    pending = dict(data.get('_pending') or {})
+    rejected = dict(data.get('_rejected') or {})
+    action = (argv[0].lower() if argv else '')
+
+    if action not in ('ok', 'no'):
+        report_credit_queue()
+        if not pending:
+            print("  ✅ אין קרדיטים שממתינים לאישור")
+        return
+
+    targets, reason = [], ''
+    for a in argv[1:]:
+        if a.startswith('@') or a == 'all':
+            targets.append(a)
+        else:
+            reason = a
+    if targets == ['all']:
+        targets = list(pending)
+    if not targets:
+        print("  ⚠️  לא צוין handle. דוגמה: --credits ok @HGoldich")
+        return
+
+    done = 0
+    for t in targets:
+        handle, _, inline = t.partition('=')
+        row = pending.get(handle) or next(
+            (v for k, v in pending.items() if k.lower() == handle.lower()), None)
+        key = handle if handle in pending else next(
+            (k for k in pending if k.lower() == handle.lower()), handle)
+        if action == 'no':
+            rejected[key] = reason or 'לא אושר'
+            pending.pop(key, None)
+            data.pop(key, None)        # also the way to undo a wrong approval
+            print(f"  ✗ {key} נדחה" + (f" ({reason})" if reason else ""))
+            done += 1
+            continue
+        name = inline.strip() or ((row or {}).get('suggest') or '').strip()
+        if not name:
+            print(f"  ⚠️  {key}: אין שם לאשר — כתוב --credits ok \"{key}=השם\"")
+            continue
+        data[key] = name
+        pending.pop(key, None)
+        print(f"  ✓ {key} → {name}")
+        done += 1
+
+    data['_pending'] = pending
+    data['_rejected'] = rejected
+    save_map_raw(data)
+    print(f"\n  {done} עודכנו · {len(pending)} עדיין ממתינים · reporters_map.json נשמר")
+    print("  התשובות נשמרות בקובץ, אז אף אחת מהן לא תישאל שוב.")
+    if action == 'ok':
+        rows = apply_map_to_content()
+        if rows:
+            print(f"  ✏️  {rows} שורות בדק הנוכחי עודכנו — צריך רק --render")
+
+
 def write_reporters_todo(missing, suggestions=None):
     """A file the editor can work through: headline + link per uncredited item,
     then the exact JSON lines to paste into reporters_overrides.json. Leaving a
@@ -2029,13 +2278,17 @@ def _typical_rates(platform):
     return med
 
 
-def _anomaly_of(item, med_rates):
+def _anomaly_of(item, med_rates, platform_key=''):
     """The single most unusual thing about this item, or None for most rows.
     Compares RATES, so a post that is merely big does not flag - only one that
     got shared/discussed/liked far beyond what its own reach explains."""
     views = float(item.get('views') or 0)
+    # the badge names the same thing the column above it names: on Facebook that
+    # is ריאקציות (all six), on X it is ריטוויטים
+    col_label = {f: lbl for f, _i, lbl in metrics.display_columns(platform_key)}
     best = None
     for key, icon, label in ANOMALY_SPECS:
+        label = col_label.get(key, label)
         typical = float(med_rates.get(key) or 0)
         if typical <= 0:
             continue
@@ -2115,14 +2368,19 @@ def content_to_context(content, thumbstyle='portrait'):
         dl = build_delta(p.get('delta_pct'))
         rows = []
         meds = _typical_rates(p)
+        # Raw counts instead of one engagement %. The % meant something
+        # different on every slide (see social_dashboard/metrics.py) and a
+        # newsroom reads "52 שיתופים" without a footnote. The rate signal is
+        # not lost: it is what the חריג badge is computed from.
+        int_cols = metrics.display_columns(key)
         for n, it in enumerate(p.get('top', []), start=1):
             rows.append(dict(rank=n, title=_display_title(it), reporter=it.get('reporter', '') or '',
                              program=_row_program(it, pmap),
                              prog_stated=(it.get('_prog_src') == 'override'),
                              url=_row_url(key, it),
                              views_fmt=fmt_num(it.get('views', 0)),
-                             eng_str=f"{float(it.get('engagement', 0) or 0):.1f}%",
-                             highlight=(n <= 3), anomaly=_anomaly_of(it, meds),
+                             cells=[fmt_count(it.get(f, 0)) for f, _i, _l in int_cols],
+                             highlight=(n <= 3), anomaly=_anomaly_of(it, meds, key),
                              thumb=thumb_data_uri(it.get('thumb'))))
         _cap_anomalies(rows, p.get('key', ''))
         # An almost-empty column is worse than no column: it reads as missing
@@ -2159,6 +2417,7 @@ def content_to_context(content, thumbstyle='portrait'):
             has_data=bool(p.get('top')),
             text_cards=(key in NO_THUMBS),
             top3=top3, top10=rows, show_program=show_program,
+            int_cols=[dict(icon=i, label=l) for _f, i, l in int_cols],
             has_links=any(r['url'] for r in rows),
             has_anomaly=any(r['anomaly'] for r in rows),
             fun_fact=(dict(value=chosen['value'], suffix=chosen.get('suffix', ''),
@@ -2305,6 +2564,14 @@ def build_mock_content():
         ("תזכורת: שידור מיוחד הערב", 135_000, 2000, 300, 200, 2.9, dict(post_id="f9", type="Links", reach=250_000)),
         ("מזג האוויר לסוף השבוע", 110_000, 1500, 200, 120, 2.1, dict(post_id="f10", type="Images", reach=210_000)),
     ])
+    # Facebook's real shape, which the other platforms do not have: reactions
+    # are spread over six columns, and `clicks` dwarfs every one of them. Both
+    # are in the mock so the QA gate keeps proving that the ❤️ column sums all
+    # six and that nothing anywhere reads the clicks - the exact bug this table
+    # was rebuilt to remove.
+    fb['love'] = (fb['likes'] * 0.18).round().astype(int)
+    fb['angry'] = (fb['likes'] * 0.06).round().astype(int)
+    fb['clicks'] = (fb['views'] * 0.12).round().astype(int)
     x = rows([
         ("הציוץ שסיכם את מסיבת העיתונאים: \"אין הסכם בלי שחרור כל החטופים\"", 380_000, 4200, 300, 1600, 4.4, dict(tweet_id="x1", retweets=1600, replies=300, quotes=200, type="Text")),
         ("שרשור: כל מה שקרה היום בכנסת — 12 הצבעות, קואליציה מתפצלת", 240_000, 3000, 400, 1100, 5.7, dict(tweet_id="x2", retweets=1100, replies=400, quotes=150, type="Text")),
@@ -2424,7 +2691,15 @@ def main():
     ap.add_argument('--retitle', action='store_true',
                     help="re-derive every headline in deck_content.json from its caption and exit "
                          "(offline; OVERWRITES hand-edited titles)")
+    ap.add_argument('--credits', nargs='*', metavar='ARG',
+                    help="the credit approval queue. No args = show it. "
+                         "'ok @handle' / 'ok \"@handle=שם\"' / 'ok all' approve into "
+                         "reporters_map.json; 'no @handle \"סיבה\"' refuses it for good.")
     args = ap.parse_args()
+
+    if args.credits is not None:
+        credits_command(args.credits)
+        return
 
     if args.retitle:
         content = load_content()
@@ -2438,7 +2713,8 @@ def main():
                 # stored title is already that first line — this only re-applies
                 # the shortening rules on top of it.
                 new = headline_of(it.get('title', '') or it.get('caption') or '',
-                                  it.get('reporter') or '')
+                                  it.get('reporter') or '',
+                                  cap=headline_cap(p.get('key', '')))
                 if new and new != it.get('title'):
                     it['title'] = new
                     changed += 1
