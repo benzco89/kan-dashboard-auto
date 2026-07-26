@@ -24,7 +24,12 @@ html,body{margin:0;padding:0;background:#f4f4f4}
    them as neutrals, the RTL context swallows them and they surface on the wrong
    side of the number ("112%+" instead of "+112%"). Isolating each numeric run as
    LTR is the fix — it also keeps the run from reordering the Hebrew around it. */
-.ltr,.mono{direction:ltr;unicode-bidi:isolate}
+/* ...and direction:ltr has a second effect that is easy to miss: a block with no
+   text-align takes its START from its OWN direction, so every block-level number
+   drifted to the LEFT edge while the Hebrew label above it stayed on the right.
+   In an RTL deck the figure belongs on the right; on inline spans this does
+   nothing, so it is safe to set here once instead of on a dozen elements. */
+.ltr,.mono{direction:ltr;unicode-bidi:isolate;text-align:right}
 .mono{font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace}
 </style>
 </head>
@@ -103,8 +108,9 @@ html,body{margin:0;padding:0;background:#f4f4f4}
     {# the tall panel shares a fixed-height band with the highlight cards, so it
        carries two runners-up, not three — a third would be clipped, not read #}
     {% for m in (p.fun_fact_more[:2] if tall else p.fun_fact_more) %}<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:{% if tall %}9px{% else %}9px{% endif %} 0;border-top:1px solid rgba({{ p.colors.tint }},.24)">
-      <span style="font-size:{% if tall %}23px{% else %}20px{% endif %};color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ m.label }}</span>
-      <span class="mono" style="font-size:{% if tall %}31px{% else %}25px{% endif %};font-weight:700;color:#404040;white-space:nowrap">{{ m.value }}<span style="font-size:{% if tall %}21px{% else %}17px{% endif %};color:{{ p.colors.accent }}">{{ m.suffix }}</span></span>
+      {#- figure first, like the חריג badge: "10K שיתופים", not "שיתופים ... 10K" -#}
+      <span class="mono" style="font-size:{% if tall %}31px{% else %}25px{% endif %};font-weight:700;color:#404040;white-space:nowrap;flex-shrink:0">{{ m.value }}<span style="font-size:{% if tall %}21px{% else %}17px{% endif %};color:{{ p.colors.accent }}">{{ m.suffix }}</span></span>
+      <span style="font-size:{% if tall %}23px{% else %}20px{% endif %};color:#808080;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left">{{ m.label }}</span>
     </div>{% endfor %}
   </div>{% endif %}
 </div>{% endif %}
@@ -272,9 +278,16 @@ html,body{margin:0;padding:0;background:#f4f4f4}
   {#--- cards hug their content (align-items:start) so there is never a hole
        inside a card; without a story band they centre in the leftover space ---#}
   <div style="display:grid;grid-template-columns:repeat({{ learnings|length or 1 }},1fr);gap:24px;align-items:start;flex-shrink:0;margin:auto 0">
-    {% for c in learnings %}<div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:{% if story %}34px 32px 36px{% else %}44px 40px{% endif %};display:flex;flex-direction:column;overflow:hidden">
-      <div style="font-size:{% if story %}37px{% else %}51px{% endif %};line-height:1">{{ c.icon }}</div>
-      {% if c.number %}<div class="mono" style="font-size:{% if story %}59px{% else %}88px{% endif %};font-weight:700;line-height:.9;color:{{ c.color }};margin-top:{% if story %}10px{% else %}20px{% endif %}">{{ c.number_main }}<span style="font-size:{% if story %}37px{% else %}53px{% endif %}">{{ c.number_suffix }}</span></div>{% endif %}
+    {#- text-align is explicit because .mono carries direction:ltr, and a block
+        with no text-align takes its START from its own direction — which put the
+        number on the left of every card while the icon stayed on the right. -#}
+    {% for c in learnings %}<div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:{% if story %}34px 32px 36px{% else %}44px 40px{% endif %};display:flex;flex-direction:column;overflow:hidden;text-align:right">
+      {#- the figure leads (RTL start) and the icon closes the line: stacked, the
+          number sat under the icon and pulled the eye across the card. -#}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        {% if c.number %}<div class="mono" style="font-size:{% if story %}59px{% else %}88px{% endif %};font-weight:700;line-height:.9;color:{{ c.color }}">{{ c.number_main }}<span style="font-size:{% if story %}37px{% else %}53px{% endif %}">{{ c.number_suffix }}</span></div>{% else %}<div></div>{% endif %}
+        <div style="font-size:{% if story %}37px{% else %}51px{% endif %};line-height:1;flex-shrink:0">{{ c.icon }}</div>
+      </div>
       <div style="font-size:{% if story %}29px{% else %}37px{% endif %};font-weight:900;line-height:1.2;letter-spacing:-.01em;margin-top:{% if story %}14px{% else %}22px{% endif %};text-wrap:pretty">{{ c.title }}</div>
       <div style="margin-top:12px;font-size:{% if story %}21px{% else %}25px{% endif %};color:#808080;line-height:1.55;text-wrap:pretty">{{ c.sentence }}</div>
     </div>{% endfor %}
