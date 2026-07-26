@@ -56,7 +56,6 @@ HEADERS = [
     'ig_followers_change',
     'ig_daily_reach',
     'ig_daily_views',
-    'ig_website_clicks',
     # Twitter / X
     'tw_followers',
     'tw_followers_change',
@@ -65,6 +64,9 @@ HEADERS = [
     'tt_followers',
     'tt_followers_change',
     'tt_video_count',
+    # חדשות נכנסות רק בסוף: השורות נכתבות לפי מיקום, אז עמודה
+    # שנדחפת באמצע מזיזה את כל הנתונים ההיסטוריים לכותרת השכנה.
+    'ig_website_clicks',
 ]
 
 # --- Helper Functions ---
@@ -494,7 +496,6 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
         ig_followers_change if instagram_stats else '',
         ig_daily.get('daily_reach', ''),
         ig_daily.get('daily_views', ''),
-        ig_daily.get('website_clicks', ''),
         # Twitter / X
         twitter_stats['followers'] if twitter_stats else '',
         tw_followers_change if twitter_stats else '',
@@ -503,6 +504,8 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
         tiktok_stats['followers'] if tiktok_stats else '',
         tt_followers_change if tiktok_stats else '',
         tiktok_stats['video_count'] if tiktok_stats else '',
+        # בסוף השורה, בהתאמה לסוף ה-HEADERS
+        ig_daily.get('website_clicks', ''),
     ]
     
     # בדיקה אם כבר יש שורה להיום
