@@ -38,6 +38,27 @@ def _num(x):
         return 0.0
 
 
+def _curve(raw):
+    """'998,915,608' -> [99.8, 91.5, 60.8]. The collector stores per-mille
+    integers to keep the cell short; the browser wants percentages."""
+    out = []
+    for part in str(raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            out.append(round(int(part) / 10, 1))
+        except ValueError:
+            return []
+    return out
+
+
+def _replay_share(p):
+    """Replays as a share of all plays — how rewatchable the reel was."""
+    total = _num(p.get("total_plays"))
+    return round(_num(p.get("replays")) / total * 100, 1) if total > 0 else 0
+
+
 def _int(x):
     return int(round(_num(x)))
 
@@ -498,6 +519,15 @@ def build_facebook(data, days):
             "clicks": _int(p.get("clicks")),
             "avg_watch": round(_num(p.get("avg_watch_sec")), 1),
             "total_watch_min": _int(p.get("total_watch_min")),
+            # reel retention (collected since 2026-07-26; blank on older rows).
+            # retention_3s is 0 when a bucket is wider than three seconds — i.e.
+            # on anything but a reel — and that means "not measured", not "zero".
+            "duration_sec": round(_num(p.get("duration_sec")), 1),
+            "retention_3s": round(_num(p.get("retention_3s")), 1),
+            "retention_end": round(_num(p.get("retention_end")), 1),
+            "retention_curve": _curve(p.get("retention_curve")),
+            "replays": _int(p.get("replays")),
+            "replay_share": _replay_share(p),
             "share_rate": round(shares / views * 100, 2) if views else 0,
             "reshetb": bool(reshetb_re.search(str(p.get("title", "")))),
             "analysis": analyses.get(str(p.get("post_id", "")).strip()),

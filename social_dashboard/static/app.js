@@ -227,6 +227,35 @@
       (unit ? ' <span class="unit">' + esc(unit) + "</span>" : "") + "</div></div>";
   }
   function kmSection(label) { return '<div class="km-seclabel">' + esc(label) + "</div>"; }
+  // Reel drop-off curve. An SVG area, not a canvas: it is a static shape inside
+  // a modal, and inline SVG needs no lifecycle, no resize handler and no
+  // teardown when the modal closes. `pts` are percentages, one per bucket.
+  function kmRetention(pts, durationSec) {
+    if (!pts || pts.length < 2) return "";
+    var W = 520, H = 96, n = pts.length;
+    var x = function (i) { return (i / (n - 1)) * W; };
+    var y = function (v) { return H - (Math.max(0, Math.min(100, v)) / 100) * H; };
+    var line = pts.map(function (v, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); }).join(" ");
+    var area = line + " L" + W + " " + H + " L0 " + H + " Z";
+    // RTL page, left-to-right time: the curve is flipped so it reads with the
+    // clock, and the labels are placed to match rather than mirrored with it.
+    var end = pts[pts.length - 1], mid = pts[Math.floor(n / 2)];
+    var secs = durationSec ? (durationSec / (n - 1)) : 0;
+    // The SVG must run left-to-right (time does), but the labels under it are
+    // Hebrew: inside a dir=ltr box "7 שנ׳" reorders to "שנ׳ 7". Only the chart
+    // is forced LTR; each label is isolated so it reads as written.
+    var lab = function (secs, pct) {
+      return '<span><bdi>' + (secs === null ? "סוף" : secs + " שנ׳") + '</bdi> · ' +
+        '<span dir="ltr">' + pct.toFixed(0) + '%</span></span>';
+    };
+    return '<div class="km-ret">' +
+      '<div dir="ltr"><svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" role="img" aria-label="עקומת נטישה">' +
+      '<path class="a" d="' + area + '"></path><path class="l" d="' + line + '"></path>' +
+      '</svg></div>' +
+      '<div class="km-ret-x">' + lab(0, pts[0]) +
+      lab(secs ? Math.round(secs * Math.floor(n / 2)) : null, mid) +
+      lab(durationSec ? Math.round(durationSec) : null, end) + '</div></div>';
+  }
   function kmCmp(label, ratio) {
     // ratio >= 1 shown as "×N", colored by whether higher is good (up) — caller
     // passes the sign via a leading "-" on label is avoided; we just color up/down by >=1
@@ -358,7 +387,7 @@
   window.KS = {
     fmt: fmt, fmtHtml: fmtHtml, fmtFull: fmtFull, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc, mdInline: mdInline,
     fillIcon: fillIcon, strokeIcon: strokeIcon, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
-    openModal: openModal, closeModal: closeModal, kmCell: kmCell, kmSection: kmSection, kmCmp: kmCmp,
+    openModal: openModal, closeModal: closeModal, kmCell: kmCell, kmSection: kmSection, kmCmp: kmCmp, kmRetention: kmRetention,
     kmAnalysis: kmAnalysis, aiDot: aiDot,
     RANGE_LABEL: RANGE_LABEL, FILL: FILL
   };

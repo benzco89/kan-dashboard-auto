@@ -148,7 +148,7 @@ def get_video_insights(video_id):
     """
     result = {'plays': 0, 'avg_watch_sec': 0, 'views_30s': 0, 'total_watch_min': 0,
               'replays': 0, 'total_plays': 0, 'duration_sec': 0,
-              'retention_3s': 0, 'retention_end': 0}
+              'retention_3s': 0, 'retention_end': 0, 'retention_curve': ''}
     if not video_id:
         return result
 
@@ -177,6 +177,7 @@ def get_video_insights(video_id):
         r3, rend = _retention_points(curve, length)
         result['retention_3s'] = r3
         result['retention_end'] = rend
+        result['retention_curve'] = _pack_curve(curve)
 
     return result
 
@@ -190,6 +191,23 @@ def _video_length(video_id):
         return float(res.get('length') or 0)
     except Exception:
         return 0
+
+
+def _pack_curve(curve):
+    """העקומה כמחרוזת אחת, פרומיל למקטע: '998,999,915,...'.
+
+    שני המספרים הנגזרים עונים "האם נשארו"; רק העקומה עונה "איפה עזבו", וזו
+    השאלה שכתב שואל על פריט ספציפי. פרומילים שלמים ולא JSON: 83 תווים במקום
+    260, ובגיליון שכבר מחזיק כותרת של 700 תווים זה זניח.
+    """
+    try:
+        keys = sorted(curve, key=lambda k: int(k))
+    except (TypeError, ValueError):
+        return ''
+    try:
+        return ','.join(str(int(round(float(curve[k] or 0) * 1000))) for k in keys)
+    except (TypeError, ValueError):
+        return ''
 
 
 def _retention_points(curve, length):
@@ -369,6 +387,7 @@ def fetch_facebook_data():
                 'duration_sec': video['duration_sec'],
                 'retention_3s': video['retention_3s'],
                 'retention_end': video['retention_end'],
+                'retention_curve': video['retention_curve'],
                 'replays': video['replays'],
                 'total_plays': video['total_plays'],
                 'likes': public['likes'],

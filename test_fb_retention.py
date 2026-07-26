@@ -64,5 +64,16 @@ check("empty curve", fbc._retention_points({}, 20), (0, 0))
 check("single bucket", fbc._retention_points(curve(.5), 20), (0, 50.0))
 check("garbage keys do not raise", fbc._retention_points({"a": .5}, 20), (0, 0))
 
+print("\nthe stored curve — two numbers say whether they stayed, only the curve says where they left")
+check("packs as per-mille integers", fbc._pack_curve(curve(.998, .915, .608)), "998,915,608")
+check("keeps every bucket", len(fbc._pack_curve(KOGAN).split(",")), 21)
+check("empty curve stores nothing", fbc._pack_curve({}), "")
+check("garbage keys store nothing", fbc._pack_curve({"a": 1}), "")
+check("a non-video post still carries every key",
+      sorted(fbc.get_video_insights(None)),
+      ['avg_watch_sec', 'duration_sec', 'plays', 'replays', 'retention_3s',
+       'retention_curve', 'retention_end', 'total_plays', 'total_watch_min',
+       'views_30s'])
+
 print(f"\n{PASS}/{PASS + FAIL} passed\n")
 sys.exit(1 if FAIL else 0)
