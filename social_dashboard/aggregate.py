@@ -490,6 +490,9 @@ def build_facebook(data, days):
 
     # avg_watch existed per post but only inside the drill-down; a video page
     # should say how long people stayed without being asked
+    total_clicks = sum(_num(p.get("clicks")) for p in cur)
+    click_rate = (total_clicks / total_views * 100) if total_views else 0
+
     fb_watches = [_num(p.get("avg_watch_sec")) for p in cur if _num(p.get("avg_watch_sec")) > 0]
     fb_avg_watch = (sum(fb_watches) / len(fb_watches)) if fb_watches else 0
 
@@ -527,6 +530,12 @@ def build_facebook(data, days):
             "sad": _int(p.get("sad")),
             "angry": _int(p.get("angry")),
             "clicks": _int(p.get("clicks")),
+            # Clicks are real interest — opening a long caption is not nothing —
+            # they are just a different thing from a reaction, and they used to
+            # be blended into one number where they were 88% of it. Over VIEWS,
+            # the same denominator as engagement, so the two read side by side:
+            # ~0.9% engaged socially, ~5.9% clicked something.
+            "click_rate": round(_num(p.get("clicks")) / views * 100, 2) if views else 0,
             "avg_watch": round(_num(p.get("avg_watch_sec")), 1),
             "total_watch_min": _int(p.get("total_watch_min")),
             # reel retention (collected since 2026-07-26; blank on older rows).
@@ -564,6 +573,7 @@ def build_facebook(data, days):
             "virality": round(virality, 2),
             "avg_engagement": round(avg_eng, 2),
             "avg_watch": round(fb_avg_watch, 1),
+            "click_rate": round(click_rate, 2),
         },
         "posts": posts,
     }
