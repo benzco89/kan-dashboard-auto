@@ -159,7 +159,7 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 {% macro platform_slide(p) %}
 <section class="slide" dir="rtl" style="background:#f4f4f4;font-family:'SimplerPro',sans-serif;color:#111;padding:46px 72px 40px;display:flex;flex-direction:column">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="display:flex;align-items:center;gap:20px">{{ p.icon }}<div><div style="font-size:20px;font-weight:700;letter-spacing:.05em;color:#FF3300">{{ p.rank_label }}</div><h2 style="margin:2px 0 0;font-size:51px;font-weight:900;letter-spacing:-.02em">{{ p.name }}</h2></div></div>
-    <div style="display:flex;gap:44px;align-items:center"><div style="text-align:center"><div class="mono" style="font-size:51px;font-weight:700;line-height:1">{{ p.weekly_views_fmt }}</div><div style="font-size:20px;color:#808080;margin-top:4px">צפיות השבוע</div></div><div style="width:1px;height:50px;background:#e0e0e0"></div><div style="text-align:center"><div class="mono" style="font-size:51px;font-weight:700;line-height:1;color:{{ p.delta_color }}">{% if p.has_delta %}{{ p.delta_str }}{% else %}—{% endif %}</div><div style="font-size:20px;color:#808080;margin-top:4px">ביחס לשבוע שעבר</div></div></div></div>
+    <div style="display:flex;gap:44px;align-items:center"><div style="text-align:right"><div class="mono" style="font-size:51px;font-weight:700;line-height:1">{{ p.weekly_views_fmt }}</div><div style="font-size:20px;color:#808080;margin-top:4px">צפיות השבוע</div></div><div style="width:1px;height:50px;background:#e0e0e0"></div><div style="text-align:right"><div class="mono" style="font-size:51px;font-weight:700;line-height:1;color:{{ p.delta_color }}">{% if p.has_delta %}{{ p.delta_str }}{% else %}—{% endif %}</div><div style="font-size:20px;color:#808080;margin-top:4px">ביחס לשבוע שעבר</div></div></div></div>
 
   {% if not p.has_data %}
   <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#808080;gap:18px">
@@ -205,7 +205,7 @@ html,body{margin:0;padding:0;background:#f4f4f4}
       <div style="font-size:31px;font-weight:600;color:#808080;margin-bottom:8px">סה״כ צפיות בכל הפלטפורמות</div>
       <div class="mono" style="font-size:200px;font-weight:700;line-height:.85;letter-spacing:-.03em;color:#111">{{ hero.total_main }}<span style="font-size:96px;color:#FF3300">{{ hero.total_suffix }}</span></div>
     </div>
-    {% if hero.has_delta %}<div style="text-align:left;display:flex;align-items:center;gap:12px;color:{{ hero.delta_color }};font-size:37px;font-weight:700"><span class="ltr" style="display:inline-flex;align-items:center;gap:12px"><span style="font-size:41px">{{ hero.delta_arrow }}</span>{{ hero.delta_str }}</span> ביחס לשבוע שעבר</div>{% endif %}
+    {% if hero.has_delta %}<div style="text-align:right;display:flex;align-items:center;gap:12px;color:{{ hero.delta_color }};font-size:37px;font-weight:700"><span class="ltr" style="display:inline-flex;align-items:center;gap:12px"><span style="font-size:41px">{{ hero.delta_arrow }}</span>{{ hero.delta_str }}</span> ביחס לשבוע שעבר</div>{% endif %}
   </div>
 </section>
 
@@ -213,7 +213,7 @@ html,body{margin:0;padding:0;background:#f4f4f4}
 <section class="slide" dir="rtl" style="background:#f4f4f4;font-family:'SimplerPro',sans-serif;color:#111;padding:84px 96px;display:flex;flex-direction:column">
   <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:8px">
     <div style="display:flex;align-items:baseline;gap:20px"><div style="width:44px;height:8px;background:#FF3300;align-self:center"></div><h2 style="margin:0;font-size:66px;font-weight:900;letter-spacing:-.02em">השבוע במספרים</h2></div>
-    <div style="text-align:left"><div class="mono" style="font-size:64px;font-weight:700;line-height:1">{{ hero.total_fmt }}</div><div style="font-size:24px;color:#808080;margin-top:4px">סה״כ צפיות{% if hero.has_delta %} · <span class="ltr" style="color:{{ hero.delta_color }};font-weight:700">{{ hero.delta_arrow }} {{ hero.delta_str }}</span> ביחס לשבוע שעבר{% endif %}</div></div></div>
+    <div style="text-align:right"><div class="mono" style="font-size:64px;font-weight:700;line-height:1">{{ hero.total_fmt }}</div><div style="font-size:24px;color:#808080;margin-top:4px">סה״כ צפיות{% if hero.has_delta %} · <span class="ltr" style="color:{{ hero.delta_color }};font-weight:700">{{ hero.delta_arrow }} {{ hero.delta_str }}</span> ביחס לשבוע שעבר{% endif %}</div></div></div>
   {# A key, not a manual. Only the marks a reader cannot decode on sight stay:
      the badge, the column icons, and the microphone on a week that has radio.
      What the bars mean, and that rows are clickable, explain themselves. #}
@@ -227,13 +227,13 @@ html,body{margin:0;padding:0;background:#f4f4f4}
     <span>🎙 שודר ב<b>כאן רשת ב׳</b></span>
     {%- endif %}
   </div>
-  <div style="display:grid;grid-template-columns:280px 1fr 155px 130px;gap:26px;padding:0 2px 16px;border-bottom:1px solid #e0e0e0;font-size:22px;font-weight:700;color:#808080;letter-spacing:.03em"><div>פלטפורמה</div><div>נתח מסך הצפיות</div><div>צפיות השבוע</div><div style="text-align:left">מגמה</div></div>
+  <div style="display:grid;grid-template-columns:280px 1fr 155px 130px;gap:26px;padding:0 2px 16px;border-bottom:1px solid #e0e0e0;font-size:22px;font-weight:700;color:#808080;letter-spacing:.03em"><div>פלטפורמה</div><div>נתח מסך הצפיות</div><div style="text-align:right">צפיות השבוע</div><div style="text-align:right">מגמה</div></div>
   <div style="flex:1;display:flex;flex-direction:column;justify-content:space-around;padding:10px 0">
     {% for r in overview_rows %}<div style="display:grid;grid-template-columns:280px 1fr 155px 130px;gap:26px;align-items:center">
       <div style="display:flex;align-items:center;gap:16px">{{ r.icon }}<div><div style="font-size:38px;font-weight:700">{{ r.name }}</div><div style="font-size:23px;color:#808080;margin-top:3px">{% if r.followers_fmt %}{{ r.followers_fmt }} עוקבים{% endif %}</div></div></div>
       <div style="position:relative;height:48px;background:#e0e0e0;border-radius:8px;overflow:hidden"><div style="position:absolute;top:0;right:0;height:100%;width:{{ r.bar_pct }}%;background:{{ r.bar_color }};border-radius:8px"></div></div>
       <div class="mono" style="font-size:45px;font-weight:700">{{ r.views_fmt }}</div>
-      <div style="font-size:27px;font-weight:700;color:{{ r.delta_color }};text-align:left">{% if r.has_delta %}<span class="ltr">{{ r.delta_arrow }} {{ r.delta_str }}</span>{% else %}—{% endif %}</div></div>
+      <div style="font-size:27px;font-weight:700;color:{{ r.delta_color }};text-align:right">{% if r.has_delta %}<span class="ltr">{{ r.delta_arrow }} {{ r.delta_str }}</span>{% else %}—{% endif %}</div></div>
     {% endfor %}
   </div>
 </section>
@@ -256,7 +256,7 @@ html,body{margin:0;padding:0;background:#f4f4f4}
       <div style="font-size:31px;color:#404040;line-height:1.5;margin-top:20px;text-wrap:pretty">{{ story.sentence }}</div>
     </div>
     {% if story.platforms %}<div style="display:flex;gap:48px;flex-shrink:0;padding-right:48px;border-right:1px solid #ececec">
-      {% for s in story.platforms %}<div style="text-align:center"><div class="mono" style="font-size:68px;font-weight:700;line-height:1;letter-spacing:-.02em">{{ s.views_fmt }}</div><div style="font-size:23px;color:#808080;margin-top:10px">{{ s.name }}</div></div>{% endfor %}
+      {% for s in story.platforms %}<div style="text-align:right"><div class="mono" style="font-size:68px;font-weight:700;line-height:1;letter-spacing:-.02em">{{ s.views_fmt }}</div><div style="font-size:23px;color:#808080;margin-top:10px">{{ s.name }}</div></div>{% endfor %}
     </div>{% endif %}
   </div>
   {% endif %}
