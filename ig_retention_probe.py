@@ -120,8 +120,15 @@ def main():
     if not ig_id:
         raise SystemExit(1)
 
-    media = recent_media(ig_id, SAMPLE)
-    reels = [m for m in media if m.get("media_product_type") == "REELS"] or media
+    # Sample BOTH product types on purpose: Meta rejects several metrics
+    # per-media-type rather than globally, so "reels only" answers half the
+    # question. link_clicks is rejected for reels — a feed post is the only way
+    # to find out whether it exists at all.
+    media = recent_media(ig_id, max(SAMPLE * 6, 24))
+    reels = [m for m in media if m.get("media_product_type") == "REELS"]
+    feed = [m for m in media if m.get("media_product_type") != "REELS"]
+    print(f"  sampled {len(media)} items: {len(reels)} reels, {len(feed)} feed")
+    reels = reels[:max(1, SAMPLE // 2)] + feed[:max(1, SAMPLE // 2)]
     if not reels:
         raise SystemExit("no media returned")
 
@@ -131,7 +138,7 @@ def main():
     _, err = probe_one(first["id"], NONSENSE)
     print("    " + (err or "(no error — the nonsense metric was accepted?!)")[:1500])
 
-    for m in reels[:SAMPLE]:
+    for m in reels:
         cap = (m.get("caption") or "").replace("\n", " ")[:40]
         print(f"\n--- {m.get('timestamp', '')[:10]} · {m.get('media_product_type')} · {m['id']}")
         print(f"    {cap}")
