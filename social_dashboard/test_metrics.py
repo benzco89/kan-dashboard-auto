@@ -39,12 +39,16 @@ X = dict(views=8514, likes=36, retweets=3, replies=23, quotes=0, bookmarks=1,
 
 YT = dict(views=162590, likes=2703, comments=86)
 
-print("\nfacebook — every reaction counts, clicks never do")
-check("all six reactions", metrics.count('facebook', FB, 'likes'), 331)
+print("\nfacebook — reactions are ONE column, clicks never count")
+# 312 is reactions.summary.total_count. love=14 / wow=3 / sad=2 are a breakdown
+# OF that number, not extra reactions beside it, so summing all six would report
+# 331 and count a quarter of Facebook's reactions twice.
+check("reactions are the `likes` column alone", metrics.count('facebook', FB, 'likes'), 312)
+check("the breakdown is never added on top", metrics.count('facebook', FB, 'likes') < 331, True)
 check("comments", metrics.count('facebook', FB, 'comments'), 14)
 check("shares", metrics.count('facebook', FB, 'shares'), 10)
-check("total ignores the 7,520 clicks", metrics.total('facebook', FB), 355)
-check("rate over views, not the sheet's 11.83%", metrics.rate('facebook', FB), 0.46)
+check("total ignores the 7,520 clicks", metrics.total('facebook', FB), 336)
+check("rate over views, not the sheet's 11.83%", metrics.rate('facebook', FB), 0.44)
 check("facebook has no saves column", metrics.columns_for('facebook', 'saves'), ())
 
 print("\ninstagram — saves are collected but stay out of the rate")

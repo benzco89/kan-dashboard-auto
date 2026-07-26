@@ -5,7 +5,7 @@ Why this file exists: every collector invented its own engagement_rate.
 Facebook divided (clicks + like + comments + shares) by reach, Instagram
 (likes + comments + saves + shares) by reach, TikTok and X by views. Measured
 over ~50 recent items per platform, **88% of Facebook's "engagement" was
-clicks** — 10.6% published against 1.2% of actual social interaction. So the
+clicks** — 10.6% published against 1.1% of actual social interaction. So the
 platform columns could not be compared to each other, and the same post scored
 differently in the deck and on the dashboard, which read the number from
 different places.
@@ -19,10 +19,11 @@ collectors already store.
 
 Two deliberate choices:
 
-**Facebook counts ALL reactions**, not just `likes`. The collector's
-total_engagement drops love/haha/wow/sad/angry — a median 20% of reactions and
-up to 42% on a single post. On a news page an angry reaction is not noise, it
-is the story.
+**Facebook's `likes` column is already every reaction.** It holds the Graph
+API's `reactions.summary.total_count`, and love/haha/wow/sad/angry are a
+breakdown of that same number rather than extra reactions beside it — a median
+24% of it, and up to 72% on a single post. Summing the six columns therefore
+double-counts, which an earlier version of this file did.
 
 **Saves are excluded from the engagement number.** Instagram and TikTok have
 them; Facebook, X and YouTube have no equivalent. A rate whose numerator
@@ -36,7 +37,11 @@ always the sum of the columns actually shown next to it.
 # not the same as "the first column that has data".
 FIELDS = {
     'facebook': {
-        'likes': ('likes', 'love', 'haha', 'wow', 'sad', 'angry'),
+        # `likes` is already the API's reactions.summary.total_count — EVERY
+        # reaction. love/haha/wow/sad/angry are a BREAKDOWN of that number
+        # (facebook_collector verified by probe that they sum to it exactly), so
+        # adding them here counted a quarter of Facebook's reactions twice.
+        'likes': ('likes',),
         'comments': ('comments',),
         'shares': ('shares',),
     },

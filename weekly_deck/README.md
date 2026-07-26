@@ -155,7 +155,7 @@ different measurements under one heading. Facebook divided
 (clicks + like + comments + shares) by **reach**; Instagram divided
 (likes + comments + saves + shares) by **reach**; TikTok and X divided by
 **views**. Measured over ~50 recent items per platform, **88% of Facebook's
-"engagement" was link clicks** — a published 10.6% against 1.2% of actual social
+"engagement" was link clicks** — a published 10.6% against 1.1% of actual social
 interaction. A reader comparing the Facebook slide to the Instagram slide
 concluded the opposite of the truth.
 
@@ -163,7 +163,7 @@ So the deck shows the counts themselves, one column each, and never a percent:
 
 | | ❤️ | 💬 | 🔁 |
 |---|---|---|---|
-| פייסבוק | **all six reactions** | תגובות | שיתופים |
+| פייסבוק | ריאקציות (the `likes` column IS all of them) | תגובות | שיתופים |
 | אינסטגרם / טיקטוק | לייקים | תגובות | שיתופים |
 | X | לייקים | replies | **retweets + quotes** |
 | יוטיוב | לייקים | תגובות | — column absent |
@@ -175,9 +175,11 @@ locks it against real sheet rows). The **collectors are untouched** — the shee
 keep their `engagement_rate` column, because the daily Telegram report prints it
 and the alert thresholds were calibrated on it.
 
-Facebook counts every reaction because the collector's `total_engagement` keeps
-only `likes` and drops love/haha/wow/sad/angry — a median 20% of reactions and
-up to 42% on one post. On a news page an angry reaction is not noise.
+Facebook's `likes` column already holds **every** reaction — it is the Graph
+API's `reactions.summary.total_count`, and love/haha/wow/sad/angry are a
+breakdown of that same number (a median 24% of it, up to 72% on one post), not
+extra reactions beside it. Summing the six columns double-counts; an earlier
+version of this file did exactly that and inflated every Facebook ❤️ figure.
 
 Saves (Instagram, TikTok) get no column: Facebook, X and YouTube have no
 equivalent, and a number whose meaning changes between slides is the problem
