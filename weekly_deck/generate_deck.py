@@ -55,6 +55,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 # תחת social_dashboard/ — הדיפלוי לשרת מסנכרן רק את התיקייה הזאת.
 sys.path.append(os.path.join(os.path.dirname(HERE), "social_dashboard"))
 import metrics  # noqa: E402
+import content_tags  # noqa: E402
 FONTS_DIR = os.path.join(HERE, "design", "fonts")
 ASSETS_DIR = os.path.join(HERE, "design", "assets")
 # Every run writes into a folder of its own — out/2026-07-19_25 for a real week,
@@ -727,8 +728,10 @@ def load_reporters_map():
 # guessed at. Topic hashtags (#מונטנגרו) must never become programmes.
 _HASHTAG_RE = re.compile(r"#([\w֐-׿]{2,40})")
 # the radio station signs its items on the news page; a station is not a
-# programme, so it is only used when no programme tag is present
-_RESHETB_RE = re.compile(r"כאן חדשות ב?רשת ב")
+# programme, so it is only used when no programme tag is present. The pattern is
+# shared with the dashboard (content_tags.py) — the two used to hold their own
+# copies, and one of them was 30 items behind.
+_RESHETB_RE = content_tags.RESHET_BET_RE
 # an explicitly quoted programme name — quotes required, so it never fires on prose
 _PROGRAM_PROSE_RE = re.compile(r'(?:ב?תוכנית|בפינה|במהדורת)\s*["״”]([^"״”\n]{2,30})["״”]')
 # Kan signs its video descriptions with a fixed template:
@@ -773,7 +776,13 @@ def resolve_program(text, pmap):
             return name, 'hashtag'
     m = _PROGRAM_PROSE_RE.search(s)
     if m:
-        return m.group(1).strip(), 'quoted'
+        # normalised through the map like every other route, so one programme
+        # cannot appear under two spellings on two slides — the hashtag
+        # #קלמןליברמן and the quoted "קלמן וליברמן" are the same show
+        cand = m.group(1).strip()
+        named = pmap.get(cand.lower(), cand)
+        if named:
+            return named, 'quoted'
     m = _PROGRAM_DATED_RE.search(s)
     if m:
         cand = m.group(1).strip(' "\'״”')
@@ -787,7 +796,7 @@ def resolve_program(text, pmap):
         if pmap.get(cand):          # undated: the name still has to be known
             return pmap[cand], 'prose'
     if _RESHETB_RE.search(s):
-        return "רשת ב׳", 'station'
+        return content_tags.RESHET_BET_NAME, 'station'
     return '', ''
 
 
@@ -2436,7 +2445,12 @@ def _row_program(item, pmap):
     means "no programme tag", not "not looked at", and is trusted. Only content
     from before the feature falls back to the stored 400-char caption."""
     if 'program' in item:
-        return (item.get('program') or '').strip()
+        # still normalised through the map on the way out: a stored name written
+        # one way ("קלמן וליברמן", read from a quote) and the same show written
+        # another ("קלמן ליברמן", from its hashtag) must not reach two slides as
+        # two programmes. An alias added later therefore lands on a re-render.
+        name = (item.get('program') or '').strip()
+        return pmap.get(name.lower(), name) if name else ''
     return resolve_program(item.get('caption') or item.get('title') or '', pmap)[0]
 
 

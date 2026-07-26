@@ -12,6 +12,8 @@ before that.
 import re
 from datetime import date, datetime, timedelta
 
+import content_tags
+
 try:
     from zoneinfo import ZoneInfo
     _TZ = ZoneInfo("Asia/Jerusalem")
@@ -457,8 +459,9 @@ def build_facebook(data, days):
     analyses = _comment_analyses(data, "facebook")
 
     # תכני רשת ב' עולים לעמוד הפייסבוק של כאן חדשות עם חתימה קבועה בכיתוב.
-    # חובה לעגן ל"כאן חדשות" - "רשת ב" לבד תופס גם "ברשת בשנים האחרונות".
-    reshetb_re = re.compile(r"כאן חדשות ב?רשת ב")
+    # הביטוי משותף עם הדק (content_tags.py): גרסה שעוגנה רק ב"כאן חדשות"
+    # פספסה 30 פריטי רדיו אמיתיים מתוך 164.
+    reshetb_re = content_tags.RESHET_BET_RE
 
     posts = []
     for p in cur:
