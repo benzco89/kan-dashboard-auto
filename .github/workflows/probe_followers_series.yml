@@ -1,0 +1,30 @@
+name: Probe daily-series lag + unused metrics (read-only)
+
+# fb_daily_reach and fb_daily_engagements held the same value on two consecutive
+# days. Does the daily series advance at all, and does date_preset=yesterday
+# actually return yesterday? Also prints a 7-day series for the metrics the
+# earlier probes found live and nothing collects. Read-only: no Sheets writes,
+# no collector touched. Manual button only.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Run series probe
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+        run: python followers_series_probe.py
