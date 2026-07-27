@@ -301,7 +301,9 @@ html,body{margin:0;padding:0;background:#f4f4f4}
   <h1 style="margin:0;font-size:120px;font-weight:900;line-height:.95;letter-spacing:-.02em">נתראה בשבוע הבא</h1>
   <div style="margin-top:56px">{{ logo_lockup(56) }}</div>
   
-  <div style="position:absolute;bottom:64px;font-size:22px;color:#808080">{{ closing_note }}{% if week.range_short %} · {{ week.range_short }}{% endif %}</div>
+  {# the separator belongs to the note, not to the dates: with no note it used to
+     render a stray "· 19/07—25/07" #}
+  <div style="position:absolute;bottom:64px;font-size:22px;color:#808080">{% if closing_note %}{{ closing_note }}{% if week.range_short %} · {% endif %}{% endif %}{{ week.range_short }}</div>
 </section>
 
 </body>
