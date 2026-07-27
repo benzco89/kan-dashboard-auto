@@ -20,37 +20,52 @@ Last reviewed: **2026-07-27**
 holding values on 2026-07-26 (`8799c48`). They appear **zero times** in
 `social_dashboard/aggregate.py` and zero times in any template.
 
-**Verify the Facebook series advances before building on it.** On 2026-07-27
-`fb_daily_reach` and `fb_daily_engagements` held byte-identical values on two
-consecutive rows (1,080,464 / 304,274) — and the probe of 2026-07-26 13:39
-returned those same two numbers. Three fetches, two days, one value. The request
-is `period=day&date_preset=yesterday`, so the likely cause is Meta lagging a day:
-at 08:30 yesterday is not final and the previous day comes back instead.
-`page_video_views` moving by only hundreds fits the same reading. The Instagram
-columns move properly. One 7-day `since/until` pull settles it — and a flat line
-labelled "no change" is exactly the failure this repo keeps having.
+**The row date does not describe the value in it — fix that first.** Settled by
+`followers_series_probe.py` (run `30251843236`, 2026-07-27): nothing is frozen,
+every metric returns 8 distinct values over 8 days. The duplicate was a race with
+Meta's clock. Its day buckets close at **07:00 UTC = 10:00 Israel**, and the
+tracker runs at **08:30** — an hour and a half before the boundary — so it always
+receives the *previous* bucket. Yesterday's manual 17:05 run and today's 08:30
+run fell inside the same window, which is why both rows hold 1,080,464 while the
+same call at noon returns 1,134,262.
+
+Instagram behaves identically: the tracker wrote `ig_daily_reach = 738,833` at
+08:30 and the same call four hours later returned 446,397.
+
+So a daily chart built on these columns today would be shifted by a day and would
+occasionally repeat a point. Two fixes: move the pull past 10:00 Israel, or —
+better, because it does not depend on when the job happens to run — ask with an
+explicit `since/until` for the day wanted and store Meta's `end_time` beside the
+value.
 
 *This is the only open item that accumulates in real time — new data every day
-that nobody reads.* Next: settle the lag, then decide where daily reach belongs.
+that nobody reads.* Next: fix the day alignment, then decide where it belongs.
 
 ### 1b. Metrics v25 offers that we do not take
-Verified live, not from docs — probe runs `30204475427` and `30199033819`
-(2026-07-26):
+Verified live over 8 days, not from docs and not from one sample — runs
+`30251843236`, `30204475427`, `30199033819`:
 
-- **`accounts_engaged`** (IG, account, daily) — 35,383/day, 191,153/week. Counts
-  *unique accounts*, not actions, so it answers "how many people engaged" in a
-  way no sum of likes and comments can. The strongest of the lot.
-- **`page_views_total`** (FB, daily) — 16,708. Visits to the page itself.
-  Instagram already has per-post `profile_visits`; Facebook has nothing.
-- **`ig_reels_video_view_total_time`** — see item 3.
-- **`post_video_followers`** (FB, per video) — followers attributed to one video.
-  Returned 0 on the sampled item; probe a big one before believing either way.
-- **Not worth it:** `website_clicks` (5), `profile_links_taps` (0),
-  `profile_activity` (0 on both sampled posts). A metric that exists and returns
-  zero is noise.
-- **Dead in v25:** `page_fan_adds`, `page_fan_removes`, `page_impressions_unique`
-  — "not a valid insights metric". Already replaced by `page_daily_follows` and
-  `page_total_media_view_unique`.
+| metric | daily range | verdict |
+|---|---|---|
+| **`accounts_engaged`** (IG) | 26,359–53,554 | **take it.** Unique *accounts*, not actions — a question no sum of likes and comments can answer |
+| **`profile_views`** (IG) | 2,592–**8,274** | **take it.** Peak on 24/07, the day the missing boy was the story |
+| **`page_views_total`** (FB) | 14,996–**29,557** | **take it.** Peak 25/07. Instagram has per-post `profile_visits`; Facebook has nothing |
+| `total_interactions` (IG) | ~49,648 | maybe — overlaps what per-post sums already give |
+| `website_clicks` (IG) | 4–21 | no |
+| `profile_links_taps` (IG) | 0–1 | no |
+| `profile_activity` (IG, per post) | 0, 0 | no |
+
+The three worth taking share a shape: **they spike on the days a story broke.**
+That is a measure of "how many people came looking for us", and no column we
+currently store is a version of it.
+
+Also open: **`ig_reels_video_view_total_time`** (item 3) and
+**`post_video_followers`** (FB, per video) — followers attributed to one video,
+which returned 0 on the sampled item; probe a big one before believing either way.
+
+**Dead in v25:** `page_fan_adds`, `page_fan_removes`, `page_impressions_unique` —
+"not a valid insights metric". Already replaced by `page_daily_follows` and
+`page_total_media_view_unique`.
 
 ### 2. `_replay_share` is written and never called
 `aggregate.py:66` defines "replays as a share of all plays — how rewatchable the
