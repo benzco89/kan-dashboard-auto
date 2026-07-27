@@ -222,6 +222,56 @@ def _follower_metric(rows, value_key, change_key):
     return {"value": value, "weekly_change": weekly, "growth_pct": growth_pct}
 
 
+ACCOUNT_DAILY = {
+    "facebook": [
+        ("fb_page_views", "כניסות לעמוד"),
+        ("fb_daily_reach", "חשיפה יומית"),
+        ("fb_daily_engagements", "מעורבות יומית"),
+        ("fb_daily_video_views", "צפיות וידאו"),
+    ],
+    "instagram": [
+        ("ig_profile_views", "כניסות לפרופיל"),
+        ("ig_accounts_engaged", "חשבונות שהתעסקו"),
+        ("ig_daily_reach", "חשיפה יומית"),
+        ("ig_daily_views", "צפיות יומיות"),
+    ],
+}
+
+
+def _account_daily(rows, platform):
+    """Account-level daily numbers — the page itself, not the sum of its posts.
+
+    Keyed on `insights_day`, never on the row's own date. Meta closes its day at
+    10:00 Israel and the tracker runs at 08:30, so until 2026-07-27 every row
+    stored a figure belonging to a different day than the one it was filed
+    under. Rows without `insights_day` are from before that fix: their day is
+    genuinely unknown, so they are skipped rather than drawn one day off.
+    """
+    fields = ACCOUNT_DAILY.get(platform) or []
+    hist = []
+    for r in rows:
+        day = str(r.get("insights_day") or "").strip()[:10]
+        if not day:
+            continue
+        point = {"day": day}
+        for key, _ in fields:
+            point[key] = _int(r.get(key))
+        if any(point[key] for key, _ in fields):
+            hist.append(point)
+    hist.sort(key=lambda p: p["day"])
+    if not hist:
+        return None
+    last = hist[-1]
+    return {
+        "day": last["day"],
+        "stats": [{"key": key, "label": label, "value": last.get(key, 0)}
+                  for key, label in fields],
+        # the chart only appears once there is something to draw a line between
+        "history": hist[-30:] if len(hist) >= 3 else [],
+        "days_collected": len(hist),
+    }
+
+
 def _last_data_date(data):
     rows = data.get("followers", [])
     if rows:
@@ -557,6 +607,7 @@ def build_facebook(data, days):
         "range": days,
         "last_date": _last_data_date(data),
         "followers": _follower_metric(foll, "fb_followers", "fb_followers_change"),
+        "account_daily": _account_daily(foll, "facebook"),
         "kpis": {
             "views": _delta_pair(fb, "date", "views", days),
             "reach": _delta_pair(fb, "date", "reach", days),
@@ -667,6 +718,7 @@ def build_instagram(data, days):
         "range": days,
         "last_date": _last_data_date(data),
         "followers": _follower_metric(foll, "ig_followers", "ig_followers_change"),
+        "account_daily": _account_daily(foll, "instagram"),
         "kpis": {
             "views": _delta_pair(ig, "date", "views", days),
             "saved": _delta_pair(ig, "date", "saved", days),

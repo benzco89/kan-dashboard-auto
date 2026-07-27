@@ -382,13 +382,42 @@
     }
   };
 
+  // The account itself: daily numbers about the page/profile, not a sum over its
+  // posts. Dated by `insights_day` because Meta's day closes at 10:00 Israel and
+  // the collector runs at 08:30 — the row's own date describes a different day.
+  // The line only appears from the third day on; two points are not a trend, and
+  // one point drawn as a chart reads as a flat week that never happened.
+  function accountDaily(ad, color) {
+    if (!ad || !ad.day) return "";
+    var tiles = ad.stats.map(function (s) {
+      return '<div class="stat"><div class="v">' + fmtHtml(s.value) + '</div><div class="l">' + esc(s.label) + '</div></div>';
+    }).join("");
+    var body = "";
+    if (ad.history && ad.history.length >= 3) {
+      var key = ad.stats[0].key;
+      body = chart({
+        dates: ad.history.map(function (p) { return p.day; }),
+        vbW: 700, vbH: 160,
+        series: [{ color: color, data: ad.history.map(function (p) { return p[key] || 0; }), name: ad.stats[0].label }]
+      });
+    } else {
+      body = '<div class="panel-sub" style="margin-top:10px;">' +
+        'נאסף מ-' + fmtDate(ad.day) + ' · ' + ad.days_collected +
+        (ad.days_collected === 1 ? ' יום' : ' ימים') + '. הגרף יופיע מהיום השלישי.</div>';
+    }
+    return '<div class="panel mb-m"><div class="panel-head"><div>' +
+      '<div class="panel-title">החשבון עצמו</div>' +
+      '<div class="panel-sub">מדדים יומיים של העמוד, לא סכום של הפוסטים · ' + fmtDate(ad.day) + '</div>' +
+      '</div></div><div class="grid-4" style="margin-top:12px;">' + tiles + '</div>' + body + '</div>';
+  }
+
   // expose helpers
   window.KanSocial = app;
   window.KS = {
     fmt: fmt, fmtHtml: fmtHtml, fmtFull: fmtFull, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc, mdInline: mdInline,
     fillIcon: fillIcon, strokeIcon: strokeIcon, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
     openModal: openModal, closeModal: closeModal, kmCell: kmCell, kmSection: kmSection, kmCmp: kmCmp, kmRetention: kmRetention,
-    kmAnalysis: kmAnalysis, aiDot: aiDot,
+    kmAnalysis: kmAnalysis, aiDot: aiDot, accountDaily: accountDaily,
     RANGE_LABEL: RANGE_LABEL, FILL: FILL
   };
 })();
