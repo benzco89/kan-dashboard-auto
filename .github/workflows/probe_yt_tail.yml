@@ -1,0 +1,38 @@
+name: Probe YouTube 30-day tail (read-only)
+
+# Is the YouTube collector's 30-day window cutting videos while they are still
+# growing? The sheet cannot answer it — a video freezes once it leaves the
+# window — so the probe asks the YouTube API for the live counts of videos that
+# froze months ago. Read-only: does NOT write to Google Sheets and does not
+# touch the collectors. Manual button only.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests google-auth google-api-python-client
+
+      - name: Run YouTube tail probe
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: python youtube_tail_probe.py --csv yt_tail.csv
+
+      - name: Upload per-video rows
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-tail
+          path: yt_tail.csv
+          if-no-files-found: warn
