@@ -62,17 +62,6 @@ one call per post — 2,793 + 2,661 ≈ 5,500 a week. The Graph batch endpoint t
 50 sub-requests per HTTP call, which brings it to ~110. Worth building that way
 or not at all.
 
-### 5. The dashboard is fast when warm and slow when cold
-Measured live 2026-07-27, after yesterday's batched read and per-tab cache
-(`33ecce0`): HTML 80–325ms, and the data endpoints **190–550ms warm** against
-**0.3–3.6s cold** (`/api/overview` is the worst, and it is the landing page).
-
-The cache TTL is 600s (`gsheets.py:48`) while the data changes once a day, so
-every visitor arriving after ten quiet minutes pays the cold price for everyone.
-Two ways out: raise the TTL, which trades staleness for speed, or keep it and
-refresh it in the background before it expires, so nobody ever waits for Sheets.
-The second costs one read every ~9 minutes and no user ever sees a cold page.
-
 ### 6. The local `.env` FACEBOOK_TOKEN expired
 Died 2026-07-26 08:00 PDT. The GitHub secret is fine (this morning's runs
 worked), so only local probing is affected. See the meta-token renewal notes.
@@ -125,4 +114,5 @@ a cut headline mattered.
 | Five daily account columns collected and displayed by nothing | Shipped. Collector day-alignment fixed (`ef2f623`) plus `page_views_total`, `accounts_engaged` and `profile_views`; a "החשבון עצמו" block on the Facebook and Instagram pages (`15b8212`), verified live. Dated by `insights_day`, rows without it skipped, line appears from the third day. | 2026-07-27 |
 | Does the dashboard serve stale JS after a deploy? | No. `/static/app.js` answers `cache-control: no-cache` with an ETag, so a browser revalidates every load. A tab opened *before* a deploy keeps the old file until it reloads — that is the tab, not the server. | 2026-07-27 |
 | YouTube's tail — 8.9M views the 30-day window could not see | Shipped 2026-07-27: `views_lifetime` + `lifetime_checked` fill weekly beside `views`, never over it (`youtube_lifetime.yml`). First run: 131,980,309 stored → 141,118,899 actual, **9.1M recovered**, 319 videos up more than 10%. The collector now carries over columns it does not produce, with `test_youtube_merge.py` holding that rule — without it the daily run would have wiped the column for every video under 30 days old. | 2026-07-27 |
+| Cold dashboard loads (0.3–3.6s while warm ones were 190–550ms) | Fixed 2026-07-27 (`gsheets.py`, warmer thread at TTL−90s). Verified live: `/api/overview` after **11 idle minutes** now answers in **621ms**, against 3.0–5.1s before. It warms only tabs somebody asked for, so a page whose tabs are not cached yet still pays once (Instagram: 1,195ms first, 424ms after) — that is the per-page split working, not a regression. A failed read keeps the previous rows. | 2026-07-27 |
 | Were the three items missing from Kan's report a data gap? | No. All three are in their *previous* report. Different week boundary, nothing lost. Always check the previous xlsx before calling something missing. | 2026-07-27 |
