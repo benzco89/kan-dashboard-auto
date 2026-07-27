@@ -6,6 +6,19 @@ name: Weekly Deck (manual)
 
 on:
   workflow_dispatch:
+    inputs:
+      week_start_hour:
+        description: 'Move the Sunday cut N hours into the day (12 = Kan דוח כתבות basis)'
+        required: false
+        default: '0'
+      variant:
+        description: 'Folder suffix, e.g. kan — keeps a second basis off the standard deck'
+        required: false
+        default: ''
+      yt_pool:
+        description: 'YouTube rows to keep (20 when the ranking will be replaced locally)'
+        required: false
+        default: '10'
 
 jobs:
   build:
@@ -57,7 +70,11 @@ jobs:
         # No GEMINI_API_KEY: the editorial layer is authored by hand in
         # deck_content.json. No GETXAPI_KEY: X gets no thumbnails by design.
         # Default run = extract (sheets + thumbnails) then render.
-        run: python weekly_deck/generate_deck.py
+        run: |
+          python weekly_deck/generate_deck.py \
+            --week-start-hour "${{ inputs.week_start_hour || 0 }}" \
+            --yt-pool "${{ inputs.yt_pool || 10 }}" \
+            ${{ inputs.variant && format('--variant {0}', inputs.variant) || '' }}
 
       - name: Upload deck artifact
         if: always()

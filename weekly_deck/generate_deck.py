@@ -132,18 +132,19 @@ def icon_svg(key, size):
 
 PLATFORMS = {
     'youtube':   dict(name='יוטיוב', sheet='נתוני יוטיוב', date_col='published_at',
+                      time_col='published_time',
                       title_col='title', id_col='video_id', follower_col='yt_subscribers',
                       colors=dict(accent='#E11900', bar='#E11900', tint='255,0,0')),
-    'tiktok':    dict(name='טיקטוק', sheet='נתוני טיקטוק', date_col='date',
+    'tiktok':    dict(name='טיקטוק', sheet='נתוני טיקטוק', date_col='date', time_col='time',
                       title_col='title', id_col='video_id', follower_col='tt_followers',
                       colors=dict(accent='#B45309', bar='#B45309', tint='251,191,36')),
-    'instagram': dict(name='אינסטגרם', sheet='נתוני אינסטגרם', date_col='date',
+    'instagram': dict(name='אינסטגרם', sheet='נתוני אינסטגרם', date_col='date', time_col='time',
                       title_col='caption', id_col='media_id', follower_col='ig_followers',
                       colors=dict(accent='#E4405F', bar='#E4405F', tint='228,64,95')),
-    'facebook':  dict(name='פייסבוק', sheet='נתוני פייסבוק', date_col='date',
+    'facebook':  dict(name='פייסבוק', sheet='נתוני פייסבוק', date_col='date', time_col='time',
                       title_col='title', id_col='post_id', follower_col='fb_followers',
                       colors=dict(accent='#1877F2', bar='#1877F2', tint='24,119,242')),
-    'x':         dict(name='X', sheet='נתוני טוויטר', date_col='date',
+    'x':         dict(name='X', sheet='נתוני טוויטר', date_col='date', time_col='time',
                       title_col='text', id_col='tweet_id', follower_col='tw_followers',
                       colors=dict(accent='#111', bar='#111', tint='17,17,17')),
 }
@@ -235,10 +236,18 @@ def clean_title(s, cap=100):
     return s[:cap] if len(s) > cap else s
 
 
-def compute_window(today=None):
+def compute_window(today=None, start_hour=0):
     """Last COMPLETE Israeli week: Sunday..Saturday (Asia/Jerusalem). Running on
     Tue 2026-07-21 -> 2026-07-12..2026-07-18; prior week (for deltas) =
-    2026-07-05..2026-07-11. Running on a Sunday -> the just-finished Sun..Sat."""
+    2026-07-05..2026-07-11. Running on a Sunday -> the just-finished Sun..Sat.
+
+    `start_hour` moves the CUT, not the label. Kan's own דוח כתבות splits the
+    week in the middle of Sunday rather than at midnight — verified on
+    2026-07-27: items published 19/07 at 00:21, 00:29 and 09:45 sit in their
+    12-18 report while one from 16:15 the same day sits in their 19-25 one. With
+    start_hour=12 the deck reproduces that assignment, and the prior week moves
+    with it so the week-over-week delta stays like-for-like. The printed dates
+    are unchanged — theirs are labelled 19-25 too."""
     today = today or datetime.now(IL_TZ)
     days_since_sunday = (today.weekday() + 1) % 7   # Python: Mon=0..Sun=6
     this_week_sunday = today - timedelta(days=days_since_sunday)
@@ -247,8 +256,18 @@ def compute_window(today=None):
     lwe = ws - timedelta(days=1)                     # prior Saturday
     lws = lwe - timedelta(days=6)                    # prior Sunday
     fmt = lambda d: d.strftime('%Y-%m-%d')
+
+    # the filter compares 'YYYY-MM-DD HH:MM' strings, so a shifted week is one
+    # subtraction away and the unshifted case stays byte-identical to the old
+    # date-only comparison
+    def bounds(sunday):
+        s = sunday.replace(hour=0, minute=0) + timedelta(hours=start_hour)
+        e = s + timedelta(days=7) - timedelta(minutes=1)
+        return (s.strftime('%Y-%m-%d %H:%M'), e.strftime('%Y-%m-%d %H:%M'))
+
     return dict(this=(fmt(ws), fmt(we)), last=(fmt(lws), fmt(lwe)),
-                d1=ws, d2=we)
+                d1=ws, d2=we, start_hour=start_hour,
+                this_ts=bounds(ws), last_ts=bounds(lws))
 
 
 # ---------------------------------------------------------------- sheets
@@ -1303,7 +1322,8 @@ def _median_of(df, *cols):
     return 0.0
 
 
-def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token, rmap, pmap):
+def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token, rmap, pmap,
+                     top_n=10):
     """Plain-data content for one platform (no markup, no base64). Thumbnails are
     written to out/thumbs/ and referenced by filename."""
     meta = PLATFORMS[key]
@@ -1320,8 +1340,20 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
     d['_date'] = d[dc].astype(str).str.slice(0, 10)
     d['views'] = to_num(d['views'])
 
-    this_df = d[(d['_date'] >= ws) & (d['_date'] <= we)]
-    last_df = d[(d['_date'] >= lws) & (d['_date'] <= lwe)]
+    # A timestamp, so the week can be cut anywhere inside a day. An item with no
+    # time lands at 00:00 — the same place the old date-only filter put it.
+    tcol = meta.get('time_col')
+    if tcol and tcol in d.columns:
+        t = d[tcol].astype(str).str.strip().str.slice(0, 5)
+        t = t.where(t.str.match(r'^\d{1,2}:\d{2}$').fillna(False), '00:00')
+        t = t.str.zfill(5)
+    else:
+        t = '00:00'
+    d['_ts'] = d['_date'] + ' ' + t
+
+    (ts_s, ts_e), (lts_s, lts_e) = window['this_ts'], window['last_ts']
+    this_df = d[(d['_ts'] >= ts_s) & (d['_ts'] <= ts_e)]
+    last_df = d[(d['_ts'] >= lts_s) & (d['_ts'] <= lts_e)]
 
     this_views = float(this_df['views'].sum())
     last_views = float(last_df['views'].sum())
@@ -1346,7 +1378,7 @@ def extract_platform(key, df_all, window, thumbs_enabled, fb_token, tikhub_token
     this_df = this_df.sort_values('views', ascending=False)
 
     items = []
-    for _, r in this_df.head(10).iterrows():
+    for _, r in this_df.head(top_n).iterrows():
         # the credit lives at the END of the caption, so resolve on the FULL raw
         # text and only then cut down to a headline for display
         raw = str(r.get(tc, '') or '')
@@ -1499,10 +1531,13 @@ def default_learnings(platforms):
 
 # ---------------------------------------------------------------- extract
 
-def build_deck_content(gc, thumbs_enabled, use_gemini=False):
-    window = compute_window()
+def build_deck_content(gc, thumbs_enabled, use_gemini=False, start_hour=0, variant='',
+                       yt_pool=10):
+    window = compute_window(start_hour=start_hour)
     # the window names the folder, so thumbnails and the JSON land together
-    print(f"   📁 {use_out_dir(week_slug(window))}")
+    print(f"   📁 {use_out_dir(week_slug(window) + variant)}")
+    if start_hour:
+        print("   🕛 חלון מוזז: %s → %s (וכך גם שבוע הבסיס)" % window['this_ts'])
     fb_token = os.environ.get('FACEBOOK_TOKEN', '')
     tikhub_token = os.environ.get('TIKHUB_TOKEN', '')
     rmap = load_reporters_map()
@@ -1511,8 +1546,11 @@ def build_deck_content(gc, thumbs_enabled, use_gemini=False):
     plats = []
     for key in PLATFORM_ORDER:
         df = load_sheet(gc, PLATFORMS[key]['sheet']) if gc else None
+        # a platform whose ranking will later be replaced from an outside report
+        # needs a deeper pool: their top-10 can hold items ours never reached
         plats.append(extract_platform(key, df, window, thumbs_enabled,
-                                      fb_token, tikhub_token, rmap, pmap))
+                                      fb_token, tikhub_token, rmap, pmap,
+                                      top_n=yt_pool if key == 'youtube' else 10))
 
     follows = followers_map(gc)
     for p in plats:
@@ -2241,6 +2279,102 @@ def carry_editorial_layer(content):
         print("   ♻️  נשמרה השכבה העריכותית מההרצה הקודמת: " + ", ".join(kept))
 
 
+def _norm_title(s):
+    """Loose enough to match the same headline written by two different tools."""
+    s = re.sub(r'[\"\'“”„:•\-–—|@…\.\,\?\!\(\)\[\]]', ' ', str(s or ''))
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def read_kan_report(path, section='יוטיוב'):
+    """One platform's table out of Kan's own 'דוח כתבות' xlsx.
+
+    Their sheet is a stack of labelled blocks — a platform name on its own row,
+    a header row, then numbered rows: name | source | link | views | reactions |
+    comments | shares."""
+    try:
+        import openpyxl
+    except ImportError:
+        raise SystemExit("❌ --yt-from needs openpyxl (pip install openpyxl)")
+    ws = openpyxl.load_workbook(path, data_only=True).worksheets[0]
+    known = {'טיקטוק', 'אינסטגרם', 'יוטיוב', 'פייסבוק', 'טוויטר'}
+    rows, cur = [], None
+    for r in ws.iter_rows(values_only=True):
+        c = [(str(x).strip() if x is not None else '') for x in r]
+        if c and c[0] in known:
+            cur = c[0]
+            continue
+        if cur == section and c and c[0].isdigit() and len(c) > 4 and c[4]:
+            num = lambda i: int(float(c[i])) if len(c) > i and c[i] else 0
+            rows.append(dict(rank=int(c[0]), title=c[1], views=num(4),
+                             likes=num(5), comments=num(6), shares=num(7)))
+    return rows
+
+
+def apply_kan_youtube(content, path, keep=10):
+    """Replace the YouTube slide's figures with the ones from Kan's own report.
+
+    Ours are cumulative views to the moment of the pull; theirs are restricted to
+    the week. Measured on 19-25/07 the two differ by 1.6-18.9% per video — enough
+    to reorder the table, which is why the ranking is taken from them too and not
+    just the numbers.
+
+    Everything the report does not carry — thumbnail, credit, programme, link —
+    is joined on from our own extract by headline. A row that cannot be matched
+    still renders, with their figures and without the extras; it is reported so
+    nobody mistakes a thin row for a data error."""
+    theirs = read_kan_report(path, 'יוטיוב')
+    if not theirs:
+        raise SystemExit("❌ no YouTube block found in %s" % path)
+    p = next((x for x in content['platforms'] if x['key'] == 'youtube'), None)
+    if p is None:
+        return 0, 0
+
+    pool = {_norm_title(it.get('caption') or it.get('title_long') or it.get('title')): it
+            for it in p.get('top', [])}
+
+    def find(title):
+        t = _norm_title(title)
+        for k, it in pool.items():
+            if not k:
+                continue
+            n = min(len(k), len(t), 30)
+            if n >= 12 and k[:n] == t[:n]:
+                return it
+        return None
+
+    new, matched, missed = [], 0, []
+    for row in sorted(theirs, key=lambda r: -r['views'])[:keep]:
+        it = find(row['title'])
+        if it:
+            matched += 1
+            item = dict(it)
+        else:
+            missed.append(row['title'])
+            item = dict(id='', title=clean_title(row['title'], headline_cap('youtube')),
+                        title_long=clean_title(row['title'], card_cap('youtube')),
+                        caption=row['title'], reporter='', program='', url=None,
+                        reshetb=False, thumb=None, engagement=0.0)
+        item['views'] = row['views']
+        item['likes'] = row['likes']
+        item['comments'] = row['comments']
+        item['shares'] = row['shares']
+        views = row['views'] or 1
+        item['engagement'] = round((row['likes'] + row['comments']) / views * 100, 1)
+        new.append(item)
+
+    p['top'] = new
+    # the badge must compare their numbers against a baseline built from their
+    # numbers; the stored week-wide medians are on our basis and would flag rows
+    # for nothing more than a smaller denominator
+    p['median_rates'] = {}
+    p['metrics_source'] = os.path.basename(path)
+    print("   📄 יוטיוב מתוך %s: %d שורות, %d הוצמדו לפריטים שלנו" % (
+        os.path.basename(path), len(new), matched))
+    for t in missed:
+        print("      ⚠️ ללא התאמה אצלנו (בלי תמונה/קרדיט): %s" % clean_title(t, 60))
+    return matched, len(missed)
+
+
 def save_content(content):
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(CONTENT_PATH, 'w', encoding='utf-8') as f:
@@ -2896,6 +3030,22 @@ def main():
     ap.add_argument('--week', metavar='FOLDER',
                     help="work on a specific out/<folder> (default: the newest week). "
                          "--extract always writes the week it just pulled.")
+    ap.add_argument('--week-start-hour', type=int, default=0, metavar='H',
+                    help="move the Sunday cut H hours into the day, for BOTH the "
+                         "reported week and the baseline. 12 reproduces the split "
+                         "Kan's own דוח כתבות uses. The printed dates do not change.")
+    ap.add_argument('--yt-from', metavar='XLSX',
+                    help="take the YouTube slide's figures and ranking from a Kan "
+                         "'דוח כתבות' xlsx instead of the sheet (their views are "
+                         "restricted to the week; ours are cumulative). Offline: "
+                         "rewrites an existing deck_content.json and exits, so it "
+                         "runs here even though CI never sees the file.")
+    ap.add_argument('--yt-pool', type=int, default=10, metavar='N',
+                    help="how many YouTube rows --extract keeps (default 10). Use 20 "
+                         "when --yt-from will re-rank them afterwards.")
+    ap.add_argument('--variant', metavar='NAME',
+                    help="write to out/<week>__<NAME>/ so a second basis does not "
+                         "overwrite the standard deck")
     args = ap.parse_args()
 
     # Which folder under out/ this run reads and writes. An extract names its own
@@ -2946,6 +3096,16 @@ def main():
         report_reporters(content)
         return
 
+    # offline pass: CI cannot read the xlsx (docs/*.xlsx is gitignored), so the
+    # swap happens here, on the deck_content.json the run produced
+    if args.yt_from and not args.extract:
+        content = load_content()
+        apply_kan_youtube(content, args.yt_from)
+        check_editorial_numbers(content)
+        save_content(content)
+        print("   ▶️  now re-run with --render")
+        return
+
     do_extract = args.extract or not args.render
     do_render = args.render or not args.extract
 
@@ -2958,7 +3118,12 @@ def main():
         else:
             print("📥 Extracting from Google Sheets...")
             content = build_deck_content(get_client(), thumbs_enabled=not args.no_thumbs,
-                                         use_gemini=args.gemini)
+                                         use_gemini=args.gemini,
+                                         start_hour=args.week_start_hour,
+                                         variant=('__' + args.variant) if args.variant else '',
+                                         yt_pool=args.yt_pool)
+        if args.yt_from:
+            apply_kan_youtube(content, args.yt_from)
         carry_editorial_layer(content)     # before the report, so the number
         report_reporters(content)          # check runs against what was carried
         save_content(content)
