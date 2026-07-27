@@ -139,9 +139,12 @@ def show(title, ser, tracker_value):
 
 def main():
     token = os.environ.get('FACEBOOK_TOKEN')
-    page = os.environ.get('FACEBOOK_PAGE_ID')
-    if not token or not page:
-        raise SystemExit("❌ missing FACEBOOK_TOKEN / FACEBOOK_PAGE_ID")
+    # or-fallback, not `os.environ.get(x, default)`: the GitHub secret exists but
+    # is EMPTY, and the workflow sets it as an empty env var — same as
+    # facebook_collector.py and followers_probe.py
+    page = os.environ.get('FACEBOOK_PAGE_ID') or "220634478361516"
+    if not token:
+        raise SystemExit("❌ missing FACEBOOK_TOKEN")
 
     print("=" * 66)
     print("🔎 האם הסדרה היומית מתקדמת, ומה עוד יש")
