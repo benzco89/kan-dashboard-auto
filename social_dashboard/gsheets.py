@@ -155,8 +155,65 @@ def _load(keys, force=False):
         with _lock:
             for k, rows in fetched.items():
                 _cache[k] = (rows, stamp)
+    _start_warmer()
     with _lock:
         return {k: _cache[k][0] for k in keys if k in _cache}
+
+
+# ---------------------------------------------------------------- warmer
+
+# Refresh before the entry expires rather than when someone asks for it. The
+# cache made a warm page 190-550ms and a cold one 0.3-3.6s (measured live
+# 2026-07-27, /api/overview being both the slowest and the landing page) — and
+# with a 600s TTL over data that changes once a day, the first visitor after ten
+# quiet minutes paid that cost on everyone's behalf.
+#
+# The margin is what makes it work: refreshing at TTL-90s means an entry is
+# replaced while it is still valid, so a request never finds a missing one.
+_WARM_MARGIN = 90
+_warmer = None
+
+
+def _warm_once():
+    """Re-read every tab already in the cache. Only tabs someone has asked for —
+    warming all fourteen would undo the per-page split that made this fast."""
+    with _lock:
+        keys = list(_cache.keys())
+    if not keys:
+        return
+    fetched = _fetch(keys)
+    stamp = time.time()
+    with _lock:
+        for k, rows in fetched.items():
+            # a failed read returns [] for that tab; keeping the previous rows is
+            # better than serving an empty dashboard because Sheets hiccuped
+            if rows or not _cache.get(k, ([], 0))[0]:
+                _cache[k] = (rows, stamp)
+
+
+def _warm_loop(interval):
+    while True:
+        time.sleep(interval)
+        try:
+            _warm_once()
+        except Exception as e:      # never let a bad read kill the thread
+            print(f"[gsheets] warm failed: {str(e)[:120]}", flush=True)
+
+
+def _start_warmer():
+    """Started by the first real read, not at import: a CLI or a test that
+    imports this module should not spawn a thread or touch the network."""
+    global _warmer
+    if _warmer is not None or os.environ.get("CACHE_WARM", "1") == "0":
+        return
+    interval = max(30, _CACHE_TTL - _WARM_MARGIN)
+    with _lock:
+        if _warmer is not None:
+            return
+        _warmer = threading.Thread(target=_warm_loop, args=(interval,),
+                                   name="gsheets-warmer", daemon=True)
+        _warmer.start()
+    print(f"[gsheets] cache warmer every {interval}s (TTL {_CACHE_TTL}s)", flush=True)
 
 
 class SheetData(dict):
