@@ -192,9 +192,21 @@ def update_google_sheet(new_data_df):
         
         # וידוא שכל העמודות קיימות
         for col in new_data_df.columns:
-            if col not in existing_df.columns: 
+            if col not in existing_df.columns:
                 existing_df[col] = ""
-        
+
+        # ובכיוון ההפוך: עמודות שקיימות רק בגיליון נכתבו על ידי תהליך אחר
+        # (youtube_lifetime_refresh). בלי לשמר אותן הן נמחקות בשקט — השורה
+        # החדשה מנצחת ב-keep='first', אין בה את העמודה, concat ממלא NaN
+        # ו-fillna(0) הופך את הכול לאפס. זה היה מוחק את הערך לכל סרטון
+        # מ-30 הימים האחרונים, בכל בוקר, בלי שגיאה.
+        carried = [c for c in existing_df.columns if c not in new_data_df.columns]
+        if carried:
+            prev = existing_df.drop_duplicates(subset=['video_id'], keep='first').set_index('video_id')
+            for col in carried:
+                new_data_df[col] = new_data_df['video_id'].map(prev[col].to_dict())
+            print(f"   ↩️  נשמרו עמודות שנכתבו מחוץ לקולקטור: {', '.join(carried)}")
+
         combined = pd.concat([new_data_df, existing_df])
         final_df = combined.drop_duplicates(subset=['video_id'], keep='first')
     

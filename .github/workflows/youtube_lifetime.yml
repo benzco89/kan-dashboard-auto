@@ -1,0 +1,42 @@
+name: YouTube lifetime refresh (weekly)
+
+# The collector stops looking at a video after 30 days, and the tail keeps
+# running for months — 8.9M views the sheet could not see when this was measured
+# (youtube_tail_probe.py, 2026-07-27). This fills views_lifetime beside views and
+# never over it: `views` stays "the first 30 days", which is what makes one week
+# comparable to another.
+#
+# Sunday 05:10 UTC — after the daily pipeline (05:30 UTC) would have started, so
+# they do not write the same sheet at the same moment. Cost: ~64 API units.
+on:
+  schedule:
+    - cron: '10 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Fetch and report without writing'
+        required: false
+        default: 'false'
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests gspread google-auth pytz
+
+      - name: Refresh lifetime views
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: |
+          python youtube_lifetime_refresh.py \
+            ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
