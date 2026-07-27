@@ -46,7 +46,7 @@ BUCKETS = [(10, 20), (20, 40), (40, 70), (70, 120), (120, 100000)]
 
 SHEETS = {
     "facebook": dict(name="נתוני פייסבוק", id_col="post_id", date_col="date",
-                     views_col="views", metric="post_video_views"),
+                     views_col="views", metric="post_media_view"),
     "instagram": dict(name="נתוני אינסטגרם", id_col="media_id", date_col="date",
                       views_col="views", metric="views"),
 }
@@ -102,8 +102,11 @@ def rows_of(platform):
 
 
 def fetch_live(platform, ids, token):
-    """Current view count per item. Instagram answers per-media insights; Facebook
-    keeps video views on the post's own insights edge."""
+    """Current view count per item, asking for the SAME metric the collector
+    stored — `post_media_view` on Facebook, `views` on Instagram. The first run
+    asked Facebook for `post_video_views` instead, and the control group came
+    back at -100%: a different metric, not a vanishing tail. That is what the
+    control is for."""
     cfg = SHEETS[platform]
     live = {}
     for i, pid in enumerate(ids, 1):
