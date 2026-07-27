@@ -20,7 +20,22 @@ Last reviewed: **2026-07-27**
 holding values on 2026-07-26 (`8799c48`). They appear **zero times** in
 `social_dashboard/aggregate.py` and zero times in any template.
 
-**The row date does not describe the value in it — fix that first.** Settled by
+**The collector half is done (2026-07-27, `ef2f623`).** The day alignment is
+fixed and the three new metrics are collected; what is still open is that
+**nothing displays any of it**. Today's row: `insights_day = 2026-07-26`,
+`fb_page_views = 18,282`, `ig_accounts_engaged = 30,069`,
+`ig_profile_views = 3,157`, and `fb_daily_reach` corrected from 1,080,464 to
+1,134,262. Verified snapshot-before/diff-after: 231 rows unchanged, 0 values
+lost, 4 columns appended at the end.
+
+**When displaying, read `insights_day`, never the row date.** Rows before
+2026-07-27 have it blank — including 2026-07-26, whose daily figures actually
+describe 25/07 — so a chart should skip any row without it rather than plot it
+one day off.
+
+<details><summary>The original problem, kept because the diagnosis is the reusable part</summary>
+
+Settled by
 `followers_series_probe.py` (run `30251843236`, 2026-07-27): nothing is frozen,
 every metric returns 8 distinct values over 8 days. The duplicate was a race with
 Meta's clock. Its day buckets close at **07:00 UTC = 10:00 Israel**, and the
@@ -36,10 +51,13 @@ So a daily chart built on these columns today would be shifted by a day and woul
 occasionally repeat a point. Two fixes: move the pull past 10:00 Israel, or —
 better, because it does not depend on when the job happens to run — ask with an
 explicit `since/until` for the day wanted and store Meta's `end_time` beside the
-value.
+value. *(The second one is what shipped.)*
 
-*This is the only open item that accumulates in real time — new data every day
-that nobody reads.* Next: fix the day alignment, then decide where it belongs.
+</details>
+
+*Still the only open item that accumulates in real time — new data every day that
+nobody reads.* Next: decide where daily reach, page views and accounts-engaged
+belong on the dashboard, and wire them.
 
 ### 1b. Metrics v25 offers that we do not take
 Verified live over 8 days, not from docs and not from one sample — runs
@@ -47,9 +65,9 @@ Verified live over 8 days, not from docs and not from one sample — runs
 
 | metric | daily range | verdict |
 |---|---|---|
-| **`accounts_engaged`** (IG) | 26,359–53,554 | **take it.** Unique *accounts*, not actions — a question no sum of likes and comments can answer |
-| **`profile_views`** (IG) | 2,592–**8,274** | **take it.** Peak on 24/07, the day the missing boy was the story |
-| **`page_views_total`** (FB) | 14,996–**29,557** | **take it.** Peak 25/07. Instagram has per-post `profile_visits`; Facebook has nothing |
+| **`accounts_engaged`** (IG) ✅ collected | 26,359–53,554 | **taken 27/07.** Unique *accounts*, not actions — a question no sum of likes and comments can answer |
+| **`profile_views`** (IG) ✅ collected | 2,592–**8,274** | **taken 27/07.** Peak on 24/07, the day the missing boy was the story |
+| **`page_views_total`** (FB) ✅ collected | 14,996–**29,557** | **taken 27/07.** Peak 25/07. Instagram has per-post `profile_visits`; Facebook has nothing |
 | `total_interactions` (IG) | ~49,648 | maybe — overlaps what per-post sums already give |
 | `website_clicks` (IG) | 4–21 | no |
 | `profile_links_taps` (IG) | 0–1 | no |
