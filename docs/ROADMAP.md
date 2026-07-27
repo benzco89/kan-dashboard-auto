@@ -37,11 +37,41 @@ Instagram has only `avg_watch_sec`. One line in the collector closes the gap.
 
 ## Open — data
 
-### 4. Nobody has measured the tail on Facebook / Instagram
-Their posts freeze at 7 days, so the question is unanswerable from the sheet —
-exactly the situation YouTube was in before the probe. The same design works
-against the Graph API on old post ids. Not built. Until it is, "a Facebook post
-is finished by day four" is only true *up to day seven*.
+### 4. Facebook and Instagram have a tail too — and nothing collects it
+Measured 2026-07-27 (`meta_tail_probe.py`, run on 148 frozen posts per platform,
+sampled across age buckets, with a control group of still-refreshed posts):
+
+| | control | 10–20d | 20–40d | 40–70d | 70–120d | 120d+ | total |
+|---|---|---|---|---|---|---|---|
+| Facebook | +0.1% ✅ | +0.8% | +1.3% | +2.9% | +4.6% | +2.3% | **+7.8%** (19.96M → 21.51M) |
+| Instagram | +0.8% ✅ | +3.3% | +5.2% | +3.4% | +3.3% | +3.1% | see below |
+
+Medians. Facebook's is the same order as YouTube's 7.5%, so the same fix applies:
+a `views_lifetime` column, never over `views`, for the reasons in the closed row
+about YouTube.
+
+**Instagram's total cannot be computed and that is a finding of its own.** Its
+per-post medians are consistently positive, but the weighted totals go *negative*
+in the old buckets (−6.5% at 70–120 days, −36.5% past 120) — old rows hold a
+bigger number than the API now returns, because `views` replaced `plays` /
+`impressions` mid-history. The tail is real; the aggregate across that boundary
+is not.
+
+**The cost is the open question.** YouTube answers 50 videos per call; Meta wants
+one call per post — 2,793 + 2,661 ≈ 5,500 a week. The Graph batch endpoint takes
+50 sub-requests per HTTP call, which brings it to ~110. Worth building that way
+or not at all.
+
+### 5. The dashboard is fast when warm and slow when cold
+Measured live 2026-07-27, after yesterday's batched read and per-tab cache
+(`33ecce0`): HTML 80–325ms, and the data endpoints **190–550ms warm** against
+**0.3–3.6s cold** (`/api/overview` is the worst, and it is the landing page).
+
+The cache TTL is 600s (`gsheets.py:48`) while the data changes once a day, so
+every visitor arriving after ten quiet minutes pays the cold price for everyone.
+Two ways out: raise the TTL, which trades staleness for speed, or keep it and
+refresh it in the background before it expires, so nobody ever waits for Sheets.
+The second costs one read every ~9 minutes and no user ever sees a cold page.
 
 ### 6. The local `.env` FACEBOOK_TOKEN expired
 Died 2026-07-26 08:00 PDT. The GitHub secret is fine (this morning's runs
