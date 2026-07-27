@@ -37,23 +37,7 @@ Instagram has only `avg_watch_sec`. One line in the collector closes the gap.
 
 ## Open — data
 
-### 4. YouTube's tail is invisible and it is worth ~7.5%
-`youtube_tail_probe.py` (run `30245535993`, 2026-07-27) compared 2,778 videos
-that froze when they left the 30-day window against their live counts:
-**118.8M stored vs 127.8M actual — 8.9M views the system never sees.** 11% of
-videos gained over 10% after the cut; one went +330%. The tail is slow and runs
-for months, so a longer window is the wrong tool (33-45 days adds only 0.3%
-median). A weekly full refresh costs **64 API calls out of a 10,000/day quota**.
-
-**Condition, and it is not cosmetic:** it must write to a NEW column
-(`views_lifetime`), never over `views`. What makes weeks comparable is that
-every post is measured on the same clock; letting history accrue forever would
-bias every week-over-week comparison downward, permanently and increasingly. It
-would also fire `views_delta` on old rows and confuse the alerts and the sniffer,
-which were calibrated on the current behaviour. Same reasoning that left
-`engagement_rate` alone in the collectors.
-
-### 5. Nobody has measured the tail on Facebook / Instagram
+### 4. Nobody has measured the tail on Facebook / Instagram
 Their posts freeze at 7 days, so the question is unanswerable from the sheet —
 exactly the situation YouTube was in before the probe. The same design works
 against the Graph API on old post ids. Not built. Until it is, "a Facebook post
@@ -110,4 +94,5 @@ a cut headline mattered.
 | Which `engagement_rate` is the true one? | None — `social_dashboard/metrics.py` is the single definition. The collectors keep their old column on purpose: the daily Telegram report prints it and the alert thresholds were calibrated on it. | 2026-07-26 |
 | Five daily account columns collected and displayed by nothing | Shipped. Collector day-alignment fixed (`ef2f623`) plus `page_views_total`, `accounts_engaged` and `profile_views`; a "החשבון עצמו" block on the Facebook and Instagram pages (`15b8212`), verified live. Dated by `insights_day`, rows without it skipped, line appears from the third day. | 2026-07-27 |
 | Does the dashboard serve stale JS after a deploy? | No. `/static/app.js` answers `cache-control: no-cache` with an ETag, so a browser revalidates every load. A tab opened *before* a deploy keeps the old file until it reloads — that is the tab, not the server. | 2026-07-27 |
+| YouTube's tail — 8.9M views the 30-day window could not see | Shipped 2026-07-27: `views_lifetime` + `lifetime_checked` fill weekly beside `views`, never over it (`youtube_lifetime.yml`). First run: 131,980,309 stored → 141,118,899 actual, **9.1M recovered**, 319 videos up more than 10%. The collector now carries over columns it does not produce, with `test_youtube_merge.py` holding that rule — without it the daily run would have wiped the column for every video under 30 days old. | 2026-07-27 |
 | Were the three items missing from Kan's report a data gap? | No. All three are in their *previous* report. Different week boundary, nothing lost. Always check the previous xlsx before calling something missing. | 2026-07-27 |
