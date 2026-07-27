@@ -242,12 +242,13 @@ def compute_window(today=None, start_hour=0):
     2026-07-05..2026-07-11. Running on a Sunday -> the just-finished Sun..Sat.
 
     `start_hour` moves the CUT, not the label. Kan's own דוח כתבות splits the
-    week in the middle of Sunday rather than at midnight — verified on
-    2026-07-27: items published 19/07 at 00:21, 00:29 and 09:45 sit in their
-    12-18 report while one from 16:15 the same day sits in their 19-25 one. With
-    start_hour=12 the deck reproduces that assignment, and the prior week moves
-    with it so the week-over-week delta stays like-for-like. The printed dates
-    are unchanged — theirs are labelled 19-25 too."""
+    week during Sunday morning rather than at midnight. Bracketed against their
+    two reports on 2026-07-27 — items published 19/07 at 00:21, 00:29 and 09:45
+    are in their 12-18 file; 11:20 and 16:15 the same day are in their 19-25
+    one — so the cut sits between 09:45 and 11:20 and start_hour=10 reproduces
+    every one of those assignments. The prior week moves with it, so the
+    week-over-week delta stays like-for-like. The printed dates do not change:
+    theirs are labelled 19-25 too."""
     today = today or datetime.now(IL_TZ)
     days_since_sunday = (today.weekday() + 1) % 7   # Python: Mon=0..Sun=6
     this_week_sunday = today - timedelta(days=days_since_sunday)
