@@ -9,7 +9,7 @@ import requests
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import pytz
 
 from utils import http_get_json
@@ -67,6 +67,12 @@ HEADERS = [
     # חדשות נכנסות רק בסוף: השורות נכתבות לפי מיקום, אז עמודה
     # שנדחפת באמצע מזיזה את כל הנתונים ההיסטוריים לכותרת השכנה.
     'ig_website_clicks',
+    # היום שאליו מתייחסים המדדים היומיים. התאריך בעמודה A הוא יום ההרצה,
+    # והם אף פעם לא אותו יום — ראו _latest_daily_insight.
+    'insights_day',
+    'fb_page_views',
+    'ig_accounts_engaged',
+    'ig_profile_views',
 ]
 
 # --- Helper Functions ---
@@ -161,41 +167,50 @@ def get_facebook_stats():
 
     return None
 
-def _one_insight(obj_id, metric, extra=None):
-    """Fetch ONE insight metric. Returns 0 on any error.
+def _latest_daily_insight(obj_id, metric, extra=None, days=5):
+    """המדד היומי האחרון שכבר נסגר — ואיזה יום הוא מתאר.
 
-    The whole point: this function used to ask for five metrics in a single
-    call, and Meta fails the entire request when one name is no longer valid.
-    page_impressions_unique was removed on 2026-06-15 and took page_fan_adds,
-    page_fan_removes, page_post_engagements and page_video_views down with it —
-    four columns empty in all 230 rows of the sheet, for eight months, with no
-    error anywhere. facebook_collector already fetches one metric at a time for
-    exactly this reason; this is the same fix, applied where it was missing.
+    לא date_preset=yesterday. היום של מטא נסגר ב-07:00 UTC, שהם 10:00 בבוקר
+    שעון ישראל, והטראקר רץ ב-08:30 — שעה וחצי לפני. אז "אתמול" החזיר את היום
+    שלפניו, ואותו מספר בדיוק נכתב בשתי שורות עוקבות ב-26 וב-27 ביולי
+    (1,080,464 חשיפה, 304,274 מעורבות). אותה קריאה בצהריים החזירה מספר אחר.
+
+    בקשה של טווח ולקיחת הנקודה האחרונה לא תלויה בשעה שבה ה-workflow רץ, ומטא
+    מחזירה end_time לכל נקודה — כך שהיום מגיע מהתשובה במקום להיות מנוחש.
+    הדלי שנגמר ב-end_time מתאר את היממה שלפניו, ולכן היום = end_time פחות יום.
+
+    מחזירה (value, day). day הוא None כשאין תשובה — הקורא לא ימציא תאריך.
     """
     token = os.environ.get('FACEBOOK_TOKEN')
     if not token:
-        return 0
-    params = {'access_token': token, 'metric': metric,
-              'period': 'day', 'date_preset': 'yesterday'}
+        return 0, None
+    now = datetime.now(timezone.utc)
+    params = {'access_token': token, 'metric': metric, 'period': 'day',
+              'since': (now - timedelta(days=days)).strftime('%Y-%m-%d'),
+              'until': now.strftime('%Y-%m-%d')}
     params.update(extra or {})
     try:
         res = http_get_json(f"https://graph.facebook.com/{FACEBOOK_API_VERSION}/{obj_id}/insights",
                             params=params)
         if 'error' in res:
-            return 0
-        data = res.get('data') or []
-        if not data:
-            return 0
-        item = data[0]
-        # v25 answers account-level metrics under total_value and page-level
-        # ones under values; accept either rather than guessing per metric
-        tv = item.get('total_value')
-        if isinstance(tv, dict) and tv.get('value') is not None:
-            return tv.get('value') or 0
-        values = item.get('values') or []
-        return (values[0].get('value') or 0) if values else 0
-    except Exception:
-        return 0
+            print(f"   ⚠️ {metric}: {res['error'].get('message', '')[:80]}")
+            return 0, None
+        points = []
+        for block in res.get('data') or []:
+            points.extend(block.get('values') or [])
+        if not points:
+            return 0, None
+        last = points[-1]
+        value = last.get('value')
+        if isinstance(value, dict):     # ריאקציות וכד' מגיעות כפירוק
+            value = sum(v for v in value.values() if isinstance(v, (int, float)))
+        end = str(last.get('end_time') or '')[:10]
+        day = ((datetime.strptime(end, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+               if end else None)
+        return (value or 0), day
+    except Exception as e:
+        print(f"   ⚠️ {metric}: {e}")
+        return 0, None
 
 
 def get_facebook_daily_insights():
@@ -206,17 +221,29 @@ def get_facebook_daily_insights():
       page_total_media_view_unique  מחליף את page_impressions_unique שהוסר
       page_post_engagements         עבד כל הזמן — נפל רק כי היה באותה קריאה
       page_video_views              כנ"ל
+      page_views_total              כניסות לעמוד עצמו (חדש; 15K-29.5K ביום)
     ל-page_fan_removes לא נמצא מחליף; הסרות עוקבים כנראה כבר לא נחשפות.
+
+    כל המדדים נמשכים לאותו יום — היום שמטא כבר סגרה — והוא מוחזר ב-insights_day
+    כדי שהדשבורד יקרא את היום מהנתון ולא מתאריך השורה.
     """
     if not os.environ.get('FACEBOOK_TOKEN'):
         return None
-    return {
-        'fan_adds': _one_insight(FACEBOOK_PAGE_ID, 'page_daily_follows'),
-        'fan_removes': 0,
-        'daily_reach': _one_insight(FACEBOOK_PAGE_ID, 'page_total_media_view_unique'),
-        'daily_engagements': _one_insight(FACEBOOK_PAGE_ID, 'page_post_engagements'),
-        'daily_video_views': _one_insight(FACEBOOK_PAGE_ID, 'page_video_views'),
-    }
+    # מטריקה-מטריקה, לא בקשה אחת: מטא מפילה את כל הקריאה כששם אחד בטל.
+    # page_impressions_unique הוסר ב-15.6.2026 ולקח איתו את page_fan_adds,
+    # page_fan_removes, page_post_engagements ו-page_video_views — ארבע עמודות
+    # ריקות ב-230 שורות, שמונה חודשים, בלי שגיאה בשום מקום.
+    out, day = {}, None
+    for key, metric in (('fan_adds', 'page_daily_follows'),
+                        ('daily_reach', 'page_total_media_view_unique'),
+                        ('daily_engagements', 'page_post_engagements'),
+                        ('daily_video_views', 'page_video_views'),
+                        ('page_views', 'page_views_total')):
+        out[key], d = _latest_daily_insight(FACEBOOK_PAGE_ID, metric)
+        day = day or d
+    out['fan_removes'] = 0
+    out['insights_day'] = day
+    return out
 
 
 # --- Instagram Functions ---
@@ -287,7 +314,36 @@ def get_instagram_stats():
     return None
 
 
-def get_instagram_daily_insights():
+def _one_day_total(obj_id, metric, day, extra=None):
+    """מדד ברמת חשבון ליום מסוים. total_value עונה לטווח ולא ליום, אז מבקשים
+    טווח של יום אחד — ואת אותו יום שפייסבוק כבר סגרה, כדי ששתי הפלטפורמות
+    יתארו את אותה יממה. בלי יום ידוע לא ננחש: מחזירים 0."""
+    token = os.environ.get('FACEBOOK_TOKEN')
+    if not token or not day:
+        return 0
+    nxt = (datetime.strptime(day, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+    params = {'access_token': token, 'metric': metric, 'period': 'day',
+              'since': day, 'until': nxt}
+    params.update(extra or {})
+    try:
+        res = http_get_json(f"https://graph.facebook.com/{FACEBOOK_API_VERSION}/{obj_id}/insights",
+                            params=params)
+        if 'error' in res:
+            print(f"   ⚠️ ig {metric}: {res['error'].get('message', '')[:80]}")
+            return 0
+        for block in res.get('data') or []:
+            tv = block.get('total_value')
+            if isinstance(tv, dict) and tv.get('value') is not None:
+                return tv.get('value') or 0
+            for v in block.get('values') or []:
+                return v.get('value') or 0
+        return 0
+    except Exception as e:
+        print(f"   ⚠️ ig {metric}: {e}")
+        return 0
+
+
+def get_instagram_daily_insights(day=None):
     """נתונים יומיים ברמת החשבון, מטריקה-מטריקה.
 
     `impressions` הוסר, וכיוון שהוא נמשך באותה קריאה עם `reach` — גם reach חזר
@@ -305,11 +361,17 @@ def get_instagram_daily_insights():
     if not ig:
         return None
     extra = {'metric_type': 'total_value'}
-    return {
-        'daily_reach': _one_insight(ig, 'reach', extra),
-        'daily_views': _one_insight(ig, 'views', extra),
-        'website_clicks': _one_insight(ig, 'website_clicks', extra),
+    out = {
+        'daily_reach': _one_day_total(ig, 'reach', day, extra),
+        'daily_views': _one_day_total(ig, 'views', day, extra),
+        'website_clicks': _one_day_total(ig, 'website_clicks', day, extra),
+        # חדשים. accounts_engaged סופר חשבונות ייחודיים ולא פעולות, וזו שאלה
+        # שאף סכום של לייקים ותגובות לא עונה עליה. profile_views הוא כמה אנשים
+        # באו לחפש אותנו — הוא הכפיל את עצמו ל-8,274 ביום שיובל קוגן נעדר.
+        'accounts_engaged': _one_day_total(ig, 'accounts_engaged', day, extra),
+        'profile_views': _one_day_total(ig, 'profile_views', day, extra),
     }
+    return out
 
 
 # --- Twitter / X Functions ---
@@ -470,7 +532,8 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
     
     # משיכת נתונים יומיים של פייסבוק
     fb_daily = get_facebook_daily_insights() or {}
-    ig_daily = get_instagram_daily_insights() or {}
+    # אותו יום לשתי הפלטפורמות — הוא מגיע מ-end_time שמטא החזירה, לא מהשעון שלנו
+    ig_daily = get_instagram_daily_insights(fb_daily.get('insights_day')) or {}
     
     # בניית שורה חדשה
     new_row = [
@@ -506,6 +569,10 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
         tiktok_stats['video_count'] if tiktok_stats else '',
         # בסוף השורה, בהתאמה לסוף ה-HEADERS
         ig_daily.get('website_clicks', ''),
+        fb_daily.get('insights_day', ''),
+        fb_daily.get('page_views', ''),
+        ig_daily.get('accounts_engaged', ''),
+        ig_daily.get('profile_views', ''),
     ]
     
     # בדיקה אם כבר יש שורה להיום
@@ -535,7 +602,10 @@ def save_followers_data(youtube_stats, facebook_stats, instagram_stats, twitter_
     if instagram_stats:
         print(f"📸 Instagram: {instagram_stats['followers']:,} followers ({ig_followers_change:+,})")
         if ig_daily:
-            print(f"   Daily: {ig_daily.get('daily_reach', 0):,} reach, {ig_daily.get('daily_views', 0):,} views, {ig_daily.get('website_clicks', 0):,} site clicks")
+            print(f"   Daily: {ig_daily.get('daily_reach', 0):,} reach, {ig_daily.get('daily_views', 0):,} views, "
+                  f"{ig_daily.get('accounts_engaged', 0):,} accounts engaged, {ig_daily.get('profile_views', 0):,} profile views")
+    print(f"📅 המדדים היומיים מתארים את {fb_daily.get('insights_day') or '??'} "
+          f"(תאריך השורה: {today}) — היום של מטא נסגר ב-10:00 שעון ישראל")
     if twitter_stats:
         print(f"🐦 Twitter: {twitter_stats['followers']:,} followers ({tw_followers_change:+,})")
     if tiktok_stats:
