@@ -596,6 +596,9 @@ def build_facebook(data, days):
             "retention_end": round(_num(p.get("retention_end")), 1),
             "retention_curve": _curve(p.get("retention_curve")),
             "replays": _int(p.get("replays")),
+            # the modal has been ready to draw this since the retention work
+            # landed; the field was simply never filled, so the row never showed
+            "replay_share": _replay_share(p),
             "replay_share": _replay_share(p),
             "share_rate": round(shares / views * 100, 2) if views else 0,
             "reshetb": bool(reshetb_re.search(str(p.get("title", "")))),
