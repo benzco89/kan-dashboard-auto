@@ -152,6 +152,41 @@ def fetch_videos():
     return pd.DataFrame(videos)
 
 
+def merge_with_existing(new_data_df, existing_df):
+    """מיזוג השורות החדשות עם מה שכבר בגיליון. פונקציה טהורה — בלי רשת — כדי
+    ש-test_youtube_merge.py יוכל לנעול אותה.
+
+    שני הכיוונים חשובים:
+      * עמודה שקיימת רק בחדש נוספת לישן כריקה (ההתנהגות המקורית).
+      * עמודה שקיימת רק בגיליון היא עמודה שכתב תהליך אחר — כרגע
+        youtube_lifetime_refresh. בלי לשמר אותה היא נמחקת בשקט: השורה החדשה
+        מנצחת ב-keep='first', אין בה את העמודה, concat ממלא NaN ו-fillna(0)
+        למטה הופך את הכול לאפס. כלומר כל סרטון מ-30 הימים האחרונים היה מאבד
+        את הערך שלו בכל בוקר, בלי שגיאה בשום מקום.
+    """
+    if existing_df is None or existing_df.empty:
+        return new_data_df
+
+    new_data_df = new_data_df.copy()
+    existing_df = existing_df.copy()
+    new_data_df['video_id'] = new_data_df['video_id'].astype(str)
+    existing_df['video_id'] = existing_df['video_id'].astype(str)
+
+    for col in new_data_df.columns:
+        if col not in existing_df.columns:
+            existing_df[col] = ""
+
+    carried = [c for c in existing_df.columns if c not in new_data_df.columns]
+    if carried:
+        prev = existing_df.drop_duplicates(subset=['video_id'], keep='first').set_index('video_id')
+        for col in carried:
+            new_data_df[col] = new_data_df['video_id'].map(prev[col].to_dict())
+        print(f"   ↩️  נשמרו עמודות שנכתבו מחוץ לקולקטור: {', '.join(carried)}")
+
+    combined = pd.concat([new_data_df, existing_df])
+    return combined.drop_duplicates(subset=['video_id'], keep='first')
+
+
 def update_google_sheet(new_data_df):
     """עדכון הגיליון בגוגל שיטס"""
     print("Updating Google Sheets...")
@@ -184,32 +219,8 @@ def update_google_sheet(new_data_df):
     except: 
         worksheet = sh.get_worksheet(0)
     
-    if existing_df.empty: 
-        final_df = new_data_df
-    else:
-        new_data_df['video_id'] = new_data_df['video_id'].astype(str)
-        existing_df['video_id'] = existing_df['video_id'].astype(str)
-        
-        # וידוא שכל העמודות קיימות
-        for col in new_data_df.columns:
-            if col not in existing_df.columns:
-                existing_df[col] = ""
+    final_df = merge_with_existing(new_data_df, existing_df)
 
-        # ובכיוון ההפוך: עמודות שקיימות רק בגיליון נכתבו על ידי תהליך אחר
-        # (youtube_lifetime_refresh). בלי לשמר אותן הן נמחקות בשקט — השורה
-        # החדשה מנצחת ב-keep='first', אין בה את העמודה, concat ממלא NaN
-        # ו-fillna(0) הופך את הכול לאפס. זה היה מוחק את הערך לכל סרטון
-        # מ-30 הימים האחרונים, בכל בוקר, בלי שגיאה.
-        carried = [c for c in existing_df.columns if c not in new_data_df.columns]
-        if carried:
-            prev = existing_df.drop_duplicates(subset=['video_id'], keep='first').set_index('video_id')
-            for col in carried:
-                new_data_df[col] = new_data_df['video_id'].map(prev[col].to_dict())
-            print(f"   ↩️  נשמרו עמודות שנכתבו מחוץ לקולקטור: {', '.join(carried)}")
-
-        combined = pd.concat([new_data_df, existing_df])
-        final_df = combined.drop_duplicates(subset=['video_id'], keep='first')
-    
     final_df = final_df.sort_values(by='published_at', ascending=False)
     final_df = final_df.fillna(0).replace([np.inf, -np.inf], 0)
     
