@@ -51,6 +51,15 @@ python weekly_reporter.py
 
 **Warning**: Running collectors locally will add duplicate rows to the Google Sheets and interfere with daily reports.
 
+## What is open
+
+`docs/ROADMAP.md` holds the open items, the decisions already taken, and the
+questions that were answered for good — each one with a file:line, a commit or a
+probe run behind it. **Read it before proposing work, and update it in the same
+commit that changes an item's status.** Its "Closed" table exists so a settled
+question (are 7 days enough? does Instagram expose retention?) is not
+re-litigated from scratch every few weeks.
+
 ## Verifying a collector change
 
 A green collector run proves it did not crash. It does **not** prove it wrote
