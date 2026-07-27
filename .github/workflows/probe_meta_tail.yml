@@ -1,0 +1,42 @@
+name: Probe the Facebook/Instagram tail (read-only)
+
+# A post is finished by its fourth day — but that is only known up to day seven,
+# where the collectors stop looking. YouTube had the same blind spot and it was
+# hiding 9.1M views. Asks the Graph API for the live figures of posts that froze
+# months ago. Read-only: no Sheets writes, no collector touched. Manual only.
+on:
+  workflow_dispatch:
+    inputs:
+      sample:
+        description: 'How many items per platform (spread across age buckets)'
+        required: false
+        default: '150'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests google-auth google-api-python-client
+
+      - name: Run the tail probe
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: python meta_tail_probe.py --sample "${{ inputs.sample || 150 }}" --csv meta_tail.csv
+
+      - name: Upload per-item rows
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meta-tail
+          path: meta_tail.csv
+          if-no-files-found: warn
