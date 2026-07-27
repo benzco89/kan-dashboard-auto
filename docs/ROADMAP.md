@@ -13,77 +13,13 @@ Last reviewed: **2026-07-27**
 
 ## Open — dashboard
 
-### 1. Five follower columns are filling up and nothing displays them
-`fb_daily_reach` (`page_total_media_view_unique`), `fb_daily_engagements`
-(`page_post_engagements`), `fb_daily_video_views` (`page_video_views`),
-`ig_daily_reach` and `ig_daily_views` sat empty for eight months and started
-holding values on 2026-07-26 (`8799c48`). They appear **zero times** in
-`social_dashboard/aggregate.py` and zero times in any template.
+### 1. Two of the eight new metrics still have no home
+`ig_reels_video_view_total_time` (item 3) and **`post_video_followers`** (FB, per
+video — followers attributed to one video) are the leftovers of the sweep that
+shipped on 2026-07-27. `post_video_followers` returned 0 on the sampled item;
+probe a big one before believing either way.
 
-**The collector half is done (2026-07-27, `ef2f623`).** The day alignment is
-fixed and the three new metrics are collected; what is still open is that
-**nothing displays any of it**. Today's row: `insights_day = 2026-07-26`,
-`fb_page_views = 18,282`, `ig_accounts_engaged = 30,069`,
-`ig_profile_views = 3,157`, and `fb_daily_reach` corrected from 1,080,464 to
-1,134,262. Verified snapshot-before/diff-after: 231 rows unchanged, 0 values
-lost, 4 columns appended at the end.
-
-**When displaying, read `insights_day`, never the row date.** Rows before
-2026-07-27 have it blank — including 2026-07-26, whose daily figures actually
-describe 25/07 — so a chart should skip any row without it rather than plot it
-one day off.
-
-<details><summary>The original problem, kept because the diagnosis is the reusable part</summary>
-
-Settled by
-`followers_series_probe.py` (run `30251843236`, 2026-07-27): nothing is frozen,
-every metric returns 8 distinct values over 8 days. The duplicate was a race with
-Meta's clock. Its day buckets close at **07:00 UTC = 10:00 Israel**, and the
-tracker runs at **08:30** — an hour and a half before the boundary — so it always
-receives the *previous* bucket. Yesterday's manual 17:05 run and today's 08:30
-run fell inside the same window, which is why both rows hold 1,080,464 while the
-same call at noon returns 1,134,262.
-
-Instagram behaves identically: the tracker wrote `ig_daily_reach = 738,833` at
-08:30 and the same call four hours later returned 446,397.
-
-So a daily chart built on these columns today would be shifted by a day and would
-occasionally repeat a point. Two fixes: move the pull past 10:00 Israel, or —
-better, because it does not depend on when the job happens to run — ask with an
-explicit `since/until` for the day wanted and store Meta's `end_time` beside the
-value. *(The second one is what shipped.)*
-
-</details>
-
-*Still the only open item that accumulates in real time — new data every day that
-nobody reads.* Next: decide where daily reach, page views and accounts-engaged
-belong on the dashboard, and wire them.
-
-### 1b. Metrics v25 offers that we do not take
-Verified live over 8 days, not from docs and not from one sample — runs
-`30251843236`, `30204475427`, `30199033819`:
-
-| metric | daily range | verdict |
-|---|---|---|
-| **`accounts_engaged`** (IG) ✅ collected | 26,359–53,554 | **taken 27/07.** Unique *accounts*, not actions — a question no sum of likes and comments can answer |
-| **`profile_views`** (IG) ✅ collected | 2,592–**8,274** | **taken 27/07.** Peak on 24/07, the day the missing boy was the story |
-| **`page_views_total`** (FB) ✅ collected | 14,996–**29,557** | **taken 27/07.** Peak 25/07. Instagram has per-post `profile_visits`; Facebook has nothing |
-| `total_interactions` (IG) | ~49,648 | maybe — overlaps what per-post sums already give |
-| `website_clicks` (IG) | 4–21 | no |
-| `profile_links_taps` (IG) | 0–1 | no |
-| `profile_activity` (IG, per post) | 0, 0 | no |
-
-The three worth taking share a shape: **they spike on the days a story broke.**
-That is a measure of "how many people came looking for us", and no column we
-currently store is a version of it.
-
-Also open: **`ig_reels_video_view_total_time`** (item 3) and
-**`post_video_followers`** (FB, per video) — followers attributed to one video,
-which returned 0 on the sampled item; probe a big one before believing either way.
-
-**Dead in v25:** `page_fan_adds`, `page_fan_removes`, `page_impressions_unique` —
-"not a valid insights metric". Already replaced by `page_daily_follows` and
-`page_total_media_view_unique`.
+Everything else from that sweep is live — see the Closed table.
 
 ### 2. `_replay_share` is written and never called
 `aggregate.py:66` defines "replays as a share of all plays — how rewatchable the
@@ -172,4 +108,6 @@ a cut headline mattered.
 | Should the collectors' 7-day window be widened? | No. FB/IG/TikTok/X posts are finished by day four — the whole week of 12–18/07 gained 0.2–0.7% between day 4 and freeze. YouTube has a real tail and already keeps 30 days. | 2026-07-27 |
 | Is 30 days enough for YouTube? | Yes, as a window — no cliff at day 30 (+0.3% median over the next fortnight). The tail is real but slow; see item 4. | 2026-07-27 |
 | Which `engagement_rate` is the true one? | None — `social_dashboard/metrics.py` is the single definition. The collectors keep their old column on purpose: the daily Telegram report prints it and the alert thresholds were calibrated on it. | 2026-07-26 |
+| Five daily account columns collected and displayed by nothing | Shipped. Collector day-alignment fixed (`ef2f623`) plus `page_views_total`, `accounts_engaged` and `profile_views`; a "החשבון עצמו" block on the Facebook and Instagram pages (`15b8212`), verified live. Dated by `insights_day`, rows without it skipped, line appears from the third day. | 2026-07-27 |
+| Does the dashboard serve stale JS after a deploy? | No. `/static/app.js` answers `cache-control: no-cache` with an ETag, so a browser revalidates every load. A tab opened *before* a deploy keeps the old file until it reloads — that is the tab, not the server. | 2026-07-27 |
 | Were the three items missing from Kan's report a data gap? | No. All three are in their *previous* report. Different week boundary, nothing lost. Always check the previous xlsx before calling something missing. | 2026-07-27 |
