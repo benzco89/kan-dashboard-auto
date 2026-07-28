@@ -7,7 +7,7 @@ ships gets moved to *Closed* with the answer, not deleted.
 Every claim here is evidence-backed: a file:line, a commit, or a probe run.
 If an item has no evidence, it is a guess and belongs in a conversation, not here.
 
-Last reviewed: **2026-07-27**
+Last reviewed: **2026-07-28**
 
 ---
 
@@ -116,3 +116,4 @@ a cut headline mattered.
 | YouTube's tail — 8.9M views the 30-day window could not see | Shipped 2026-07-27: `views_lifetime` + `lifetime_checked` fill weekly beside `views`, never over it (`youtube_lifetime.yml`). First run: 131,980,309 stored → 141,118,899 actual, **9.1M recovered**, 319 videos up more than 10%. The collector now carries over columns it does not produce, with `test_youtube_merge.py` holding that rule — without it the daily run would have wiped the column for every video under 30 days old. | 2026-07-27 |
 | Cold dashboard loads (0.3–3.6s while warm ones were 190–550ms) | Fixed 2026-07-27 (`gsheets.py`, warmer thread at TTL−90s). Verified live: `/api/overview` after **11 idle minutes** now answers in **621ms**, against 3.0–5.1s before. It warms only tabs somebody asked for, so a page whose tabs are not cached yet still pays once (Instagram: 1,195ms first, 424ms after) — that is the per-page split working, not a regression. A failed read keeps the previous rows. | 2026-07-27 |
 | Were the three items missing from Kan's report a data gap? | No. All three are in their *previous* report. Different week boundary, nothing lost. Always check the previous xlsx before calling something missing. | 2026-07-27 |
+| A green Twitter step that collected nothing | Fixed 2026-07-28. GetXAPI answers 200 with an empty or truncated feed every few days; `twitter_collector.py` read "no more pages" as "end of feed" and exited 0 — on 28.7 that was 0 tweets, no alert, and 27.7 frozen at the 13 the previous morning caught. Only a page reaching back past the cutoff now counts as full coverage (`reached_window_start`); anything short retries 3× and then exits 1, so the best-effort alert fires. Partial data is still saved — the merge never overwrites. `test_twitter_coverage.py` replays the incident. Re-run `30354470681` recovered both days (378 tweets, `stop=cutoff`, 1848 → 1921 rows). | 2026-07-28 |
