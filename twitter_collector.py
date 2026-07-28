@@ -32,6 +32,12 @@ DAYS_BACK = 7
 # @kann_news מצייץ ~40 ציוצים/יום (~18 לעמוד), כך ש-7 ימים ≈ 16 עמודים; 30 נותן מרווח לימים כבדים.
 MAX_PAGES = 30
 
+# GetXAPI נחנק מדי כמה ימים ומחזיר 200 עם עמוד ריק או פיד קטוע - זה נראה
+# בדיוק כמו סוף פיד תקין. ב-28.7.2026 זה הפיל יום שלם בשקט (ריצה ירוקה,
+# 0 ציוצים). לכן: ניסיון חוזר על משיכה שלא הגיעה לתחילת החלון.
+MAX_FETCH_ATTEMPTS = 3
+RETRY_DELAY_SEC = 20
+
 SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
 SHEET_NAME = "נתוני טוויטר"
 
@@ -52,6 +58,9 @@ def get_tweets(username, cutoff, max_pages=MAX_PAGES):
     משיכת ציוצים אחרונים עם pagination חכמה לפי תאריך.
     הציוצים מגיעים מהחדש לישן; עוצרים ברגע שעמוד כולל ציוץ ישן מ-cutoff
     (כלומר כיסינו את כל החלון), או כשנגמרו העמודים / נחצתה תקרת הביטחון.
+
+    מחזיר (tweets, stop_reason). רק stop_reason="cutoff" מעיד על כיסוי מלא -
+    ראו reached_window_start().
     """
     all_tweets = []
     cursor = None
@@ -73,12 +82,10 @@ def get_tweets(username, cutoff, max_pages=MAX_PAGES):
 
         page_tweets = data.get("tweets")
         if not isinstance(page_tweets, list):
-            # עמוד בלי רשימת ציוצים: בלי has_more זה סוף פיד תקין; אחרת שגיאה
-            if not data.get("has_more"):
-                stop_reason = "end_of_feed"
-            else:
-                print(f"❌ GetXAPI unexpected response on page {pages_used}: {str(data)[:200]}")
-                stop_reason = "error"
+            # עמוד בלי רשימת ציוצים: בלי has_more זה *נראה* כמו סוף פיד תקין,
+            # אבל ככה בדיוק נראה גם GetXAPI חנוק. תמיד להדפיס מה חזר.
+            print(f"⚠️ GetXAPI returned no tweet list on page {pages_used}: {str(data)[:200]}")
+            stop_reason = "end_of_feed" if not data.get("has_more") else "error"
             break
         all_tweets.extend(page_tweets)
 
@@ -100,7 +107,21 @@ def get_tweets(username, cutoff, max_pages=MAX_PAGES):
     if stop_reason == "max_pages":
         print(f"⚠️ Hit MAX_PAGES={max_pages} before reaching the {DAYS_BACK}-day window — "
               f"coverage is PARTIAL. Raise MAX_PAGES for full coverage.")
-    return all_tweets
+    return all_tweets, stop_reason
+
+
+def reached_window_start(tweets, cutoff):
+    """
+    האם המשיכה הגיעה אחורה מעבר לתחילת החלון.
+
+    זה הסימן היחיד לכיסוי מלא. הספק לא מבדיל בין "נגמר הפיד" לבין "נחנקתי
+    באמצע" - בשני המקרים הוא פשוט מפסיק להחזיר עמודים, ולכן stop_reason
+    לבדו לא אומר כלום על שלמות הנתונים.
+    """
+    return any(
+        (ct := parse_tweet_time(t)) and ct.astimezone(IL_TZ) < cutoff
+        for t in tweets
+    )
 
 
 def parse_tweet_time(tweet):
@@ -136,14 +157,30 @@ def tweet_id_of(tweet):
 # --- Build DataFrame ---
 
 def fetch_twitter_data():
+    """מחזיר (df, complete) - complete=False כשהפיד לא כיסה את כל החלון."""
     print(f"🚀 Twitter Collector - @{USERNAME} - {datetime.now(IL_TZ).strftime('%Y-%m-%d %H:%M')}")
 
     if not get_api_key():
         print("❌ Missing GETXAPI_KEY environment variable")
-        return pd.DataFrame()
+        return pd.DataFrame(), False
 
     cutoff = datetime.now(IL_TZ) - timedelta(days=DAYS_BACK)
-    raw_tweets = get_tweets(USERNAME, cutoff)
+
+    # ניסיון חוזר על פיד קטוע. שומרים את המשיכה העשירה ביותר מבין הניסיונות,
+    # כי משיכה חלקית עדיין שווה שמירה - המיזוג לא דורס נתונים קיימים.
+    raw_tweets = []
+    for attempt in range(1, MAX_FETCH_ATTEMPTS + 1):
+        attempt_tweets, stop_reason = get_tweets(USERNAME, cutoff)
+        if len(attempt_tweets) > len(raw_tweets):
+            raw_tweets = attempt_tweets
+        if reached_window_start(attempt_tweets, cutoff):
+            break
+        print(f"⚠️ Attempt {attempt}/{MAX_FETCH_ATTEMPTS}: {len(attempt_tweets)} tweets, "
+              f"stop={stop_reason} — feed ended before the {DAYS_BACK}-day window")
+        if attempt < MAX_FETCH_ATTEMPTS:
+            time.sleep(RETRY_DELAY_SEC)
+
+    complete = reached_window_start(raw_tweets, cutoff)
     print(f"📥 Fetched {len(raw_tweets)} raw tweets")
 
     rows = []
@@ -185,7 +222,7 @@ def fetch_twitter_data():
         })
 
     print(f"📊 {len(rows)} tweets in the last {DAYS_BACK} days")
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows), complete
 
 
 def save_to_sheets(new_df):
@@ -268,12 +305,21 @@ def main():
     print(f"🐦 Twitter Collector - {datetime.now(IL_TZ).strftime('%Y-%m-%d %H:%M')}")
     print(f"{'='*50}\n")
 
-    df = fetch_twitter_data()
-    if not df.empty:
-        save_to_sheets(df)
-        print(f"\n✅ Done! {len(df)} tweets processed.")
-    else:
-        print("❌ No data collected.")
+    df, complete = fetch_twitter_data()
+
+    if df.empty:
+        print(f"❌ No data collected after {MAX_FETCH_ATTEMPTS} attempts — the feed came back empty.")
+        sys.exit(1)
+
+    save_to_sheets(df)
+    print(f"\n✅ Done! {len(df)} tweets processed.")
+
+    # שומרים מה שיש (המיזוג בטוח), אבל יוצאים בכשל כדי שההתראה תצא.
+    # השלב ב-daily_update.yml הוא continue-on-error, אז זה לא מפיל את הפייפליין.
+    if not complete:
+        print(f"⚠️ PARTIAL coverage: the feed ended before reaching the {DAYS_BACK}-day window. "
+              f"What was fetched is saved, but older days in the window may be missing.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
