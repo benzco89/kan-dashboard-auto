@@ -243,7 +243,8 @@ def fetch_young_facebook():
     res = http_get_json(f"{BASE}/{PAGE_ID}/published_posts", params={
         'access_token': ACCESS_TOKEN,
         'fields': 'id,message,created_time,permalink_url,shares,'
-                  'attachments{target},'  # מזהה אובייקט הווידאו, לנפילה ב-_fb_views
+                  'attachments,'  # מזהה אובייקט הווידאו, לנפילה ב-_fb_views.
+                                  # בדיוק כמו בקולקטור: attachments{target} מוחזר ריק.
                   'comments.summary(true).limit(0),reactions.summary(true).limit(0)',
         'limit': 25,
     })
