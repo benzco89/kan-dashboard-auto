@@ -70,17 +70,32 @@ worked), so only local probing is affected. See the meta-token renewal notes.
 
 ## Open — alerts
 
-### 12. The hot sniffer misses Instagram
-Five Instagram posts that finished in the **98th–100th percentile** of their own
-platform never fired any alert — including one at p100 on both views and
-comments. Found while validating the thresholds (see the Closed row below), on
-the *permissive* rule; it is not a threshold problem.
+### 12. Recall — how many real explosions the sniffer never sees
+Counting only posts published **after the sniffer went live on 2026-07-13**
+(an earlier count of "5 Instagram misses" was an artifact: most of those posts
+predate the sniffer and could never have alerted):
 
-Candidates, none tested: the 24h window closes before an Instagram post peaks;
-`fetch_young_instagram` reads `limit: 25` and a busy day pushes past it; the
-per-post insights call fails quietly and views/shares arrive as 0.
+| | posts since 13/07 | in the top 2% that never alerted |
+|---|---|---|
+| Instagram | 162 | 1 |
+| Facebook | 288 | 2 |
+| TikTok | 111 | 2 |
 
-**This is the side that needs work. The alert count is not.**
+**Two of the five had one cause and it is now fixed** — Facebook views were
+never fetched. `"איפה היית חמודי?"` (25/07) reached **1,025,485 views, p99,
+2.10× the bar**, while its reactions sat at 0.79× and shares at 0.36×: views
+were the only axis that crossed and the only axis not measured. Same for the
+26/07 post. Fixed by `_fb_views()` — one `post_media_view` call per young post,
+the same metric the collector stores, so the live value and the sheet-derived
+p90 are the same unit.
+
+The other three are not bugs: two crossed only at maturity (1.03–1.15× the bar,
+so below it inside the 24h window), and one never crossed any bar at all — it is
+p99 on views but its own week held bigger posts, and the rule is relative.
+
+**Still open:** whether the 24h window should stretch for slow-burning posts.
+Both late-crossers were marginal, so there is no evidence yet that it is worth
+the added noise. Needs a measurement, not an opinion.
 
 ---
 

@@ -194,8 +194,33 @@ def fetch_young_instagram():
     return posts
 
 
+def _fb_views(post_id):
+    """צפיות של פוסט פייסבוק בודד. אותו מדד שהקולקטור כותב לגיליון
+    (facebook_collector._insight עם post_media_view), כדי שהערך החי וה-p90
+    שנגזר מהגיליון יהיו אותה יחידה. 0 בכל כשל - ציר אחד שותק, לא ריצה שנופלת."""
+    try:
+        res = http_get_json(f"{BASE}/{post_id}/insights", params={
+            'access_token': ACCESS_TOKEN, 'metric': 'post_media_view',
+            'period': 'lifetime'}, timeout=15, max_retries=2)
+        if 'error' in res:
+            return 0
+        data = res.get('data', [])
+        vals = data[0].get('values', []) if data else []
+        v = vals[0].get('value') if vals else 0
+        # post_media_view מגיע לפעמים כדיקט (organic/paid) - סכום, כמו בקולקטור
+        return sum(v.values()) if isinstance(v, dict) else (v or 0)
+    except Exception:
+        return 0
+
+
 def fetch_young_facebook():
-    """ספירות ציבוריות בלבד (ריאקציות/תגובות/שיתופים) - בלי insights, קריאה אחת."""
+    """ספירות ציבוריות בקריאה אחת, ועוד קריאת insights לצפיות לכל פוסט צעיר.
+
+    הצפיות היו 0 קבוע עד 2026-07-29, כדי לחסוך קריאה לפוסט. זה עלה בפספוסים:
+    "איפה היית חמודי?" (25/07) עשה 1,025,485 צפיות - אחוזון 99, פי 2.1 מהרף -
+    בזמן שהלייקים עמדו על 0.79 מהרף והשיתופים על 0.36. הצפיות היו הציר היחיד
+    שחצה, והוא היה בדיוק הציר שלא נמדד. ~20 קריאות לריצה, כמו באינסטגרם.
+    """
     res = http_get_json(f"{BASE}/{PAGE_ID}/published_posts", params={
         'access_token': ACCESS_TOKEN,
         'fields': 'id,message,created_time,permalink_url,shares,'
@@ -215,7 +240,7 @@ def fetch_young_facebook():
             'id': p['id'], 'platform': 'facebook',
             'title': (p.get('message') or '').replace('\n', ' ')[:200],
             'posted': posted, 'permalink': p.get('permalink_url', ''),
-            'views': 0,  # צפיות FB דורשות insights; הריאקציות/תגובות מספיקות לזיהוי
+            'views': _fb_views(p['id']),
             'likes': p.get('reactions', {}).get('summary', {}).get('total_count', 0),
             'comments': p.get('comments', {}).get('summary', {}).get('total_count', 0),
             'shares': (p.get('shares') or {}).get('count', 0),
