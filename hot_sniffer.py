@@ -194,23 +194,42 @@ def fetch_young_instagram():
     return posts
 
 
-def _fb_views(post_id):
-    """צפיות של פוסט פייסבוק בודד. אותו מדד שהקולקטור כותב לגיליון
-    (facebook_collector._insight עם post_media_view), כדי שהערך החי וה-p90
-    שנגזר מהגיליון יהיו אותה יחידה. 0 בכל כשל - ציר אחד שותק, לא ריצה שנופלת."""
+def _fb_insight(obj_id, metric, endpoint='insights'):
+    """מדד insights בודד. 0 בכל כשל - ציר אחד שותק, לא ריצה שנופלת."""
+    params = {'access_token': ACCESS_TOKEN, 'metric': metric}
+    if endpoint == 'insights':
+        params['period'] = 'lifetime'
     try:
-        res = http_get_json(f"{BASE}/{post_id}/insights", params={
-            'access_token': ACCESS_TOKEN, 'metric': 'post_media_view',
-            'period': 'lifetime'}, timeout=15, max_retries=2)
+        res = http_get_json(f"{BASE}/{obj_id}/{endpoint}", params=params,
+                            timeout=15, max_retries=2)
         if 'error' in res:
             return 0
         data = res.get('data', [])
         vals = data[0].get('values', []) if data else []
         v = vals[0].get('value') if vals else 0
-        # post_media_view מגיע לפעמים כדיקט (organic/paid) - סכום, כמו בקולקטור
+        # לפעמים דיקט (organic/paid) - סכום, כמו ב-_flatten_value של הקולקטור
         return sum(v.values()) if isinstance(v, dict) else (v or 0)
     except Exception:
         return 0
+
+
+def _fb_views(post):
+    """צפיות של פוסט פייסבוק בודד, באותו מסלול שהקולקטור עובר.
+
+    post_media_view הוא המדד המאוחד, אבל **הוא מחזיר 0 לחלק מהרילסים** -
+    facebook_collector נופל שם ל-plays של אובייקט הווידאו, וכאן חייבת להיות
+    אותה נפילה: רילס הם שליש מהפוסטים ובדיוק הסוג עתיר-הצפיות, אז בלעדיה
+    הציר היקר ביותר נשאר עיוור דווקא היכן שהוא הכי נחוץ.
+    """
+    views = _fb_insight(post['id'], 'post_media_view')
+    if views:
+        return views
+    try:
+        vid = post['attachments']['data'][0]['target']['id']
+    except (KeyError, IndexError, TypeError):
+        return 0
+    return (_fb_insight(vid, 'blue_reels_play_count', endpoint='video_insights')
+            or _fb_insight(vid, 'total_video_views', endpoint='video_insights'))
 
 
 def fetch_young_facebook():
@@ -224,6 +243,7 @@ def fetch_young_facebook():
     res = http_get_json(f"{BASE}/{PAGE_ID}/published_posts", params={
         'access_token': ACCESS_TOKEN,
         'fields': 'id,message,created_time,permalink_url,shares,'
+                  'attachments{target},'  # מזהה אובייקט הווידאו, לנפילה ב-_fb_views
                   'comments.summary(true).limit(0),reactions.summary(true).limit(0)',
         'limit': 25,
     })
@@ -240,7 +260,7 @@ def fetch_young_facebook():
             'id': p['id'], 'platform': 'facebook',
             'title': (p.get('message') or '').replace('\n', ' ')[:200],
             'posted': posted, 'permalink': p.get('permalink_url', ''),
-            'views': _fb_views(p['id']),
+            'views': _fb_views(p),
             'likes': p.get('reactions', {}).get('summary', {}).get('total_count', 0),
             'comments': p.get('comments', {}).get('summary', {}).get('total_count', 0),
             'shares': (p.get('shares') or {}).get('count', 0),
