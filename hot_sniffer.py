@@ -224,31 +224,12 @@ def _fb_views(post):
     views = _fb_insight(post['id'], 'post_media_view')
     if views:
         return views
-    vid = _fb_video_id(post)
-    if not vid:
+    try:
+        vid = post['attachments']['data'][0]['target']['id']
+    except (KeyError, IndexError, TypeError):
         return 0
     return (_fb_insight(vid, 'blue_reels_play_count', endpoint='video_insights')
             or _fb_insight(vid, 'total_video_views', endpoint='video_insights'))
-
-
-def _fb_video_id(post):
-    """מזהה אובייקט הווידאו של הפוסט.
-
-    הקולקטור קורא את /feed ומקבל שם attachments מלא; הרחרחן קורא
-    /published_posts, ששם ה-target חסר לחלק מהרילסים. במקום להחליף edge
-    ולשנות אילו פוסטים נבדקים בכלל - קריאה ייעודית, ורק כשהיא נחוצה.
-    """
-    try:
-        return post['attachments']['data'][0]['target']['id']
-    except (KeyError, IndexError, TypeError):
-        pass
-    try:
-        res = http_get_json(f"{BASE}/{post['id']}/attachments", params={
-            'access_token': ACCESS_TOKEN, 'fields': 'target,type'},
-            timeout=15, max_retries=2)
-        return (res.get('data') or [{}])[0].get('target', {}).get('id')
-    except Exception:
-        return None
 
 
 def fetch_young_facebook():
