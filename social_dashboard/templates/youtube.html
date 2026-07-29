@@ -10,6 +10,7 @@
 <header id="header"></header>
 <main id="main" class="main"></main>
 <script src="/static/app.js"></script>
+<script src="/static/glossary.js"></script>
 <script>
 (function () {
   function kpi(k) {
@@ -32,9 +33,9 @@
     var k = data.kpis;
     var kpis = [
       kpi({ label: "מנויים", value: data.subscribers.value, weekly: data.subscribers.weekly_change, growth: data.subscribers.growth_pct, icon: "users" }),
-      kpi({ label: "צפיות", value: k.views.value, prev: k.views.prev, icon: "eye" }),
+      kpi({ label: "צפיות" + KS.term("views"), value: k.views.value, prev: k.views.prev, icon: "eye" }),
       kpi({ label: "לייקים", value: k.likes.value, prev: k.likes.prev, icon: "like" }),
-      kpi({ label: "תגובות", value: k.comments.value, prev: k.comments.prev, icon: "comment" })
+      kpi({ label: "תגובות" + KS.term("comments"), value: k.comments.value, prev: k.comments.prev, icon: "comment" })
     ].join("");
 
     var chart = KS.chart({ dates: data.chart.dates, vbW: 700, vbH: 230, area: true, series: [{ color: "var(--pf)", data: data.chart.views, w: 2.6, name: "צפיות" }] });
@@ -98,7 +99,7 @@
         (v.duration ? KS.kmCell("אורך", KS.esc(v.duration)) : "") +
         KS.kmCell("% לייקים", v.like_rate.toFixed(2) + "%") +
         KS.kmCell("% תגובות", v.comment_rate.toFixed(2) + "%") +
-        KS.kmCell("% מעורבות", v.eng.toFixed(1) + "%") + '</div>';
+        KS.kmCell("% מעורבות", v.eng.toFixed(1) + "%", null, "eng_rate") + '</div>';
       var momentum = v.views_delta ? (KS.kmSection("מומנטום") + '<div class="km-grid">' +
         KS.kmCell("צבר לאחרונה", KS.signed(v.views_delta) + " צפיות") + '</div>') : "";
       var cmp = mv ? (KS.kmSection("ביחס לטיפוסי בערוץ") + '<div class="km-cmp">' + KS.kmCmp("צפיות מול חציון", v.views / mv) + '</div>') : "";

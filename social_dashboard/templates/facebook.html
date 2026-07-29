@@ -10,6 +10,7 @@
 <header id="header"></header>
 <main id="main" class="main"></main>
 <script src="/static/app.js"></script>
+<script src="/static/glossary.js"></script>
 <script>
 (function () {
   var TYPE_COLOR = { Reels: "var(--pf)", Videos: "var(--purp)", Images: "var(--teal)", Links: "var(--muted)" };
@@ -34,9 +35,9 @@
     var k = data.kpis;
     var kpis = [
       kpi({ label: "עוקבים", value: data.followers.value, weekly: data.followers.weekly_change, growth: data.followers.growth_pct, icon: "users" }),
-      kpi({ label: "צפיות", value: k.views.value, prev: k.views.prev, icon: "eye" }),
-      kpi({ label: "חשיפה", value: k.reach.value, prev: k.reach.prev, icon: "reach" }),
-      kpi({ label: "שיתופים", value: k.shares.value, prev: k.shares.prev, icon: "share" })
+      kpi({ label: "צפיות" + KS.term("views"), value: k.views.value, prev: k.views.prev, icon: "eye" }),
+      kpi({ label: "חשיפה" + KS.term("reach"), value: k.reach.value, prev: k.reach.prev, icon: "reach" }),
+      kpi({ label: "שיתופים" + KS.term("shares"), value: k.shares.value, prev: k.shares.prev, icon: "share" })
     ].join("");
 
     // when Meta stops returning reach (happened with the v25 metric removal),
@@ -126,7 +127,7 @@
         KS.kmCell("רגשות (סה״כ)", KS.fmtFull(p.likes)) +
         KS.kmCell("תגובות", KS.fmtFull(p.comments)) +
         KS.kmCell("שיתופים", KS.fmtFull(p.shares)) +
-        (p.clicks ? KS.kmCell("קליקים", KS.fmtFull(p.clicks)) : "") + '</div>';
+        (p.clicks ? KS.kmCell("קליקים", KS.fmtFull(p.clicks), null, "clicks") : "") + '</div>';
       // retention_3s is 0 on anything but a reel — a bucket wider than three
       // seconds cannot be read, and that is "not measured", not "nobody stayed"
       var watch = p.avg_watch ? (KS.kmSection("צפייה בווידאו") + '<div class="km-grid">' +
@@ -141,7 +142,7 @@
           : "")) : "";
       var rates = KS.kmSection("שיעורים") + '<div class="km-grid">' +
         KS.kmCell("שיעור שיתוף", p.share_rate.toFixed(2) + "%") +
-        KS.kmCell("% מעורבות", p.engagement.toFixed(1) + "%") + '</div>';
+        KS.kmCell("% מעורבות", p.engagement.toFixed(1) + "%", null, "eng_rate") + '</div>';
       var cmp = (mv || msr) ? (KS.kmSection("ביחס לטיפוסי בפלטפורמה") + '<div class="km-cmp">' +
         (mv ? KS.kmCmp("צפיות מול חציון", p.views / mv) : "") +
         (msr && p.share_rate ? KS.kmCmp("שיתוף מול חציון", p.share_rate / msr) : "") + '</div>') : "";

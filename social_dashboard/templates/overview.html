@@ -10,6 +10,7 @@
 <header id="header"></header>
 <main id="main" class="main"></main>
 <script src="/static/app.js"></script>
+<script src="/static/glossary.js"></script>
 <script>
 (function () {
   var PIC = { youtube: { c: "var(--yt)", icon: "yt" }, facebook: { c: "var(--fb)", icon: "fb" }, instagram: { c: "var(--ig)", icon: "ig" }, twitter: { c: "var(--tw)", icon: "x" }, tiktok: { c: "var(--tt)", icon: "tiktok" } };
@@ -57,9 +58,9 @@
     ].join("");
 
     var kpis = [
-      kpiCard({ label: "צפיות", value: data.kpis.views.value, prev: data.kpis.views.prev, icon: "eye", color: "var(--purp)", bg: "var(--purp-bg)" }),
-      kpiCard({ label: "חשיפה", value: data.kpis.reach.value, prev: data.kpis.reach.prev, icon: "reach", color: "var(--blue)", bg: "var(--blue-bg)" }),
-      kpiCard({ label: "אינטראקציות", value: data.kpis.interactions.value, prev: data.kpis.interactions.prev, icon: "heart", color: "var(--orange)", bg: "var(--orange-bg)" }),
+      kpiCard({ label: "צפיות" + KS.term("views"), value: data.kpis.views.value, prev: data.kpis.views.prev, icon: "eye", color: "var(--purp)", bg: "var(--purp-bg)" }),
+      kpiCard({ label: "חשיפה" + KS.term("reach"), value: data.kpis.reach.value, prev: data.kpis.reach.prev, icon: "reach", color: "var(--blue)", bg: "var(--blue-bg)" }),
+      kpiCard({ label: "אינטראקציות" + KS.term("engagement"), value: data.kpis.interactions.value, prev: data.kpis.interactions.prev, icon: "heart", color: "var(--orange)", bg: "var(--orange-bg)" }),
       kpiCard({ label: "תכנים", value: data.kpis.content.value, prev: data.kpis.content.prev, icon: "video", color: "var(--teal)", bg: "var(--teal-bg)" })
     ].join("");
 
