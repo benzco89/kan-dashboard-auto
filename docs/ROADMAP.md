@@ -70,33 +70,17 @@ worked), so only local probing is affected. See the meta-token renewal notes.
 
 ## Open — alerts
 
-### 12. Hot-sniffer thresholds recalibrated — merged? not yet
-Measured 2026-07-29 against the sniffer's own first 17 days (63 rows in
-`hot_alerts`) and the current distribution in the sheets:
+### 12. The hot sniffer misses Instagram
+Five Instagram posts that finished in the **98th–100th percentile** of their own
+platform never fired any alert — including one at p100 on both views and
+comments. Found while validating the thresholds (see the Closed row below), on
+the *permissive* rule; it is not a threshold problem.
 
-| | was | sits at | now |
-|---|---|---|---|
-| multiplier | 1.5×p90 | ≈p95 | **2.0×p90** |
-| IG comments | 600 | p93 | **1,000** |
-| FB comments | 1,000 | p92 | **2,000** |
-| TikTok comments | 400 | **p88** | **800** |
+Candidates, none tested: the 24h window closes before an Instagram post peaks;
+`fetch_young_instagram` reads `limit: 25` and a busy day pushes past it; the
+per-post insights call fails quietly and views/shares arrive as 0.
 
-**26 alerts a week — 34 of ~85 runs fired.** An interrupt that fires every second
-or third run is background, not an interrupt. Two causes: the comment floors were
-`comment_analyzer`'s "worth a Gemini call" floor ×2, never calibrated against the
-comment distribution (TikTok's 400 had sunk *below* TikTok's own p90 of 450–587),
-and 1.5×p90 is only about p95 — 16 of the 38 ratio triggers landed in 1.5–1.79,
-where the rule's own justification had cited real explosions at 2.7–3.3×.
-
-Replaying the 63 alerts at the new numbers leaves **14 (~6/week)**, keeping every
-genuine one: the ×9.6-shares reel (19/07), the ×3.4-reactions posts (24/07).
-The new floors are ≈p98 of 30 days, so "כמות נדירה" is finally true.
-
-Not merged. The VPS dispatches `{"ref":"main"}`, so **production is still on the
-old numbers until this lands on main**, and the run after the merge sends real
-Telegram — there is no approval step in between.
-
-Move to Closed after one live run confirms the quieter rate.
+**This is the side that needs work. The alert count is not.**
 
 ---
 
@@ -138,6 +122,7 @@ a cut headline mattered.
 
 | Question | Answer | When |
 |---|---|---|
+| Should the hot sniffer's thresholds be raised — it fires ~26 times a week? | **No. Raised them on 2026-07-29 and reverted the same day; do not re-open on a noise argument.** Rate is not the criterion, precision is, and precision was already total: all 63 alerts from the first 17 days were cross-referenced to the sheets and scored on where each post finished *at maturity* — median 97th percentile of its platform, 44 of 59 at p95+, all at p90+, **zero below p90**. No early spike ever decayed to ordinary, which is exactly what a too-low bar would have produced. The raise (2.0×p90, floors 1000/2000/800) silenced 47 of 63 at a median of p97: the missing 4-year-old found alive, Yair Golan's declaration, the attacked reservist, the baby saved in emergency surgery. Caveat stated honestly: alerting on a number and then measuring that number is partly circular — the non-circular finding is the zero. | 2026-07-29 |
 | Facebook `views_30s` / `completion_rate` are 0 in every row — recoverable? | No. Removed in Graph v25. The reel retention curve replaces them. | 2026-07-26 |
 | Does Instagram expose a retention curve, replays, plays or completion? | No. Meta rejects every variant; asked directly on v25. | 2026-07-26, run `30199414956` |
 | Should the collectors' 7-day window be widened? | No. FB/IG/TikTok/X posts are finished by day four — the whole week of 12–18/07 gained 0.2–0.7% between day 4 and freeze. YouTube has a real tail and already keeps 30 days. | 2026-07-27 |
