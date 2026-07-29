@@ -10,6 +10,7 @@
 <header id="header"></header>
 <main id="main" class="main"></main>
 <script src="/static/app.js"></script>
+<script src="/static/glossary.js"></script>
 <script>
 (function () {
   var TYPE_COLOR = { Video: "var(--pf)", Photo: "var(--purp)", Text: "var(--muted)" };
@@ -35,7 +36,7 @@
     var k = data.kpis;
     var kpis = [
       kpi({ label: "עוקבים", value: data.followers.value, weekly: data.followers.weekly_change, growth: data.followers.growth_pct, icon: "users" }),
-      kpi({ label: "צפיות", value: k.views.value, prev: k.views.prev, icon: "eye" }),
+      kpi({ label: "צפיות" + KS.term("views"), value: k.views.value, prev: k.views.prev, icon: "eye" }),
       kpi({ label: "לייקים", value: k.likes.value, prev: k.likes.prev, icon: "heart" }),
       kpi({ label: "ריטוויטים", value: k.retweets.value, prev: k.retweets.prev, icon: "share" })
     ].join("");

@@ -36,7 +36,7 @@ async def revalidate_assets(request, call_next):
     """
     response = await call_next(request)
     path = request.url.path
-    if path.startswith("/static/") or path in ("/", "/youtube", "/facebook", "/instagram", "/twitter", "/tiktok", "/alerts"):
+    if path.startswith("/static/") or path in ("/", "/youtube", "/facebook", "/instagram", "/twitter", "/tiktok", "/alerts", "/glossary"):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -124,6 +124,13 @@ def competitors_page():
 @app.get("/alerts")
 def alerts_page():
     return _page("alerts.html")
+
+
+@app.get("/glossary")
+def glossary_page():
+    """The one page with no /api/ behind it — its content lives in
+    static/glossary.js, which the page and the '?' chips both read."""
+    return _page("glossary.html")
 
 
 @app.get("/api/config")

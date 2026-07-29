@@ -222,8 +222,11 @@
     return el;
   }
   // small builders so the platform pages stay tidy
-  function kmCell(label, valueHtml, unit) {
-    return '<div class="km-cell"><div class="l">' + esc(label) + '</div><div class="v">' + valueHtml +
+  // `termKey` adds the glossary "?" beside the label — for the cells in the
+  // drill-down whose meaning is not self-evident (clicks, skip rate, saves).
+  function kmCell(label, valueHtml, unit, termKey) {
+    return '<div class="km-cell"><div class="l">' + esc(label) + (termKey ? term(termKey) : "") +
+      '</div><div class="v">' + valueHtml +
       (unit ? ' <span class="unit">' + esc(unit) + "</span>" : "") + "</div></div>";
   }
   function kmSection(label) { return '<div class="km-seclabel">' + esc(label) + "</div>"; }
@@ -298,7 +301,8 @@
     { key: "tiktok", href: "/tiktok", label: "TikTok", icon: fillIcon("tiktok", "var(--text)", 13) },
     { key: "competitors", href: "/competitors", label: "מתחרים", icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>' },
     { key: "viral", href: "/viral", label: "ויראלי", icon:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>' },
-    { key: "alerts", href: "/alerts", label: "התראות", icon:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>' }
+    { key: "alerts", href: "/alerts", label: "התראות", icon:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>' },
+    { key: "glossary", href: "/glossary", label: "מילון", icon:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:currentColor;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' }
   ];
 
   var app = {
@@ -328,8 +332,11 @@
           '<nav class="nav">' + nav + "</nav>" +
           '<a class="ext-link" href="' + self.pushstat + '">' + extIcon + "פושים</a>" +
           '<span class="spacer"></span>' +
-          '<div class="ranges">' + ranges + "</div>" +
-          '<button class="iconbtn" id="btnRefresh" title="רענון">' + refreshIcon + "</button>" +
+          // a page with no data of its own (the glossary) gets no range picker and
+          // no refresh — both would promise a reload that has nothing to reload
+          (self.noData ? "" :
+            '<div class="ranges">' + ranges + "</div>" +
+            '<button class="iconbtn" id="btnRefresh" title="רענון">' + refreshIcon + "</button>") +
           '<button class="iconbtn" id="btnTheme" title="החלפת מצב תצוגה">' + themeIcon + "</button>" +
         "</div></div>";
       var el = document.getElementById("header");
@@ -347,9 +354,11 @@
         self.theme = self.theme === "dark" ? "light" : "dark";
         setTheme(self.theme);
         self.buildHeader();
+        if (self.noData) { if (self.onRender) self.onRender(); return; }
         if (self._data) self.render(self._data); // redraw for theme-tied colors
       });
-      document.getElementById("btnRefresh").addEventListener("click", function () { self.load(true); });
+      var btnRefresh = document.getElementById("btnRefresh");
+      if (btnRefresh) btnRefresh.addEventListener("click", function () { self.load(true); });
     },
 
     render: function (data) {
@@ -379,8 +388,36 @@
       setTheme(this.theme);
       this.buildHeader();
       this.load();
+    },
+
+    // Same chrome, no fetch: for a page whose content is in the repo rather than
+    // in the sheet. `onRender` is called with no data, and again on a theme flip.
+    initStatic: function (page, onRender) {
+      this.noData = true;
+      this.page = page;
+      this.theme = getTheme();
+      this.range = getRange();
+      this.onRender = onRender;
+      document.body.setAttribute("data-page", page);
+      setTheme(this.theme);
+      this.buildHeader();
+      if (onRender) onRender();
     }
   };
+
+  // The "?" beside a number: links to that term's card in the glossary, and
+  // carries the one-line version as a native tooltip when glossary.js is loaded
+  // on the page. Unknown key still renders — it lands on the glossary index,
+  // which beats a number with no explanation at all.
+  // stopPropagation because these chips sit inside rows and cards that open a
+  // modal on click — asking what a metric means must not also open the post.
+  function term(key) {
+    var t = (window.KS_TERMS || []).filter(function (x) { return x.key === key; })[0];
+    var tip = t ? t.label + " — " + t.short.replace(/<[^>]+>/g, "") : "מה המדד הזה אומר";
+    return '<a class="kterm" href="/glossary#term-' + encodeURIComponent(key) + '"' +
+      ' title="' + esc(tip) + '" aria-label="' + esc(tip) + '"' +
+      ' onclick="event.stopPropagation();">?</a>';
+  }
 
   // The account itself: daily numbers about the page/profile, not a sum over its
   // posts. Dated by `insights_day` because Meta's day closes at 10:00 Israel and
@@ -417,7 +454,7 @@
     fmt: fmt, fmtHtml: fmtHtml, fmtFull: fmtFull, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc, mdInline: mdInline,
     fillIcon: fillIcon, strokeIcon: strokeIcon, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
     openModal: openModal, closeModal: closeModal, kmCell: kmCell, kmSection: kmSection, kmCmp: kmCmp, kmRetention: kmRetention,
-    kmAnalysis: kmAnalysis, aiDot: aiDot, accountDaily: accountDaily,
+    kmAnalysis: kmAnalysis, aiDot: aiDot, accountDaily: accountDaily, term: term,
     RANGE_LABEL: RANGE_LABEL, FILL: FILL
   };
 })();
