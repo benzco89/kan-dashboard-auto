@@ -7,7 +7,7 @@ ships gets moved to *Closed* with the answer, not deleted.
 Every claim here is evidence-backed: a file:line, a commit, or a probe run.
 If an item has no evidence, it is a guess and belongs in a conversation, not here.
 
-Last reviewed: **2026-07-28**
+Last reviewed: **2026-07-29**
 
 ---
 
@@ -65,6 +65,38 @@ or not at all.
 ### 6. The local `.env` FACEBOOK_TOKEN expired
 Died 2026-07-26 08:00 PDT. The GitHub secret is fine (this morning's runs
 worked), so only local probing is affected. See the meta-token renewal notes.
+
+---
+
+## Open — alerts
+
+### 12. Hot-sniffer thresholds recalibrated — merged? not yet
+Measured 2026-07-29 against the sniffer's own first 17 days (63 rows in
+`hot_alerts`) and the current distribution in the sheets:
+
+| | was | sits at | now |
+|---|---|---|---|
+| multiplier | 1.5×p90 | ≈p95 | **2.0×p90** |
+| IG comments | 600 | p93 | **1,000** |
+| FB comments | 1,000 | p92 | **2,000** |
+| TikTok comments | 400 | **p88** | **800** |
+
+**26 alerts a week — 34 of ~85 runs fired.** An interrupt that fires every second
+or third run is background, not an interrupt. Two causes: the comment floors were
+`comment_analyzer`'s "worth a Gemini call" floor ×2, never calibrated against the
+comment distribution (TikTok's 400 had sunk *below* TikTok's own p90 of 450–587),
+and 1.5×p90 is only about p95 — 16 of the 38 ratio triggers landed in 1.5–1.79,
+where the rule's own justification had cited real explosions at 2.7–3.3×.
+
+Replaying the 63 alerts at the new numbers leaves **14 (~6/week)**, keeping every
+genuine one: the ×9.6-shares reel (19/07), the ×3.4-reactions posts (24/07).
+The new floors are ≈p98 of 30 days, so "כמות נדירה" is finally true.
+
+Not merged. The VPS dispatches `{"ref":"main"}`, so **production is still on the
+old numbers until this lands on main**, and the run after the merge sends real
+Telegram — there is no approval step in between.
+
+Move to Closed after one live run confirms the quieter rate.
 
 ---
 
