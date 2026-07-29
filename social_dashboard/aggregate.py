@@ -272,6 +272,58 @@ def _account_daily(rows, platform):
     }
 
 
+# The collector's own last-seen stamp. YouTube called the column
+# `last_updated`; every collector written since settled on `pulled_at`.
+_STAMP_KEY = {"youtube": "last_updated"}
+
+# The daily pipeline starts at 08:30 Israel time and takes about a quarter of
+# an hour. Before it has had its chance, the freshest stamp a healthy sheet can
+# hold is yesterday's, so today only becomes the expectation afterwards. Earlier
+# than this and every morning goes red on its own; later, and a missed run stays
+# hidden until tomorrow — which is how Twitter lost 28/07 without anyone seeing.
+DAILY_RUN_DONE_HOUR = 10
+
+
+def _stamp_key(plat):
+    return _STAMP_KEY.get(plat, "pulled_at")
+
+
+def _expected_stamp():
+    """The newest day a healthy sheet should already carry."""
+    now = datetime.now(_TZ) if _TZ else datetime.now()
+    return now.date() if now.hour >= DAILY_RUN_DONE_HOUR else now.date() - timedelta(days=1)
+
+
+def freshness(items, plat):
+    """
+    Whether this platform's sheet is still being written to at all.
+
+    It cannot be derived the way _vanished_alerts derives a missing post. That
+    one measures every row against the newest stamp in the same sheet, so a
+    sheet nobody wrote to stays perfectly consistent with itself and reads as
+    healthy — which is exactly what the dashboard showed while Twitter sat
+    frozen on 28/07. The clock is the only reference from outside the data.
+
+    Returns None when the sheet carries no stamp at all: that is a shape
+    problem, not a staleness one, and guessing between them would be worse.
+    """
+    key = _stamp_key(plat)
+    stamps = [s for s in (str(it.get(key) or "")[:10] for it in items) if len(s) == 10]
+    if not stamps:
+        return None
+    try:
+        last = date.fromisoformat(max(stamps))
+    except ValueError:
+        return None
+    behind = (_expected_stamp() - last).days
+    return {
+        "platform": plat,
+        "last_seen": last.isoformat(),
+        "days_behind": max(behind, 0),
+        "stale": behind > 0,
+    }
+
+
 def _last_data_date(data):
     rows = data.get("followers", [])
     if rows:
@@ -462,6 +514,12 @@ def build_youtube(data, days):
             "comment_rate": round(_num(v.get("comment_rate")), 2),
             "duration": v.get("duration_formatted", "") or "",
             "views_delta": _int(v.get("views_delta")),
+            # written weekly by youtube_lifetime_refresh, never over `views`.
+            # `lifetime_checked` is what says "measured": a video the weekly run
+            # has not reached yet holds a 0 that means nothing, and showing that
+            # as zero views would be worse than showing nothing at all
+            "views_lifetime": _int(v.get("views_lifetime")),
+            "lifetime_checked": str(v.get("lifetime_checked") or "")[:10],
             "thumb": v.get("thumbnail_url", "") or "",
         })
     videos.sort(key=lambda x: x["views"], reverse=True)
@@ -469,6 +527,7 @@ def build_youtube(data, days):
     return {
         "range": days,
         "last_date": _last_data_date(data),
+        "freshness": freshness(data.get("youtube") or [], "youtube"),
         "subscribers": _follower_metric(foll, "yt_subscribers", "yt_subscribers_change"),
         "kpis": {
             "views": _delta_pair(yt, "published_at", "views", days),
@@ -599,7 +658,6 @@ def build_facebook(data, days):
             # the modal has been ready to draw this since the retention work
             # landed; the field was simply never filled, so the row never showed
             "replay_share": _replay_share(p),
-            "replay_share": _replay_share(p),
             "share_rate": round(shares / views * 100, 2) if views else 0,
             "reshetb": bool(reshetb_re.search(str(p.get("title", "")))),
             "analysis": analyses.get(str(p.get("post_id", "")).strip()),
@@ -609,6 +667,7 @@ def build_facebook(data, days):
     return {
         "range": days,
         "last_date": _last_data_date(data),
+        "freshness": freshness(data.get("facebook") or [], "facebook"),
         "followers": _follower_metric(foll, "fb_followers", "fb_followers_change"),
         "account_daily": _account_daily(foll, "facebook"),
         "kpis": {
@@ -720,6 +779,7 @@ def build_instagram(data, days):
     return {
         "range": days,
         "last_date": _last_data_date(data),
+        "freshness": freshness(data.get("instagram") or [], "instagram"),
         "followers": _follower_metric(foll, "ig_followers", "ig_followers_change"),
         "account_daily": _account_daily(foll, "instagram"),
         "kpis": {
@@ -801,6 +861,7 @@ def build_twitter(data, days):
     return {
         "range": days,
         "last_date": _last_data_date(data),
+        "freshness": freshness(data.get("twitter") or [], "twitter"),
         "followers": _follower_metric(foll, "tw_followers", "tw_followers_change"),
         "kpis": {
             "views": _delta_pair(tw, "date", "views", days),
@@ -880,6 +941,7 @@ def build_tiktok(data, days):
     return {
         "range": days,
         "last_date": _last_data_date(data),
+        "freshness": freshness(data.get("tiktok") or [], "tiktok"),
         "followers": _follower_metric(foll, "tt_followers", "tt_followers_change"),
         "kpis": {
             "views": _delta_pair(tt, "date", "views", days),
@@ -1506,7 +1568,10 @@ def _vanished_alerts(items, plat):
         all), two consecutive daily runs is not.
     """
     date_key, title_key, url_key = _ALERT_PLATFORMS[plat][:3]
-    stamps = [str(it.get("pulled_at") or "")[:10] for it in items]
+    # YouTube spells this column differently; reading a hardcoded `pulled_at`
+    # left it with an empty stamp list, so it never raised one of these at all
+    stamp = _stamp_key(plat)
+    stamps = [str(it.get(stamp) or "")[:10] for it in items]
     stamps = [x for x in stamps if len(x) == 10]
     if not stamps:
         return []
@@ -1521,7 +1586,7 @@ def _vanished_alerts(items, plat):
     out = []
     for it in items:
         published = str(it.get(date_key) or "")[:10]
-        seen = str(it.get("pulled_at") or "")[:10]
+        seen = str(it.get(stamp) or "")[:10]
         if not (window_start <= published <= last_run) or len(seen) != 10:
             continue
         if seen >= missed_before:
@@ -1668,6 +1733,13 @@ def build_alerts(data, days):
             alerts.extend(_ig_extra_alerts(posts))
     alerts.extend(_follower_alerts(data["followers"], days))
 
+    # not an alert about content, so it stays out of the capped/sorted feed and
+    # rides its own key: a platform that stopped reporting is a fact about the
+    # pipeline, and burying it behind a filter chip is how it gets missed
+    stale = [f for f in (freshness(data[plat], plat) for plat in _ALERT_PLATFORMS)
+             if f and f["stale"]]
+    stale.sort(key=lambda f: -f["days_behind"])
+
     # cap each (kind, platform) to its strongest N by impact, so no single
     # category — nor a high-volume platform like Twitter's firehose — floods the
     # feed. An alerts page is only useful if it surfaces the few standouts.
@@ -1718,5 +1790,6 @@ def build_alerts(data, days):
         "last_date": _last_data_date(data),
         "alerts": alerts,
         "summary": summary,
+        "stale": stale,
         "hot_history": hot_history[:20],
     }

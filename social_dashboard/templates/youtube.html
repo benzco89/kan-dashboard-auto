@@ -101,13 +101,22 @@
         KS.kmCell("% מעורבות", v.eng.toFixed(1) + "%") + '</div>';
       var momentum = v.views_delta ? (KS.kmSection("מומנטום") + '<div class="km-grid">' +
         KS.kmCell("צבר לאחרונה", KS.signed(v.views_delta) + " צפיות") + '</div>') : "";
+      // the daily collector refreshes 30 days; everything older keeps the number
+      // it froze on. The weekly lifetime run is the only place the real figure
+      // exists, and until now it existed only in the sheet.
+      var lifetime = (v.lifetime_checked && v.views_lifetime > v.views) ?
+        (KS.kmSection("צפיות מצטברות") + '<div class="km-grid">' +
+         KS.kmCell("בפועל", KS.fmtFull(v.views_lifetime)) +
+         KS.kmCell("מעבר לחלון", KS.signed(v.views_lifetime - v.views)) + '</div>' +
+         '<div class="km-foot">נמדד ' + KS.fmtDate(v.lifetime_checked) +
+         '. הטבלה מציגה את מה שהאיסוף היומי רואה בחלון 30 הימים.</div>') : "";
       var cmp = mv ? (KS.kmSection("ביחס לטיפוסי בערוץ") + '<div class="km-cmp">' + KS.kmCmp("צפיות מול חציון", v.views / mv) + '</div>') : "";
       var ai = KS.kmAnalysis(v.analysis);
       var openBtn = v.url ? '<a class="km-open" href="' + KS.esc(v.url) + '" target="_blank" rel="noopener">פתח ביוטיוב ↗</a>' : "";
       KS.openModal({
         iconHtml: KS.fillIcon("yt", "#fff", 19), iconBg: "var(--yt)",
         type: "YouTube · " + v.type, title: v.title || "(ללא כותרת)", date: KS.fmtFullDate(v.date),
-        bodyHtml: thumbHtml + hero + meta + momentum + cmp + ai + openBtn
+        bodyHtml: thumbHtml + hero + meta + lifetime + momentum + cmp + ai + openBtn
       });
     }
     function cmpFn(a, b) {
@@ -128,6 +137,7 @@
       '<div class="platform-head"><span class="pf-icon" style="background:var(--pf);">' + KS.fillIcon("yt", "#fff", 24) + '</span>' +
       '<div><h1>YouTube Analytics</h1><p>ניתוח ביצועי ערוץ היוטיוב של כאן חדשות · ' + rl + '</p></div></div>' +
 
+      KS.staleBanner(data.freshness) +
       '<div class="grid-4 mb-s">' + kpis + '</div>' +
 
       '<div class="split" style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:12px;margin-bottom:14px;">' +
