@@ -411,13 +411,39 @@
       '</div></div><div class="grid-4" style="margin-top:12px;">' + tiles + '</div>' + body + '</div>';
   }
 
+  var PLAT_HE = {
+    youtube: "יוטיוב", facebook: "פייסבוק", instagram: "אינסטגרם",
+    twitter: "טוויטר", tiktok: "טיקטוק"
+  };
+
+  // A platform whose collector stopped writing. Nothing else on the page can
+  // show this: the numbers stay internally consistent and simply describe an
+  // older day, which is exactly how Twitter sat frozen on 28/07 behind a
+  // dashboard that looked fine. Takes one freshness object or an array; draws
+  // nothing at all when everything is current.
+  function staleBanner(f) {
+    var list = (f == null ? [] : (f.length === undefined ? [f] : f))
+      .filter(function (x) { return x && x.stale; });
+    if (!list.length) return "";
+    var rows = list.map(function (x) {
+      var d = x.days_behind;
+      var behind = d === 1 ? "יום אחד" : (d === 2 ? "יומיים" : d + " ימים");
+      return '<div class="stale-row"><b>' + esc(PLAT_HE[x.platform] || x.platform) + '</b>' +
+        '<span>נראה לאחרונה ' + fmtDate(x.last_seen) + ' · פיגור של ' + behind + '</span></div>';
+    }).join("");
+    return '<div class="stale-banner"><div class="stale-head">⚠️ ' +
+      (list.length > 1 ? 'נתונים שלא התעדכנו' : 'הנתונים לא התעדכנו') + '</div>' +
+      rows + '<div class="stale-foot">המספרים למטה נכונים ליום האחרון שנאסף, לא להיום. ' +
+      'בדוק את ההרצה היומית ב-GitHub Actions.</div></div>';
+  }
+
   // expose helpers
   window.KanSocial = app;
   window.KS = {
     fmt: fmt, fmtHtml: fmtHtml, fmtFull: fmtFull, fmtDate: fmtDate, fmtFullDate: fmtFullDate, signed: signed, delta: delta, esc: esc, mdInline: mdInline,
     fillIcon: fillIcon, strokeIcon: strokeIcon, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
     openModal: openModal, closeModal: closeModal, kmCell: kmCell, kmSection: kmSection, kmCmp: kmCmp, kmRetention: kmRetention,
-    kmAnalysis: kmAnalysis, aiDot: aiDot, accountDaily: accountDaily,
+    kmAnalysis: kmAnalysis, aiDot: aiDot, accountDaily: accountDaily, staleBanner: staleBanner,
     RANGE_LABEL: RANGE_LABEL, FILL: FILL
   };
 })();

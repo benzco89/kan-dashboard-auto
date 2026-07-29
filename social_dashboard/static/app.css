@@ -124,6 +124,17 @@ h1{ margin:0; font-weight:900; letter-spacing:-.7px; }
 .up{ color:var(--ok); }
 .down{ color:var(--bad); }
 
+/* ---------- stale-data banner ---------- */
+/* Only ever rendered when a collector stopped writing, so it is allowed to be
+   loud — it is the one thing on the page the numbers themselves cannot say. */
+.stale-banner{ background:var(--orange-bg); border:1px solid var(--bad); border-inline-start:4px solid var(--bad);
+  border-radius:8px; padding:13px 16px; margin-bottom:16px; }
+.stale-head{ font-weight:700; font-size:15px; color:var(--bad); margin-bottom:7px; }
+.stale-row{ display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; font-size:13.5px; padding:2px 0; }
+.stale-row b{ font-weight:700; }
+.stale-row span{ color:var(--body); }
+.stale-foot{ font-size:12px; color:var(--muted); margin-top:7px; }
+
 /* ---------- panels / charts ---------- */
 .panel{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px 18px 14px; }
 .panel-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
@@ -246,6 +257,7 @@ h1{ margin:0; font-weight:900; letter-spacing:-.7px; }
 .km-cell .l{ font-size:11px; color:var(--muted); }
 .km-cell .v{ font-size:15px; font-weight:700; color:var(--text); font-family:'SimplerPro',sans-serif; margin-top:2px; }
 .km-cell .v .unit{ font-size:.62em; font-weight:600; color:var(--muted); margin-inline-start:1px; }
+.km-foot{ font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.5; }
 .km-ret{ background:var(--console); border:1px solid var(--line); border-radius:8px; padding:10px 12px 8px; }
 .km-ret svg{ display:block; width:100%; height:96px; }
 .km-ret path.a{ fill:color-mix(in srgb, var(--pf) 18%, transparent); }
