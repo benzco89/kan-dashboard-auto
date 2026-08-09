@@ -458,8 +458,12 @@ def tiktok_cover_map(wanted_ids, token, max_pages=8):
 
 # ---------------------------------------------------------------- reporters
 
-# 2-3 Hebrew words, apostrophes/geresh/hyphen allowed inside a word.
-_NAME_RE = re.compile(r"^[֐-׿]+(?:[ ׳״'\"\-][֐-׿]+){1,2}$")
+# 2-3 Hebrew words, apostrophes/geresh/hyphen allowed inside a word — and a
+# geresh allowed at the END of one, because Kan surnames end in it constantly
+# (בורוביץ', דוידוביץ') and requiring a final Hebrew letter dropped their
+# written-out credits.
+_NAME_WORD = r"[֐-׿]+(?:['׳״\"][֐-׿]+)*['׳]?"
+_NAME_RE = re.compile(r"^%s(?:[ \-]%s){1,2}$" % (_NAME_WORD, _NAME_WORD))
 
 
 # Roles that are credited like a reporter but are NOT the reporter.
