@@ -1,0 +1,34 @@
+name: Probe yearly content counts (read-only)
+
+# How much did the page publish, by type - 2025 vs 2026. Counts only, no
+# metrics. Read-only: no Sheets writes, no collector touched. Manual only.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run the yearly content probe
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+        run: python yearly_content_probe.py --csv yearly_content.csv
+
+      - name: Upload per-item rows
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yearly-content
+          path: yearly_content.csv
+          if-no-files-found: warn
