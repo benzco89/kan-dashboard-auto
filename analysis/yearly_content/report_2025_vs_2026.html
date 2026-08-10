@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>הדוח השנתי: כמה תוכן פרסמנו? 2025 מול 2026</title>
+<style>
+  :root {
+    --bg: #FAF9F7;
+    --surface: #FFFFFF;
+    --ink: #1F2229;
+    --ink-2: #565C68;
+    --ink-3: #8A8F99;
+    --line: #E7E4DE;
+    --accent: #F7381B;
+    --s-2025: #2a78d6;
+    --s-2026: #F7381B;
+    --fb: #1877F2;
+    --ig: #E4405F;
+    --tile: #F4F2EE;
+    --grid: #EEECE7;
+    --tooltip-bg: #23262D;
+    --tooltip-ink: #F2F3F5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15171C;
+      --surface: #1E2128;
+      --ink: #E9EAEE;
+      --ink-2: #A7ACB6;
+      --ink-3: #767C88;
+      --line: #30343D;
+      --accent: #EF5A3E;
+      --s-2025: #3987e5;
+      --s-2026: #EF5A3E;
+      --fb: #4D95F0;
+      --ig: #E8657E;
+      --tile: #23262E;
+      --grid: #282C34;
+      --tooltip-bg: #F2F3F5;
+      --tooltip-ink: #23262D;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15171C;
+    --surface: #1E2128;
+    --ink: #E9EAEE;
+    --ink-2: #A7ACB6;
+    --ink-3: #767C88;
+    --line: #30343D;
+    --accent: #EF5A3E;
+    --s-2025: #3987e5;
+    --s-2026: #EF5A3E;
+    --fb: #4D95F0;
+    --ig: #E8657E;
+    --tile: #23262E;
+    --grid: #282C34;
+    --tooltip-bg: #F2F3F5;
+    --tooltip-ink: #23262D;
+  }
+
+  * { box-sizing: border-box; }
+  html { direction: rtl; scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Heebo', 'Segoe UI', 'Arial Hebrew', system-ui, sans-serif;
+    line-height: 1.65;
+    font-size: 16px;
+  }
+  .page { max-width: 880px; margin: 0 auto; padding: 48px 24px 72px; }
+
+  /* ---- header ---- */
+  .eyebrow {
+    display: flex; align-items: center; gap: 10px;
+    color: var(--ink-3); font-size: 13px; font-weight: 500;
+  }
+  .eyebrow::before {
+    content: ""; display: inline-block; width: 26px; height: 4px;
+    background: var(--accent); border-radius: 2px;
+  }
+  h1 {
+    font-size: clamp(26px, 4.5vw, 38px); font-weight: 800;
+    line-height: 1.25; margin: 10px 0 6px; text-wrap: balance;
+  }
+  .meta { color: var(--ink-2); font-size: 14px; margin: 0 0 8px; }
+  .lede { color: var(--ink-2); max-width: 64ch; margin: 14px 0 0; }
+
+  /* ---- toc ---- */
+  .toc {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px;
+  }
+  .toc a {
+    font-size: 12.5px; font-weight: 600; text-decoration: none;
+    color: var(--ink-2); background: var(--tile);
+    padding: 6px 13px; border-radius: 99px;
+  }
+  .toc a:hover { color: var(--accent); }
+  .toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---- stat tiles ---- */
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 30px 0 8px; }
+  @media (max-width: 720px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 460px) { .tiles { grid-template-columns: 1fr; } }
+  .tile { background: var(--tile); border-radius: 10px; padding: 18px 20px 16px; }
+  .tile .v {
+    font-size: 30px; font-weight: 800; line-height: 1.1;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.5px;
+  }
+  .tile .v.hot { color: var(--accent); }
+  .tile .k { font-size: 14px; font-weight: 600; margin-top: 6px; }
+  .tile .s { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.5; }
+
+  /* ---- sections ---- */
+  section { margin-top: 56px; scroll-margin-top: 20px; }
+  h2 {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 21px; font-weight: 700; margin: 0 0 4px;
+  }
+  .chip { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .chip.fb { background: var(--fb); }
+  .chip.ig { background: var(--ig); }
+  .chip.red { background: var(--accent); }
+  .sub { color: var(--ink-2); font-size: 14px; margin: 0 0 18px; max-width: 68ch; }
+
+  /* ---- tables ---- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 540px; }
+  th, td { padding: 9px 14px; text-align: right; vertical-align: top; }
+  thead th {
+    font-size: 12px; font-weight: 600; color: var(--ink-3);
+    border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  tbody td { border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  tbody th { font-weight: 600; border-bottom: 1px solid var(--line); white-space: nowrap; font-size: 13.5px; }
+  tbody tr:last-child td, tbody tr:last-child th { border-bottom: none; }
+  tr.total td { font-weight: 700; background: var(--tile); }
+  td.pos { color: var(--accent); font-weight: 600; }
+  td.dim { color: var(--ink-3); }
+  td.hot { color: var(--accent); font-weight: 600; }
+
+  /* ---- chart ---- */
+  .chartcard {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 18px 10px; margin-top: 18px;
+  }
+  .charthead { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+  .charttitle { font-size: 14.5px; font-weight: 700; }
+  .legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--ink-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 9px; height: 9px; border-radius: 3px; display: inline-block; flex: none; }
+  .dot.y25 { background: var(--s-2025); }
+  .dot.y26 { background: var(--s-2026); }
+  .dot.own { background: var(--s-2026); }
+  .dot.fam { background: var(--s-2025); }
+  .dot.oth { background: var(--ink-3); }
+  .chartwrap { overflow-x: auto; }
+  .chartwrap svg { display: block; width: 100%; height: auto; min-width: 560px; }
+  .bar:hover { opacity: 0.85; }
+  .chartnote { font-size: 12px; color: var(--ink-3); margin: 6px 2px 6px; }
+
+  #tooltip {
+    position: fixed; pointer-events: none; z-index: 10;
+    background: var(--tooltip-bg); color: var(--tooltip-ink);
+    font-size: 12.5px; line-height: 1.5; padding: 7px 11px;
+    border-radius: 7px; opacity: 0; transition: opacity 0.1s;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  }
+
+  details { margin-top: 12px; }
+  summary {
+    cursor: pointer; font-size: 13px; color: var(--ink-2); font-weight: 500;
+    padding: 4px 2px; user-select: none;
+  }
+  summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  details .tablewrap { margin-top: 8px; }
+
+  /* ---- insight & panels ---- */
+  .insight { max-width: 68ch; }
+  .insight p { margin: 14px 0 0; }
+
+  .events { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+  @media (max-width: 640px) { .events { grid-template-columns: 1fr; } }
+  .event {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 20px;
+  }
+  .event .when { font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+  .event .what { font-size: 16.5px; font-weight: 700; margin: 3px 0 8px; }
+  .event .num {
+    font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums;
+    color: var(--accent); letter-spacing: -0.5px;
+  }
+  .event .num small { font-size: 13px; font-weight: 500; color: var(--ink-2); letter-spacing: 0; }
+  .event p { font-size: 13.5px; color: var(--ink-2); margin: 8px 0 0; line-height: 1.6; }
+
+  /* ---- breakdown bar ---- */
+  .breakdown {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 20px; margin-top: 18px;
+  }
+  .bd-bar { display: flex; height: 34px; border-radius: 7px; overflow: hidden; margin: 12px 0 10px; }
+  .bd-bar .own { background: var(--s-2026); flex: 2512; }
+  .bd-bar .fam { background: var(--s-2025); flex: 281; }
+  .bd-bar .oth { background: var(--ink-3); flex: 50; }
+  .bd-bar div + div { margin-right: 2px; }
+  .bd-legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: var(--ink-2); }
+  .bd-legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .bd-legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .who { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+  @media (max-width: 720px) { .who { grid-template-columns: 1fr; } }
+  .whocard {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px 18px;
+  }
+  .whocard .t { font-size: 14.5px; font-weight: 700; }
+  .whocard .share { font-size: 12.5px; color: var(--accent); font-weight: 600; margin-bottom: 6px; }
+  .whocard p { font-size: 13px; color: var(--ink-2); margin: 6px 0 0; line-height: 1.6; }
+  .whocard code { font-size: 12px; direction: ltr; unicode-bidi: embed; }
+
+  /* ---- lessons ---- */
+  .points { counter-reset: pt; list-style: none; padding: 0; margin: 18px 0 0; max-width: 72ch; }
+  .points li {
+    counter-increment: pt; position: relative;
+    padding-right: 44px; margin-bottom: 18px;
+  }
+  .points li::before {
+    content: counter(pt);
+    position: absolute; right: 0; top: 1px;
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--accent); color: #fff;
+    font-size: 14px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .points b { font-weight: 700; }
+
+  /* ---- footer ---- */
+  .method { border-top: 1px solid var(--line); margin-top: 56px; padding-top: 24px; }
+  .method h3 { font-size: 15px; font-weight: 700; margin: 0 0 10px; }
+  .method ul { margin: 0; padding-right: 18px; color: var(--ink-2); font-size: 13.5px; }
+  .method li { margin-bottom: 8px; max-width: 75ch; }
+  .method li::marker { color: var(--accent); }
+  code { font-family: Consolas, monospace; font-size: 0.9em; }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="eyebrow">כאן חדשות · דיגיטל · דוח מלא</div>
+    <h1>כמה תוכן פרסמנו? 2025 מול 2026</h1>
+    <p class="meta">פייסבוק ואינסטגרם · נכון ל־10 באוגוסט 2026 · 16,204 פוסטים + 3,684 סטוריז + 999 קולאבים</p>
+    <p class="lede">ספירה מלאה של כל מה שפורסם בעמודים — כמה, מאיזה סוג, ומה עומד מאחורי כל פער. "תקופה מקבילה" פירושה 1 בינואר עד 10 באוגוסט בשתי השנים. המספרים אומתו משלושה מקורות בלתי־תלויים, שמתלכדים עד כדי ±2 פוסטים.</p>
+    <nav class="toc">
+      <a href="#facebook">פייסבוק</a>
+      <a href="#instagram">אינסטגרם</a>
+      <a href="#stories">סטוריז</a>
+      <a href="#collabs">קולאבים</a>
+      <a href="#sources">אמינות המספרים</a>
+      <a href="#lessons">מה למדנו</a>
+    </nav>
+  </header>
+
+  <div class="tiles">
+    <div class="tile">
+      <div class="v hot">‎+53%‎</div>
+      <div class="k">פייסבוק — קצב הפרסום</div>
+      <div class="s">2,714 → 4,151 בתקופה המקבילה. עלייה בכל חודש, בלי יוצא מן הכלל.</div>
+    </div>
+    <div class="tile">
+      <div class="v">‎−17%‎</div>
+      <div class="k">אינסטגרם — אבל לא באמת</div>
+      <div class="s">3,025 → 2,514. בנטרול חודשי האירועים של 2025: ‎−5%‎ בלבד, ואוגוסט זהה.</div>
+    </div>
+    <div class="tile">
+      <div class="v">‎−13%‎</div>
+      <div class="k">סטוריז</div>
+      <div class="s">1,550 → 1,348. כל הירידה בינואר–פברואר; ממרץ ברמת 2025 ומעלה.</div>
+    </div>
+    <div class="tile">
+      <div class="v">‎−46%‎</div>
+      <div class="k">קרוסלות באינסטגרם</div>
+      <div class="s">השינוי המערכתי היחיד: ירידה עקבית בכל חודש, ללא קשר לאירועים.</div>
+    </div>
+    <div class="tile">
+      <div class="v hot">58.3M</div>
+      <div class="k">צפיות מחוץ לדוחות</div>
+      <div class="s">331 קולאבים בבעלות אחרים ב־2026 — על הפרופיל שלנו, בלתי נראים לכל מערכת שלנו.</div>
+    </div>
+    <div class="tile">
+      <div class="v">‎±2‎</div>
+      <div class="k">דיוק מאומת</div>
+      <div class="s">הצלבה מול Business Suite ומול גיליון האיסוף — שלושת המקורות מתלכדים.</div>
+    </div>
+  </div>
+
+  <section id="facebook">
+    <h2><span class="chip fb"></span>פייסבוק — האצה מבנית</h2>
+    <p class="sub">2026 גבוה מ־2025 בכל חודש בנפרד — כולל מול חודשי השיא של השנה שעברה. המנוע: רילס, שיותר מהוכפלו.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>סוג</th><th>2025 מלאה</th><th>2025 עד 10.8</th><th>2026 עד 10.8</th><th>שינוי</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>רילס + וידאו</td><td>2,087</td><td>954</td><td>2,198</td><td class="pos">‎+130%‎</td></tr>
+          <tr><td>תמונה</td><td>2,657</td><td>1,707</td><td>1,950</td><td class="pos">‎+14%‎</td></tr>
+          <tr><td>סטטוס</td><td>53</td><td>51</td><td>3</td><td class="dim">—</td></tr>
+          <tr><td>לינק</td><td>2</td><td>2</td><td>0</td><td class="dim">—</td></tr>
+          <tr class="total"><td>סה״כ</td><td>4,799</td><td>2,714</td><td>4,151</td><td class="pos">‎+53%‎</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="chartcard">
+      <div class="charthead">
+        <div class="charttitle">פרסומים בחודש, חודש מול חודש</div>
+        <div class="legend"><span><i class="dot y25"></i>2025</span><span><i class="dot y26"></i>2026</span></div>
+      </div>
+      <div class="chartwrap"><svg id="chart-fb" role="img" aria-label="פרסומי פייסבוק לפי חודש, 2025 מול 2026"></svg></div>
+      <div class="chartnote">אוגוסט: 1–10 בחודש בשתי השנים. וידאו אוחד לרילס (שינוי פורמט של מטא, אמצע 2025).</div>
+      <details>
+        <summary>הנתונים המלאים בטבלה</summary>
+        <div class="tablewrap"><table id="table-fb"></table></div>
+      </details>
+    </div>
+
+    <div class="insight">
+      <p>שני דברים קרו בפייסבוק במקביל: <b>הקצב הכולל זינק</b> — משיא של +84% באפריל ועד "רק" +29% ביוני (שהיה חודש מלחמת איראן ב־2025, כלומר גם מול בסיס מנופח 2026 מנצח) — <b>ותמהיל הפורמטים התהפך</b>. ב־2025 תמונות היו פי שניים מרילס; ב־2026 הרילס כבר עוקף את התמונות ברוב החודשים.</p>
+    </div>
+  </section>
+
+  <section id="instagram">
+    <h2><span class="chip ig"></span>אינסטגרם — הבסיס יציב</h2>
+    <p class="sub">הירידה השנתית מרוכזת כמעט כולה בשני חודשים שבהם 2025 הייתה חריגה, לא 2026 חלשה. מרץ–אפריל 2026 דווקא גבוהים מ־2025, ואוגוסט זהה לחלוטין.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>סוג</th><th>2025 מלאה</th><th>2025 עד 10.8</th><th>2026 עד 10.8</th><th>שינוי</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>תמונה</td><td>2,009</td><td>1,319</td><td>1,148</td><td>‎−13%‎</td></tr>
+          <tr><td>רילס</td><td>1,902</td><td>1,180</td><td>1,080</td><td>‎−9%‎</td></tr>
+          <tr><td>קרוסלה</td><td>829</td><td>526</td><td>286</td><td>‎−46%‎</td></tr>
+          <tr class="total"><td>סה״כ</td><td>4,740</td><td>3,025</td><td>2,514</td><td>‎−17%‎</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="chartcard">
+      <div class="charthead">
+        <div class="charttitle">פרסומים בחודש, חודש מול חודש</div>
+        <div class="legend"><span><i class="dot y25"></i>2025</span><span><i class="dot y26"></i>2026</span></div>
+      </div>
+      <div class="chartwrap"><svg id="chart-ig" role="img" aria-label="פרסומי אינסטגרם לפי חודש, 2025 מול 2026"></svg></div>
+      <div class="chartnote">אוגוסט: 1–10 בחודש בשתי השנים.</div>
+      <details>
+        <summary>הנתונים המלאים בטבלה</summary>
+        <div class="tablewrap"><table id="table-ig"></table></div>
+      </details>
+    </div>
+
+    <div class="insight">
+      <p>מתוך פער שנתי של 511 פוסטים, <b>413 (כ־80%) יושבים בפברואר וביוני 2025</b> — שני חודשי החדשות הקיצוניים של השנה שעברה. בשאר החודשים ההפרשים קטנים ומתחלפים בסימנם, וב־1–10 באוגוסט הקצב זהה: 104 מול 105.</p>
+    </div>
+
+    <div class="events">
+      <div class="event">
+        <div class="when">פברואר 2025</div>
+        <div class="what">שחרורי החטופים</div>
+        <div class="num">529 <small>פוסטים · פי 1.7 מפברואר 2026</small></div>
+        <p>ימי השיא הם בדיוק שבתות השחרור — 1.2, 8.2, 15.2, 22.2 — עם 33–41 פוסטים ביום, פי שלושה מיום שגרה.</p>
+      </div>
+      <div class="event">
+        <div class="when">יוני 2025</div>
+        <div class="what">מלחמת ישראל–איראן</div>
+        <div class="num">530 <small>פוסטים · פי 1.6 מיוני 2026</small></div>
+        <p>ימי השיא: 13–16.6 (פתיחת המבצע), 22.6 (התקיפה האמריקאית), 24.6 (הפסקת האש) — עד 37 פוסטים ביום.</p>
+      </div>
+    </div>
+
+    <div class="insight">
+      <p><b>קרוסלות הן הסיפור המערכתי היחיד.</b> בניגוד לתנודות החדשות, הן יורדות בכל חודש וחודש — מ־52–93 בחודש ב־2025 ל־33–55 ב־2026. זו החלטת פורמט, לא אירועים; חלק מהנפח נדד כנראה לרילס ולתמונות בודדות.</p>
+    </div>
+  </section>
+
+  <section id="stories">
+    <h2><span class="chip ig"></span>סטוריז — צלילה בתחילת השנה, התאוששות מלאה ממרץ</h2>
+    <p class="sub">ה־API לא חושף סטוריז היסטוריים, אבל ייצוא ידני מ־Business Suite כן — וזה סוגר את החור האחרון בספירה: 2,336 סטוריז ב־2025, 1,348 עד כה ב־2026.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th></th><th>2025 מלאה</th><th>2025 עד 10.8</th><th>2026 עד 10.8</th><th>שינוי</th></tr>
+        </thead>
+        <tbody>
+          <tr class="total"><td>סטוריז</td><td>2,336</td><td>1,550</td><td>1,348</td><td>‎−13%‎</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="chartcard">
+      <div class="charthead">
+        <div class="charttitle">סטוריז בחודש, חודש מול חודש</div>
+        <div class="legend"><span><i class="dot y25"></i>2025</span><span><i class="dot y26"></i>2026</span></div>
+      </div>
+      <div class="chartwrap"><svg id="chart-st" role="img" aria-label="סטוריז באינסטגרם לפי חודש, 2025 מול 2026"></svg></div>
+      <div class="chartnote">אוגוסט: 1–10 בחודש בשתי השנים. המקור: ייצוא ידני מ־Business Suite (10.8.2026).</div>
+      <details>
+        <summary>הנתונים המלאים בטבלה</summary>
+        <div class="tablewrap"><table id="table-st"></table></div>
+      </details>
+    </div>
+
+    <div class="insight">
+      <p>המספר השנתי (‎−13%‎) מסתיר מגמה הפוכה: <b>כל הירידה יושבת בינואר–פברואר 2026</b> (103 ו־154 מול 279 ו־272 אשתקד). ממרץ הסטוריז חזרו לרמת 2025 ומעלה — מאי גבוה ב־42%, ו־1–10 באוגוסט גבוה ב־60% מהמקביל. הקצב הנוכחי איתן.</p>
+    </div>
+  </section>
+
+  <section id="collabs">
+    <h2><span class="chip red"></span>קולאבים — התוכן שאף מערכת שלנו לא סופרת</h2>
+    <p class="sub">פוסטים בשיתוף שבבעלות חשבון אחר מוצגים על הפרופיל שלנו, אבל אינם ברשימת ה־media של ה־API — ולכן הדשבורד, דוחות הטלגרם והסניפר עיוורים אליהם. זה ההסבר המלא לתחושת "יש יותר בפרופיל".</p>
+
+    <div class="breakdown">
+      <div style="font-size:14.5px; font-weight:700;">הפירוק של 2,843 שורות ייצוא Business Suite (2026)</div>
+      <div class="bd-bar"><div class="own"></div><div class="fam"></div><div class="oth"></div></div>
+      <div class="bd-legend">
+        <span><i class="dot own"></i>בבעלות kan_news — <b>2,512</b> (מול 2,514 בספירה שלנו)</span>
+        <span><i class="dot fam"></i>קולאב עם משפחת כאן — <b>281</b></span>
+        <span><i class="dot oth"></i>קולאב עם כתבים וחיצוניים — <b>50</b></span>
+      </div>
+    </div>
+
+    <div class="chartcard">
+      <div class="charthead">
+        <div class="charttitle">קולאבים בחודש, חודש מול חודש</div>
+        <div class="legend"><span><i class="dot y25"></i>2025</span><span><i class="dot y26"></i>2026</span></div>
+      </div>
+      <div class="chartwrap"><svg id="chart-cl" role="img" aria-label="פוסטים בשיתוף לפי חודש, 2025 מול 2026"></svg></div>
+      <div class="chartnote">אוגוסט: 1–10 בחודש בשתי השנים. שורות הייצוא שבעליהן אינו kan_news.</div>
+      <details>
+        <summary>הנתונים המלאים בטבלה</summary>
+        <div class="tablewrap"><table id="table-cl"></table></div>
+      </details>
+    </div>
+
+    <div class="insight">
+      <p><b>668 קולאבים ב־2025, 331 עד כה ב־2026</b> — בהשוואה שנתית פחות, אבל המגמה בתוך 2026 הפוכה: עלייה עקבית מינואר (27) עד שיא ביולי (76, כמעט כפול מיולי 2025). ועל הקולאבים האלה יושבות <b>58.3 מיליון צפיות ב־2026</b> — תוספת של כ־16% על 358M הצפיות של התוכן העצמי (ב־2025: 132M, כ־23%). הסתייגות: מונה הצפיות בקולאב משותף לכל הפרופילים השותפים, כך שאי אפשר לדעת איזה חלק הגיע מהקהל שלנו.</p>
+    </div>
+
+    <div class="who">
+      <div class="whocard">
+        <div class="t">משפחת כאן</div>
+        <div class="share">85–91% מהקולאבים</div>
+        <p><code>kan_reshetb</code> (330 ב־2025, 160 ב־2026), <code>kan_israel</code> (107, 92), <code>kan_middleast</code> (98, 16), הארכיון, מורשת ועוד. הצלבה פנים־תאגידית — הנפח הגדול.</p>
+      </div>
+      <div class="whocard">
+        <div class="t">כתבים בחשבון אישי</div>
+        <div class="share">הצומחים של 2026</div>
+        <p><code>anna.pines</code> — 25 קולאבים ו־6.6M צפיות ב־2026, הבולטת החדשה. גם <code>shaul_amsterdamski</code>, <code>shemeshmicha</code>, <code>roysharon11</code>, <code>eliorlevy</code>.</p>
+      </div>
+      <div class="whocard">
+        <div class="t">חיצוניים</div>
+        <div class="share">בודדים, נקודתיים</div>
+        <p><code>omerwenkert</code>, <code>standwithus</code>, <code>ziv_and_gali_are_back_home</code>, <code>knessettv</code>. אירועי־תוכן חד־פעמיים.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="sources">
+    <h2><span class="chip red"></span>אמינות המספרים — שלושה מקורות, הצלבה מלאה</h2>
+    <p class="sub">אף מקור לא "טועה" — כל אחד סופר דבר אחר. אחרי שמסננים נכון, הם מתלכדים.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th></th><th>ה־API שלנו (probe)</th><th>גיליון האיסוף היומי</th><th>ייצוא Business Suite</th></tr>
+        </thead>
+        <tbody>
+          <tr><th>מה נספר</th><td>פוסטים בבעלות kan_news</td><td>פוסטים בבעלות kan_news</td><td class="hot">כל תוכן שאנחנו מעורבים בו, כולל קולאבים של אחרים</td></tr>
+          <tr><th>פוסטים שנמחקו</th><td>לא (מצב נוכחי)</td><td>כן — זוכר מהאיסוף</td><td>לא</td></tr>
+          <tr><th>סטוריז</th><td>אין</td><td>מ־5.7.2026 בלבד</td><td>כן, כולל היסטוריה</td></tr>
+          <tr><th>כיסוי אחורה</th><td>2025 ומעבר</td><td>מ־21.11.2025</td><td>לפי טווח הייצוא</td></tr>
+          <tr><th>אוטומציה</th><td>מלאה</td><td>מלאה</td><td>ידני בלבד</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tablewrap" style="margin-top: 14px;">
+      <table>
+        <thead>
+          <tr><th>אינסטגרם, kan_news בלבד</th><th>Business Suite</th><th>הספירה שלנו (API)</th><th>פער</th><th>הסבר</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>2025 שנה מלאה</td><td>4,742</td><td>4,740</td><td>2</td><td>זניח</td></tr>
+          <tr><td>2025 עד 10.8</td><td>3,008</td><td>3,025</td><td>17</td><td>‎~0.6%‎, פוסטים שנמחקו/סווגו מחדש</td></tr>
+          <tr><td>2026 עד 10.8</td><td>2,512</td><td>2,514</td><td>2</td><td>פורסמו בין הייצוא (בוקר) לסריקה (אחה״צ)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="insight">
+      <p>גם מול גיליון האיסוף היומי ההתאמה בתוך כ־2%: ההפרשים הקטנים הם פוסטים שנמחקו מאינסטגרם (הגיליון זוכר, ה־API לא) וימים בודדים שהריצה היומית נפלה. וברמת הסוג ב־2026 ההתאמה כמעט מוחלטת: תמונות 1,148 = 1,148 בדיוק, רילס 1,079 מול 1,080.</p>
+    </div>
+  </section>
+
+  <section id="lessons">
+    <h2><span class="chip red"></span>מה למדנו</h2>
+    <ol class="points">
+      <li><b>פייסבוק האיץ מבנית, לא נסיבתית.</b> עלייה בכל חודש בנפרד, גם מול חודשי השיא של 2025. כמות הווידאו יותר מהוכפלה, ותמהיל הפורמטים התהפך — הרילס עוקף את התמונות.</li>
+      <li><b>"הירידה" באינסטגרם היא אשליית בסיס.</b> 80% מהפער יושב בפברואר וביוני 2025 — שחרורי החטופים ומלחמת איראן, שניפחו את הבסיס. בנטרולם: ‎−5%‎; באוגוסט הנוכחי: קצב זהה.</li>
+      <li><b>קרוסלות נזנחו — וסטוריז חזרו.</b> הקרוסלה היא השינוי המערכתי היחיד (‎−46%‎, עקבי בכל חודש); הסטוריז ירדו רק בינואר–פברואר וממרץ הם ברמת 2025 ומעלה.</li>
+      <li><b>הפרופיל מציג יותר ממה שכל מערכת שלנו סופרת.</b> 331 קולאבים בבעלות אחרים ב־2026, עם 58.3M צפיות, לא קיימים בשום דוח שלנו — וזו תופעה שמכפילה את עצמה (יולי: 76). ההיפך ("שיתפתי") כן נספר כרגיל, כך שאין כפילות — יש עיוורון חד־כיווני.</li>
+      <li><b>כל השוואה מול Business Suite מחייבת סינון</b> <code dir="ltr">Account username == kan_news</code> — הייצוא הגולמי מכיל את כל תיק החשבונות ואת שותפי הקולאב.</li>
+      <li><b>סטוריז וקולאבים נספרים רק בייצוא ידני.</b> אין להם API; אם רוצים לעקוב — ייצוא Business Suite תקופתי (רבעוני) הוא הדרך היחידה.</li>
+    </ol>
+  </section>
+
+  <section class="method">
+    <h3>מתודולוגיה ומקורות</h3>
+    <ul>
+      <li><b>פוסטים:</b> ספירה ישירה מה־Graph API — רשימת <code dir="ltr">published_posts</code> של עמוד הפייסבוק ורשימת <code dir="ltr">media</code> של חשבון האינסטגרם, מ־1.1.2025 עד 10.8.2026. תאריך וסוג בלבד, ללא מדדי ביצוע.</li>
+      <li><b>סטוריז וקולאבים:</b> ייצוא ידני מ־Business Suite (10.8.2026), אחרי סינון ל־kan_news (סטוריז) או לפי בעלים (קולאבים). צפיות הקולאבים = מונה מצטבר משותף לכל הפרופילים השותפים.</li>
+      <li><b>וידאו ורילס בפייסבוק אוחדו:</b> מאמצע 2025 מטא מפרסמת כל וידאו כרילס. בלי האיחוד נדמה שהווידאו "נעלם" — זה אותו רצף תוכן.</li>
+      <li><b>הספירה היא של מה שקיים היום:</b> פוסט שפורסם ונמחק מאז אינו נספר (למעט בגיליון האיסוף, שזוכר אותו).</li>
+      <li><b>הנתונים המלאים</b> שמורים בריפו תחת <code dir="ltr">analysis/yearly_content/</code>: שורה לכל פריט, פיבוט חודשי, נתוני סטוריז, קובצי המקור של Business Suite, ומסמכי הניתוח.</li>
+    </ul>
+  </section>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+(function () {
+  var MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוג׳ 1–10'];
+  var DATA = {
+    fb: { y25: [362, 409, 359, 321, 361, 419, 376, 107], y26: [490, 545, 626, 591, 603, 540, 561, 195], max: 700, grid: [0, 200, 400, 600], unit: 'פרסומים' },
+    ig: { y25: [372, 529, 376, 342, 403, 530, 369, 104], y26: [302, 318, 429, 363, 355, 328, 314, 105], max: 700, grid: [0, 200, 400, 600], unit: 'פרסומים' },
+    st: { y25: [279, 272, 195, 223, 159, 221, 158, 43], y26: [103, 154, 220, 221, 225, 193, 163, 69], max: 320, grid: [0, 100, 200, 300], unit: 'סטוריז' },
+    cl: { y25: [54, 63, 59, 51, 85, 64, 41, 14], y26: [27, 40, 38, 39, 54, 50, 76, 7], max: 100, grid: [0, 25, 50, 75, 100], unit: 'קולאבים' }
+  };
+  var NS = 'http://www.w3.org/2000/svg';
+  var tooltip = document.getElementById('tooltip');
+  var css = getComputedStyle(document.documentElement);
+
+  function el(name, attrs, parent) {
+    var n = document.createElementNS(NS, name);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+
+  function draw(svgId, d) {
+    var svg = document.getElementById(svgId);
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    var c25 = css.getPropertyValue('--s-2025').trim();
+    var c26 = css.getPropertyValue('--s-2026').trim();
+    var inkMuted = css.getPropertyValue('--ink-3').trim();
+    var gridCol = css.getPropertyValue('--grid').trim();
+
+    var W = 760, H = 260, padT = 14, padB = 30, padR = 44, padL = 8;
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    var plotW = W - padL - padR, plotH = H - padT - padB;
+    var max = d.max;
+    var n = MONTHS.length;
+    var groupW = plotW / n;
+    var barW = Math.min(22, (groupW - 18) / 2);
+
+    d.grid.forEach(function (v) {
+      var y = padT + plotH - (v / max) * plotH;
+      el('line', { x1: padL, x2: padL + plotW, y1: y, y2: y, stroke: gridCol, 'stroke-width': v === 0 ? 1.5 : 1 }, svg);
+      if (v > 0) {
+        var t = el('text', { x: W - padR + 6, y: y + 4, 'font-size': 11, fill: inkMuted, 'text-anchor': 'start' }, svg);
+        t.textContent = v;
+      }
+    });
+
+    for (var i = 0; i < n; i++) {
+      var gx = padL + plotW - (i + 1) * groupW; // rightmost group = January (RTL)
+      var cx = gx + groupW / 2;
+      [['y25', c25, 2025], ['y26', c26, 2026]].forEach(function (series, si) {
+        var v = d[series[0]][i];
+        var h = Math.max(2, (v / max) * plotH);
+        var y = padT + plotH - h;
+        var x = si === 0 ? cx + 1 : cx - 1 - barW;
+        var r = 4;
+        var path = 'M' + x + ',' + (padT + plotH) +
+          ' V' + (y + r) + ' Q' + x + ',' + y + ' ' + (x + r) + ',' + y +
+          ' H' + (x + barW - r) + ' Q' + (x + barW) + ',' + y + ' ' + (x + barW) + ',' + (y + r) +
+          ' V' + (padT + plotH) + ' Z';
+        var bar = el('path', { d: path, fill: series[1], 'class': 'bar' }, svg);
+        var other = d[si === 0 ? 'y26' : 'y25'][i];
+        var base = si === 0 ? v : other;
+        var cur = si === 0 ? other : v;
+        var pct = base > 0 ? Math.round((cur - base) / base * 100) : 0;
+        var label = MONTHS[i] + ' ' + series[2] + ' · ' + v.toLocaleString('he') + ' ' + d.unit +
+          ' (' + (pct >= 0 ? '‎+' + pct + '%‎' : '‎−' + Math.abs(pct) + '%‎') + ' ב־2026 מול 2025)';
+        bar.addEventListener('mousemove', function (e) {
+          tooltip.textContent = label;
+          tooltip.style.opacity = 1;
+          var tw = tooltip.offsetWidth;
+          var xx = Math.min(Math.max(e.clientX - tw / 2, 8), window.innerWidth - tw - 8);
+          tooltip.style.left = xx + 'px';
+          tooltip.style.top = (e.clientY - 44) + 'px';
+        });
+        bar.addEventListener('mouseleave', function () { tooltip.style.opacity = 0; });
+      });
+      var mt = el('text', { x: cx, y: H - 9, 'font-size': 11.5, fill: inkMuted, 'text-anchor': 'middle' }, svg);
+      mt.textContent = MONTHS[i];
+    }
+  }
+
+  function fillTable(id, d) {
+    var t = document.getElementById(id);
+    var html = '<thead><tr><th>חודש</th><th>2025</th><th>2026</th><th>שינוי</th></tr></thead><tbody>';
+    for (var i = 0; i < MONTHS.length; i++) {
+      var a = d.y25[i], b = d.y26[i];
+      var pct = a > 0 ? Math.round((b - a) / a * 100) : 0;
+      html += '<tr><td>' + MONTHS[i] + '</td><td>' + a.toLocaleString('he') + '</td><td>' + b.toLocaleString('he') + '</td><td>' +
+        (pct >= 0 ? '‎+' + pct + '%‎' : '‎−' + Math.abs(pct) + '%‎') + '</td></tr>';
+    }
+    t.innerHTML = html + '</tbody>';
+  }
+
+  function render() {
+    for (var key in DATA) draw('chart-' + key, DATA[key]);
+  }
+  for (var key in DATA) fillTable('table-' + key, DATA[key]);
+  render();
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+  }
+})();
+</script>
+
+</body>
+</html>
