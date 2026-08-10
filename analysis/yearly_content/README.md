@@ -11,6 +11,7 @@
 | `summary_2025_vs_2026.md` | הסיכום: טבלאות ההשוואה והמסקנות |
 | `monthly_2025_vs_2026.md` | חודש מול חודש + ניתוח חודשי האירועים של 2025 + אימות מול הגיליון |
 | `business_suite_reconciliation.md` | הצלבה מול ייצוא Business Suite (התאמה ±2) + מספרי הסטוריז |
+| `collab_and_source_differences.md` | ההבדלים בין שלושת המקורות + ניתוח הקולאבים והמשמעויות |
 | `stories_monthly.csv` | סטוריז לפי חודש, 2025–2026 (מקור: ייצוא Business Suite ידני) |
 | `data_buisness_suit/` | הייצוא הגולמי של בן מ-Business Suite (2026-08-10) — מכיל את כל חשבונות התיק, לסנן ל-kan_news |
 
