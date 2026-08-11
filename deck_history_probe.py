@@ -55,7 +55,9 @@ YOUTUBE_CHANNEL_ID = "UC_HwfTAcjBESKZRJq6BTCpg"
 
 # תקרות ביטחון בלבד. הכיסוי נקבע לפי מה שהספק מפסיק להחזיר, לא לפי אלה —
 # ומודפס בסוף כדי שנדע אם נעצרנו בתקרה (כיסוי חלקי) או בסוף הפיד.
-TIKTOK_MAX_PAGES = int(os.environ.get("TIKTOK_MAX_PAGES", "400"))
+# 400 נגמרו ב-3,993 סרטונים מתוך 4,950 שהפרופיל מדווח (ריצה 31498296544),
+# כלומר הפיד המשיך. 700 נותן מרווח מעל המספר המדווח.
+TIKTOK_MAX_PAGES = int(os.environ.get("TIKTOK_MAX_PAGES", "700"))
 TWITTER_MAX_PAGES = int(os.environ.get("TWITTER_MAX_PAGES", "250"))
 
 
@@ -169,7 +171,8 @@ def dump_tiktok(outdir):
                 page + 1, len(rows), min(r["date"] for r in rows)), flush=True)
 
     _write(os.path.join(outdir, "tiktok_history.csv"), rows)
-    _report("טיקטוק", rows, stop, TIKTOK_MAX_PAGES)
+    _report("טיקטוק", rows, stop, TIKTOK_MAX_PAGES,
+            expected=stats.get("videoCount") or None)
 
 
 # --- יוטיוב: כל הסרטונים אי פעם ---
@@ -187,6 +190,10 @@ def dump_youtube(outdir):
         raise SystemExit("❌ הערוץ לא נמצא")
     uploads = item["contentDetails"]["relatedPlaylists"]["uploads"]
     st = item.get("statistics") or {}
+    # פלייליסט ההעלאות נחתך ב-20,000 פריטים, וזה נראה בדיוק כמו סוף רשימה
+    # תקין — ריצה 31498296544 קיבלה 20,000 בול מתוך 51,520 שהערוץ מדווח.
+    # מכסה את 2022-08 ואילך, כלומר את כל מה שהמצגת צריכה, אבל לא "כל סרטון".
+    reported = int(st.get("videoCount") or 0)
     print("הערוץ: %s מנויים, %s סרטונים, %s צפיות מצטברות" % (
         format(int(st.get("subscriberCount", 0)), ","),
         format(int(st.get("videoCount", 0)), ","),
@@ -231,7 +238,7 @@ def dump_youtube(outdir):
             print("   %s סרטונים..." % format(len(rows), ","), flush=True)
 
     _write(os.path.join(outdir, "youtube_history.csv"), rows)
-    _report("יוטיוב", rows, "end_of_feed", 0)
+    _report("יוטיוב", rows, "end_of_feed", 0, expected=reported)
 
 
 def _iso_seconds(dur):
@@ -254,7 +261,8 @@ def dump_twitter(outdir):
 
     rows, seen, cursor, stop = [], set(), None, "max_pages"
     for page in range(TWITTER_MAX_PAGES):
-        params = {"username": TWITTER_USER}
+        # userName, לא username — הספק מחזיר 400 על השני
+        params = {"userName": TWITTER_USER}
         if cursor:
             params["cursor"] = cursor
         data = _get("%s/twitter/user/tweets" % GETXAPI_BASE, headers=h, params=params)
@@ -307,7 +315,12 @@ def _write(path, rows):
         w.writerows(rows)
 
 
-def _report(label, rows, stop, cap):
+def _report(label, rows, stop, cap, expected=None):
+    """`expected` = כמה פריטים החשבון עצמו מדווח שיש לו.
+
+    בלעדיו "הפיד נגמר" זו הצהרה שאי אפשר לבדוק: ספק שנחנק באמצע נראה בדיוק
+    כמו סוף פיד תקין. עם המספר המדווח אפשר לומר את ההבדל.
+    """
     if not rows:
         print("❌ %s — 0 שורות (stop=%s)" % (label, stop), flush=True)
         return
@@ -320,9 +333,15 @@ def _report(label, rows, stop, cap):
         by_year[y] = by_year.get(y, 0) + 1
     for y in sorted(by_year):
         print("   %s: %s" % (y, format(by_year[y], ",")), flush=True)
+
     if stop == "max_pages":
         print("⚠️  נעצרנו בתקרת %d עמודים — הכיסוי חלקי, יש עוד היסטוריה מעבר." % cap,
               flush=True)
+    elif expected and len(rows) < expected * 0.98:
+        print("⚠️  הפיד נעצר על %s פריטים אבל החשבון מדווח %s — חסרים %s, "
+              "וההיסטוריה נחתכת ב-%s ולא מסתיימת בו." % (
+                  format(len(rows), ","), format(expected, ","),
+                  format(expected - len(rows), ","), oldest), flush=True)
     else:
         print("✅ הפיד נגמר מעצמו — %s הוא באמת הפריט הישן ביותר שהספק חושף." % oldest,
               flush=True)
