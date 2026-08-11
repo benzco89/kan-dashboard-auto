@@ -133,6 +133,32 @@ a cut headline mattered.
 
 ---
 
+## Open — data (נמצא בבניית המצגת)
+
+### 16. The Facebook sheet under-reports views before June 2026 — the dashboard reads it
+`נתוני פייסבוק` holds **zero views in 38–53% of rows from 2025-11 through
+2026-05**, and the zeros stop dead in June 2026: 16% in June, **0% in July and
+August**. That is the date Meta removed `post_impressions_unique` (2026-06-15)
+and the collector moved to v25 — the fix worked going forward and nothing ever
+repaired the rows behind it.
+
+Measured against two independent sources on the same windows:
+
+| window | sheet | export / API | ratio |
+|---|---|---|---|
+| 2026-03 | 80,955,154 | 197,163,151 | **2.44×** |
+| 2026-06 | 79,871,781 | 117,716,651 | 1.47× |
+| 2025-11-17→12-31 | 60,280,009 | 144,284,664 | **2.39×** |
+
+The deck sidesteps it by reading the exports and the API backfill instead
+(`build_history.py` says so in `load_facebook`). **The live dashboard does
+not** — any Facebook view total it shows for before June 2026 is roughly half
+the real figure, and so is anything derived from it. `backfill_zero_metrics`
+in `utils.py` exists for exactly this shape of problem; whether it can be
+pointed at the historical rows is the open question.
+
+---
+
 ## Open — מצגת 2024→היום
 
 ### 13. The metric history is a wasting asset — export yearly

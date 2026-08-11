@@ -38,9 +38,13 @@ BS = os.path.join(SRC, 'data_buisness_suit')
 FB_PAGE_ID = '100064467291406'
 IG_USERNAME = 'kan_news'
 
-# מאיזה חודש המדד אמין — ראו התיעוד למעלה
-VALID_FROM = {'views': '2024-07', 'reach': '2024-09',
-              'shares': '2024-09', 'saves': '2024-09', 'follows': '2024-09'}
+# מאיזה חודש המדד אמין, לכל פלטפורמה בנפרד — ראו התיעוד למעלה.
+# בפייסבוק ה-`Views` בייצוא 2024 ריק עד ספטמבר, כמו החשיפה באינסטגרם.
+VALID_FROM = {
+    'instagram': {'views': '2024-07', 'reach': '2024-09', 'shares': '2024-09',
+                  'saves': '2024-09', 'follows': '2024-09'},
+    'facebook': {'views': '2024-09', 'reach': '2024-09'},
+}
 
 IG_TYPES = {'IG reel': 'רילס', 'IG image': 'תמונה',
             'IG carousel': 'קרוסלה', 'IGTV': 'רילס'}
@@ -86,26 +90,58 @@ def load_instagram():
     return d
 
 
-def load_facebook():
-    """ייצוא 2024 העשיר. 2025-2026 עדיין לא יוצאו — ראו README."""
-    f = os.path.join(SRC, 'Jan-01-2024_Dec-31-2024_1509169891251840.csv')
-    d = _read(f)
+def _fb_export(path):
+    """ייצוא Business Suite של עמוד פייסבוק — 2024 ו-2026."""
+    d = _read(path)
     d = d[d['Page ID'].astype(str) == FB_PAGE_ID].copy()
     d['ts'] = pd.to_datetime(d['Publish time'], format='mixed', errors='coerce')
     d['format'] = d['Post type'].map(FB_TYPES)
-    # לפייסבוק אין `Views` מאוחד בייצוא הזה; 3-second video views הוא היחיד
-    # שמודד צפייה, והוא לא אותה יחידה כמו Views של אינסטגרם. נשמר בנפרד.
-    d['views'] = pd.NA
-    d['video_views_3s'] = _num(d['3-second video views'])
+    d['views'] = _num(d['Views']) if 'Views' in d.columns else pd.NA
     d['watch_hours'] = _num(d['Seconds viewed']) / 3600
     d['reach'] = _num(d['Reach'])
     d['likes'] = _num(d['Reactions'])
     d['comments'] = _num(d['Comments'])
     d['shares'] = _num(d['Shares'])
-    d['saves'] = pd.NA
-    d['follows'] = pd.NA
+    d['saves'] = d['follows'] = pd.NA
+    return d
+
+
+def _fb_backfill(path):
+    """2025, שנמשך מה-Graph API כי הייצוא הידני נתקע (`fb_2025_backfill.py`).
+
+    אין כאן `reach` בכוונה: `post_total_media_view_unique` נשחק עם גיל הפוסט
+    ולכן לא נמשך. עמודה שנראית תקינה ואינה תקינה גרועה מעמודה חסרה.
+    """
+    d = _read(path)
+    d['ts'] = pd.to_datetime(d['date'] + ' ' + d['time'].astype(str), errors='coerce')
+    d['format'] = d['type'].map({'Photo': 'תמונה', 'Reel': 'וידאו', 'Video': 'וידאו',
+                                 'Status': 'סטטוס', 'Link': 'לינק'})
+    d['views'] = _num(d['views'])
+    d['watch_hours'] = _num(d['watch_min']) / 60
+    d['likes'] = _num(d['reactions'])
+    d['comments'] = _num(d['comments'])
+    d['shares'] = _num(d['shares'])
+    d['reach'] = d['saves'] = d['follows'] = pd.NA
+    return d
+
+
+def load_facebook():
+    """שלוש שנים משלושה מקורות — שניים מיוצאים ואחד נמשך.
+
+    הגיליון `נתוני פייסבוק` **לא** משמש כאן: 38–53% מהשורות בו מחזיקות אפס
+    צפיות מנובמבר 2025 ועד מאי 2026, והאפסים נעלמים ביוני 2026 — בדיוק
+    כשמטא הסירה את `post_impressions_unique` (15.6.2026) והקולקטור עבר ל-v25.
+    מול הייצוא של מרץ 2026 הגיליון קורא 2.44 פעמים נמוך מדי.
+    """
+    parts = [
+        _fb_export(os.path.join(SRC, 'Jan-01-2024_Dec-31-2024_1509169891251840.csv')),
+        _fb_backfill(os.path.join(HERE, 'pulled', 'fb_2025_metrics.csv')),
+        _fb_export(os.path.join(SRC, 'Jan-01-2026_Aug-11-2026_1369894801784288.csv')),
+    ]
+    cols = ['ts', 'format', 'watch_hours'] + METRICS
+    d = pd.concat([p[cols] for p in parts], ignore_index=True)
     d['platform'] = 'facebook'
-    return d[['ts', 'platform', 'format', 'video_views_3s', 'watch_hours'] + METRICS]
+    return d
 
 
 def monthly(d):
@@ -122,9 +158,15 @@ def monthly(d):
     g = g.merge(piv, on=['platform', 'month'], how='left')
 
     # מסמנים ולא מוחקים: הערך נשאר בקובץ, והדגל אומר אם מותר לצייר אותו
-    for metric, first in VALID_FROM.items():
-        if metric in g.columns:
-            g['%s_valid' % metric] = g['month'] >= first
+    for metric in METRICS:
+        if metric not in g.columns:
+            continue
+        col = '%s_valid' % metric
+        g[col] = True
+        for platform, rules in VALID_FROM.items():
+            if metric in rules:
+                bad = (g['platform'] == platform) & (g['month'] < rules[metric])
+                g.loc[bad, col] = False
     return g.sort_values(['platform', 'month'])
 
 
@@ -139,17 +181,29 @@ def main():
 
     print("נכתב: %s  (%d שורות)" % (out, len(g)))
     for p, sub in g.groupby('platform'):
-        print("\n%s — %s עד %s, %s פוסטים" % (
+        print("\n%s — %s עד %s, %s פריטים" % (
             p, sub['month'].min(), sub['month'].max(), format(int(sub['posts'].sum()), ',')))
-        for metric in METRICS:
+        for metric in METRICS + ['watch_hours']:
             if metric not in sub.columns:
                 continue
-            ok = sub[sub.get('%s_valid' % metric, True)] if '%s_valid' % metric in sub else sub
+            col = '%s_valid' % metric
+            ok = sub[sub[col]] if col in sub.columns else sub
             total = ok[metric].sum(skipna=True)
             if pd.isna(total) or total == 0:
                 continue
-            note = '' if '%s_valid' % metric not in sub else '  (מ-%s)' % VALID_FROM[metric]
-            print("   %-9s %16s%s" % (metric, format(int(total), ','), note))
+            first = VALID_FROM.get(p, {}).get(metric)
+            print("   %-12s %16s%s" % (
+                metric, format(int(total), ','), '  (מ-%s)' % first if first else ''))
+        # שנה מול שנה, כי זה מה שהמצגת בעצם שואלת
+        for metric in ('views', 'watch_hours'):
+            if metric not in sub.columns:
+                continue
+            col = '%s_valid' % metric
+            ok = sub[sub[col]] if col in sub.columns else sub
+            by_year = ok.groupby(ok['month'].str[:4])[metric].sum()
+            parts = ["%s %s" % (y, format(int(v), ',')) for y, v in by_year.items() if v]
+            if parts:
+                print("     %-10s %s" % (metric, ' | '.join(parts)))
 
 
 if __name__ == '__main__':
