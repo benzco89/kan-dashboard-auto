@@ -1,0 +1,28 @@
+name: Probe Graph API recovery (read-only)
+
+# האם ה-Graph API מחזיר מדדים שהייצוא של Business Suite כבר לא נותן —
+# פייסבוק 2025/2024 ברמת פוסט, שחזור אינסטגרם מתחילת 2024, וסדרות העמוד.
+# מדגם של 15 פריטים לשאלה. קריאה בלבד. ידני בלבד.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run the recovery probe
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+        run: python graph_recovery_probe.py
