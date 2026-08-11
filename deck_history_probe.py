@@ -259,8 +259,10 @@ def dump_twitter(outdir):
         raise SystemExit("❌ missing GETXAPI_KEY")
     h = {"Authorization": "Bearer %s" % token}
 
-    rows, seen, cursor, stop, empty = [], set(), None, "max_pages", 0
+    rows, seen, cursor, stop = [], set(), None, "max_pages"
+    empty = barren = 0
     for page in range(TWITTER_MAX_PAGES):
+        before = len(rows)
         # userName, לא username — הספק מחזיר 400 על השני
         params = {"userName": TWITTER_USER}
         if cursor:
@@ -308,6 +310,16 @@ def dump_twitter(outdir):
         if not data.get("has_more") or not data.get("next_cursor"):
             stop = "end_of_feed"
             break
+        # הספק ממשיך להציע cursor גם כשהוא כבר לא מחזיר כלום חדש — ריצה
+        # 31500547213 טחנה 200 עמודים על אותם 710 ציוצים. עשרה עמודים
+        # רצופים בלי ציוץ חדש הם הקיר, לא הפסקה.
+        if len(rows) == before:
+            barren += 1
+            if barren >= 10:
+                stop = "stalled"
+                break
+        else:
+            barren = 0
         cursor = data["next_cursor"]
         if page % 20 == 0 and rows:
             print("   עמוד %d — %d ציוצים, הישן ביותר %s" % (
