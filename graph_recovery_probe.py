@@ -114,6 +114,62 @@ def probe_fb_posts(label, since, until):
                                               first_err.get(m, "ריק")))
 
 
+FB_2026 = os.path.join(HERE, "analysis", "yearly_content",
+                       "Jan-01-2026_Aug-11-2026_1369894801784288.csv")
+
+
+def probe_fb_control():
+    """הבקרה: על 2026 יש גם ייצוא וגם API. האם הם מסכימים?
+
+    בלי זה, "15/15 חזרו" ל-2025 לא אומר שהמספרים נכונים — רק שמשהו חזר.
+    חשיפת ה-API ל-2025 יצאה 12,542 בחציון מול צפיות 111,098, יחס של 1:9,
+    בעוד שבייצוא של 2026 היחס הוא 1:1.3. או ש-2025 באמת היה שונה, או
+    שהמדד נשחק עם הגיל. השוואה על אותו post id עונה על זה.
+    """
+    print("\n" + "-" * 70)
+    print("1ב. בקרה — פייסבוק 2026: API מול הייצוא, אותו post id")
+    if not os.path.exists(FB_2026):
+        print("   ❌ ייצוא 2026 לא נמצא")
+        return
+    rows = []
+    with open(FB_2026, encoding="utf-8-sig", newline="") as f:
+        for r in csv.DictReader(f):
+            if r.get("Views") and r.get("Reach"):
+                rows.append(r)
+    if not rows:
+        print("   ❌ אין שורות עם מדדים")
+        return
+    random.seed(11)
+    pick = random.sample(rows, min(SAMPLE, len(rows)))
+    print("   נדגמו %d פוסטים מ-2026" % len(pick))
+    print("   %-26s %12s %12s   %12s %12s" % (
+        "post id", "views ייצוא", "views API", "reach ייצוא", "reach API"))
+    ratios_v, ratios_r = [], []
+    for r in pick:
+        pid = r.get("Post ID", "")
+        ev = int(float(r["Views"])) if r["Views"] else 0
+        er = int(float(r["Reach"])) if r["Reach"] else 0
+        av, _ = insight(pid, "post_media_view")
+        ar, _ = insight(pid, "post_total_media_view_unique")
+        if ev and isinstance(av, (int, float)):
+            ratios_v.append(av / ev)
+        if er and isinstance(ar, (int, float)):
+            ratios_r.append(ar / er)
+        print("   %-26s %12s %12s   %12s %12s" % (
+            pid[-24:], format(ev, ","),
+            format(int(av), ",") if isinstance(av, (int, float)) else "-",
+            format(er, ","),
+            format(int(ar), ",") if isinstance(ar, (int, float)) else "-"))
+    print()
+    for name, rs in (("views", ratios_v), ("reach", ratios_r)):
+        if not rs:
+            print("   %s: אין מה להשוות" % name)
+            continue
+        med = sorted(rs)[len(rs) // 2]
+        verdict = "✅ תואם" if 0.9 <= med <= 1.1 else "❌ לא תואם"
+        print("   %s: יחס API/ייצוא חציוני %.2f  %s" % (name, med, verdict))
+
+
 def ig_account():
     res = get(PAGE, fields="instagram_business_account")
     return (res.get("instagram_business_account") or {}).get("id")
@@ -208,6 +264,7 @@ def main():
         me.get("name"), format(me.get("followers_count", 0), ",")))
 
     probe_fb_posts("1. פייסבוק 2025 ברמת פוסט", "2025-05-01", "2025-05-03")
+    probe_fb_control()
     probe_fb_posts("2. פייסבוק 2024 ברמת פוסט", "2024-03-01", "2024-03-03")
 
     ig = ig_account()
