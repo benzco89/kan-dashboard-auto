@@ -1,0 +1,48 @@
+name: Facebook 2025 backfill (read-only)
+
+# מושך מדדי פייסבוק ברמת פוסט לשנה שלמה מה-Graph API, כי הייצוא הידני של
+# 2025 נתקע ב-Business Suite. קריאה בלבד — GET בלבד, שום כתיבה לגיליונות,
+# הפלט הוא ארטיפקט CSV. ידני בלבד.
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: 'שנה'
+        default: '2025'
+      limit:
+        description: 'לעצור אחרי N פוסטים (0 = הכל). להתחיל ב-50 לבדיקה.'
+        default: '0'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests pytz
+
+      - name: Pull the year
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+        run: |
+          python fb_2025_backfill.py \
+            --year ${{ inputs.year }} \
+            --limit ${{ inputs.limit }} \
+            --out fb_${{ inputs.year }}_metrics.csv
+
+      - name: Upload the pulled year
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fb-${{ inputs.year }}-metrics
+          path: fb_${{ inputs.year }}_metrics.csv
+          if-no-files-found: warn
