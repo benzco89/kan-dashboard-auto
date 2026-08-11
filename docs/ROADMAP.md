@@ -133,6 +133,36 @@ a cut headline mattered.
 
 ---
 
+## Open — מצגת 2024→היום
+
+### 13. The metric history is a wasting asset — export yearly
+Meta's Business Suite export keeps per-post insights only ~23 months, measured
+2026-08-11 on the exports themselves: IG `Views` is empty before Jul-2024 and
+`Reach` is junk before Sep-2024 (median 3–24 on posts with 1,500+ likes), while
+likes/comments/counts survive all of 2024. Meta also redefined reach/views in
+Aug–Sep 2024 — in the FB 2024 export `Reach from Organic` matches `Reach` until
+Aug-2024 then jumps to ~2× it with Boosted at 0, which cannot be true.
+
+So **any views/reach chart starts Sep-2024**; counts, likes and comments can
+start Jan-2024. And whatever is not exported now is gone in two years — a
+yearly Business Suite export belongs in the routine. Details and the plan:
+`analysis/presentation/PLAN.md`, base built by `build_history.py`.
+
+### 14. Facebook 2025–2026 has counts but no metrics
+The Graph probe counted FB posts for 2025–2026, but per-post reach/engagement
+for those years exists nowhere: the sheets only start 12/2025 and the rich
+Business Suite export was only ever taken for 2024. Closing it is a manual
+export (Insights → Content), the same one already done for Instagram. Until
+then the Facebook deep-dive slide rests on 2024 plus eight months of sheet.
+
+### 15. How far back Twitter reaches is unmeasured
+X's timeline caps around 3,200 tweets and @kann_news posts ~40/day, so the
+ceiling may be ~80 days — which would keep Twitter out of a multi-year deck
+entirely. `deck_history_probe.py twitter` pages until the provider stops and
+reports the oldest date reached. Not yet run.
+
+---
+
 ## Closed — do not re-open
 
 | Question | Answer | When |
