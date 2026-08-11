@@ -268,6 +268,10 @@ def dump_twitter(outdir):
         data = _get("%s/twitter/user/tweets" % GETXAPI_BASE, headers=h, params=params)
         batch = data.get("tweets") or data.get("data") or []
         if not batch:
+            # עמוד בלי ציוצים נראה בדיוק כמו סוף פיד תקין — זה בדיוק מה
+            # ש-twitter_collector נשרף עליו. תמיד להדפיס מה באמת חזר.
+            print("⚠️  עמוד %d בלי ציוצים. המפתחות שחזרו: %s\n    %s" % (
+                page + 1, list(data)[:10], str(data)[:300]), flush=True)
             stop = "end_of_feed"
             break
         for t in batch:
