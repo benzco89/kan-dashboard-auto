@@ -146,11 +146,16 @@ def probe_fb_control():
         "post id", "views ייצוא", "views API", "reach ייצוא", "reach API"))
     ratios_v, ratios_r = [], []
     for r in pick:
-        pid = r.get("Post ID", "")
+        # הייצוא נותן מזהה עירום; ה-Graph רוצה {page_id}_{post_id}
+        pid = "%s_%s" % (r.get("Page ID", "").strip(), r.get("Post ID", "").strip())
         ev = int(float(r["Views"])) if r["Views"] else 0
         er = int(float(r["Reach"])) if r["Reach"] else 0
         av, _ = insight(pid, "post_media_view")
         ar, _ = insight(pid, "post_total_media_view_unique")
+        if av is None and ar is None:      # אולי הייצוא כבר נתן צורה מלאה
+            pid = r.get("Post ID", "").strip()
+            av, _ = insight(pid, "post_media_view")
+            ar, _ = insight(pid, "post_total_media_view_unique")
         if ev and isinstance(av, (int, float)):
             ratios_v.append(av / ev)
         if er and isinstance(ar, (int, float)):
