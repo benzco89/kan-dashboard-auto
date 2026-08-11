@@ -259,21 +259,29 @@ def dump_twitter(outdir):
         raise SystemExit("❌ missing GETXAPI_KEY")
     h = {"Authorization": "Bearer %s" % token}
 
-    rows, seen, cursor, stop = [], set(), None, "max_pages"
+    rows, seen, cursor, stop, empty = [], set(), None, "max_pages", 0
     for page in range(TWITTER_MAX_PAGES):
         # userName, לא username — הספק מחזיר 400 על השני
         params = {"userName": TWITTER_USER}
         if cursor:
             params["cursor"] = cursor
         data = _get("%s/twitter/user/tweets" % GETXAPI_BASE, headers=h, params=params)
-        batch = data.get("tweets") or data.get("data") or []
-        if not batch:
-            # עמוד בלי ציוצים נראה בדיוק כמו סוף פיד תקין — זה בדיוק מה
-            # ש-twitter_collector נשרף עליו. תמיד להדפיס מה באמת חזר.
-            print("⚠️  עמוד %d בלי ציוצים. המפתחות שחזרו: %s\n    %s" % (
+        batch = data.get("tweets")
+        if not isinstance(batch, list):
+            print("❌ עמוד %d — אין רשימת ציוצים בכלל. מפתחות: %s\n    %s" % (
                 page + 1, list(data)[:10], str(data)[:300]), flush=True)
-            stop = "end_of_feed"
+            stop = "error"
             break
+        if page == 0:
+            print("   הספק מדווח %s ציוצים בחשבון" % format(
+                data.get("tweet_count") or 0, ","), flush=True)
+        if not batch:
+            # עמוד ריק *עם* has_more ו-cursor הוא הפרעה זמנית, לא סוף הפיד.
+            # להתייחס אליו כסוף זה בדיוק מה ש-twitter_collector נשרף עליו
+            # (ריצה 31500308061 כאן עצרה על 0 ציוצים בגלל זה). ממשיכים.
+            empty += 1
+            print("⚠️  עמוד %d חזר ריק — ממשיכים (has_more=%s)" % (
+                page + 1, data.get("has_more")), flush=True)
         for t in batch:
             tid = str(t.get("id") or t.get("tweetId") or t.get("id_str") or "")
             if not tid or tid in seen:
@@ -306,6 +314,8 @@ def dump_twitter(outdir):
                 page + 1, len(rows), min(r["date"] for r in rows)), flush=True)
 
     _write(os.path.join(outdir, "twitter_history.csv"), rows)
+    if empty:
+        print("(%d עמודים חזרו ריקים בדרך)" % empty, flush=True)
     _report("טוויטר", rows, stop, TWITTER_MAX_PAGES)
 
 
