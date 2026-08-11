@@ -155,18 +155,13 @@ Business Suite export was only ever taken for 2024. Closing it is a manual
 export (Insights → Content), the same one already done for Instagram. Until
 then the Facebook deep-dive slide rests on 2024 plus eight months of sheet.
 
-### 15. How far back Twitter reaches is unmeasured
-X's timeline caps around 3,200 tweets and @kann_news posts ~40/day, so the
-ceiling may be ~80 days — which would keep Twitter out of a multi-year deck
-entirely. `deck_history_probe.py twitter` pages until the provider stops and
-reports the oldest date reached. Not yet run.
-
 ---
 
 ## Closed — do not re-open
 
 | Question | Answer | When |
 |---|---|---|
+| How far back can Twitter/X history be pulled for a multi-year deck? | **13 days.** Not the assumed ~3,200-tweet ceiling — nowhere near it. `deck_history_probe.py twitter` (run `31500547213`) paged to exhaustion and returned 710 tweets, 2026-07-29 → 2026-08-11. So X can never carry a 2024-2026 comparison; in any long-range view it starts at 2026-06-21 where our own sheet starts, and that is a provider limit, not a collection gap. Two traps found on the way, both now guarded: GetXAPI wants `userName` (`username` → 400), and it keeps issuing a `next_cursor` after it has stopped returning anything new — pages 41–241 all ended on the same 710 tweets. | 2026-08-11 |
 | Should the hot sniffer's thresholds be raised — it fires ~26 times a week? | **No. Raised them on 2026-07-29 and reverted the same day; do not re-open on a noise argument.** Rate is not the criterion, precision is, and precision was already total: all 63 alerts from the first 17 days were cross-referenced to the sheets and scored on where each post finished *at maturity* — median 97th percentile of its platform, 44 of 59 at p95+, all at p90+, **zero below p90**. No early spike ever decayed to ordinary, which is exactly what a too-low bar would have produced. The raise (2.0×p90, floors 1000/2000/800) silenced 47 of 63 at a median of p97: the missing 4-year-old found alive, Yair Golan's declaration, the attacked reservist, the baby saved in emergency surgery. Caveat stated honestly: alerting on a number and then measuring that number is partly circular — the non-circular finding is the zero. | 2026-07-29 |
 | Facebook `views_30s` / `completion_rate` are 0 in every row — recoverable? | No. Removed in Graph v25. The reel retention curve replaces them. | 2026-07-26 |
 | Does Instagram expose a retention curve, replays, plays or completion? | No. Meta rejects every variant; asked directly on v25. | 2026-07-26, run `30199414956` |
