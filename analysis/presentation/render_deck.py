@@ -310,7 +310,7 @@ def s_growth(d):
             % (icon(p, 34), esc(HEB[p]), short(tot),
                esc(pts[0]['month']), esc(pts[-1]['month']),
                sparkline(pts, BRAND[p], h=210)))
-    body = [head('הצמיחה', 'צפיות חודשיות, ספטמבר 2024 עד היום', ''),
+    body = [head('הצמיחה', 'צפיות חודשיות, ספטמבר 2024 – יולי 2026', ''),
             '<div class="grid2">%s</div>' % ''.join(cards),
             '<div class="foot">כל גרף בקנה מידה משלו — ההשוואה היא של <b>מגמה</b>, '
             'לא של גובה; הערך המרבי מסומן על ציר ה-Y. הערכים המוחלטים בשקף הקודם. '
@@ -406,14 +406,25 @@ def s_output(d):
             rows.append('<div class="mixrow"><div class="my">%s</div>%s'
                         '<div class="mt">%s</div></div>'
                         % (y, stacked(seg), num(fmt(sum(s[1] for s in seg)))))
+        # השוואה הוגנת: ינואר–יולי בכל שנה, ולא שנה שלמה מול שבעה חודשים
+        ytd = d['platforms'][p].get('posts_ytd') or {}
+        note = ''
+        if ytd.get('2024') and ytd.get('2026'):
+            a, b = ytd['2024'], ytd['2026']
+            pct = (b / a - 1) * 100
+            note = ('<div class="mixnote"><b>ינואר–יולי:</b> %s ← %s פריטים '
+                    '<span class="%s">%s</span></div>'
+                    % (num(fmt(a)), num(fmt(b)),
+                       'up' if pct >= 0 else 'down',
+                       num('%+.0f%%' % pct)))
         cards.append('<div class="card"><div class="ch">%s<div class="pn">%s</div></div>'
-                     '<div class="mixlist">%s</div></div>'
-                     % (icon(p, 34), esc(HEB[p]), ''.join(rows)))
-    body = [head('מה פרסמנו', 'נפח ותמהיל הפורמטים', ''),
+                     '<div class="mixlist">%s</div>%s</div>'
+                     % (icon(p, 34), esc(HEB[p]), ''.join(rows), note))
+    body = [head('מה פרסמנו', 'ינואר–יולי בכל שנה · נפח ותמהיל הפורמטים', ''),
             '<div class="grid3">%s</div>' % ''.join(cards),
             '<div class="foot">בפייסבוק <b>וידאו</b> מאחד רילס וּוידאו: מטא מפרסמת כל וידאו '
             'כרילס מאמצע 2025, וההפרדה בנתונים הגולמיים היא שינוי שלה ולא שינוי בעמוד. '
-            '2026 היא שנה חלקית (עד 11.8).</div>']
+            'כל השנים נמדדות באותו חלון — ינואר עד יולי.</div>']
     return slide('מה פרסמנו', 'הנפח והתמהיל בשלוש הרשתות שיש להן פילוח פורמטים.',
                  ''.join(body))
 
@@ -461,7 +472,7 @@ def s_platform(d, p, extra_html=''):
         win = v.get('views_window')
         tag = ''
         if k == '2026':
-            tag = ' <span>עד 11.8</span>'
+            tag = ' <span>עד 31.7</span>'
         elif win and not win.endswith('-01'):
             tag = ' <span>מספטמבר</span>'
         cells.append('<div class="yc"><div class="yy">%s%s</div>'
@@ -487,11 +498,13 @@ def s_platform(d, p, extra_html=''):
     body = [head(HEB[p], 'עוקבים: %s' % fmt(d['followers'].get(p, 0)),
                  ('<div class="rnum">%s</div><div class="rlab">%s</div>'
                   % (short(total_v), span)) if pts else ''),
-            '<div class="yrow">%s</div>' % ''.join(cells),
+            '<div class="yrow" style="grid-template-columns:repeat(%d,1fr)">%s</div>'
+            % (len(cells), ''.join(cells)),
             ('<div class="panel%s">%s</div>'
              % ('' if extra_html else ' grow',
                 sparkline(pts, BRAND[p], h=200 if extra_html else 300))) if pts else '',
-            ('<div class="kpirow">%s</div>' % ''.join(extras)) if extras else '',
+            ('<div class="kpirow" style="grid-template-columns:repeat(%d,1fr)">%s</div>'
+             % (len(extras), ''.join(extras))) if extras else '',
             extra_html,
             ('<div class="foot">%s</div>' % esc(note)) if note else '']
     return slide(HEB[p], 'עומק לרשת %s.' % HEB[p], ''.join(body))
@@ -516,10 +529,24 @@ def s_thin(d):
             '<div class="note warn">%s</div></div>'
             % (icon('whatsapp', 34), fmt(d['followers']['whatsapp']),
                esc(wa.get('coverage_note'))),
-            '</div>',
-            # מחרוזת שלא עוברת עיצוב-% — כאן אחוז אחד, לא כפול
-            '<div class="foot">ערוץ הוואטסאפ לבדו גדול מ-39% ממנויי יוטיוב, '
-            'בלי שהושקע בו מה שהושקע בהם.</div>']
+            '</div>']
+    # לשתי הרשתות האלה אין די נתונים למלא שקף. במקום לנפח אותן, נותנים להן
+    # הקשר: כמה גדול הקהל שלהן ביחס לשאר. האפור מרמז שהשורות האחרות הן
+    # רקע להשוואה ולא הנושא.
+    fol = sorted(d['followers'].items(), key=lambda x: -x[1])
+    hi = fol[0][1]
+    bars = ''.join(
+        bar_row('<div class="pl">%s<div class="pn">%s</div></div>'
+                % (icon(p, 34), esc(HEB[p])),
+                n, hi, BRAND[p] if p in ('twitter', 'whatsapp') else '#dcdcdc',
+                num(fmt(n)), 'ללא היסטוריה' if p in ('twitter', 'whatsapp') else '')
+        for p, n in fol)
+    # המחרוזת הזו כן עוברת עיצוב-% (bars) — ולכן אחוז ספרותי נכתב כפול
+    body.append('<div class="panel grow"><div class="ptitle">גודל הקהל בהשוואה</div>'
+                '<div class="barlist">%s</div>'
+                '<div class="foot">ערוץ הוואטסאפ, בלי שהושקע בו מה שהושקע ברשתות '
+                'הוותיקות, כבר גדול מ-39%% ממנויי יוטיוב ומתקרב ל-X. שניהם נכסים '
+                'אמיתיים שאין עליהם היסטוריה למדוד.</div></div>' % bars)
     return slide('X ווואטסאפ', 'שתי רשתות בלי היסטוריה. אומרים את זה ולא מותחים.',
                  ''.join(body))
 
@@ -700,6 +727,7 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .bhead div:last-child,.bhead div:nth-child(3){text-align:left}
 .blist{flex:1;display:flex;flex-direction:column;justify-content:space-around;padding:8px 0}
 .brow{display:grid;grid-template-columns:280px 1fr 150px 170px;gap:26px;align-items:center}
+.barlist{display:flex;flex-direction:column;gap:18px;margin-top:6px}
 .bl .pl,.pl{display:flex;align-items:center;gap:16px}
 .pn{font-size:27px;font-weight:700}
 .btrack{position:relative;height:40px;background:#e6e6e6;border-radius:8px;overflow:hidden}
@@ -710,14 +738,16 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .bs{font-size:19px;color:%(m)s;text-align:left}
 .pw{font-size:15px;color:#8a4b00;margin-top:2px}
 /* כרטיסים */
-.grid2{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:26px;align-content:start}
-.grid3{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-content:start}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px;align-content:stretch}
+.grid3{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-content:center}
 .card{background:#fff;border:1px solid %(g)s;border-radius:14px;padding:24px 26px;
   display:flex;flex-direction:column;gap:12px}
+.card > .chart{flex:1;display:flex;flex-direction:column;justify-content:center}
 .ch{display:flex;align-items:center;gap:14px}
 .cs{font-size:16px;color:%(m)s;margin-top:2px}
 .panel{background:#fff;border:1px solid %(g)s;border-radius:14px;padding:24px 26px;margin-top:18px}
 .panel.grow{flex:1;display:flex;flex-direction:column;justify-content:center}
+.panel.grow .barlist{flex:1;justify-content:space-evenly}
 /* גרף: ה-SVG נמתח, התוויות לא — לכן הן מחוצה לו */
 .chart{position:relative;padding:0 0 22px 0}
 .spark{display:block;width:100%%}
@@ -767,7 +797,10 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .yl{font-size:16px;color:%(m)s}
 .ys{font-size:18px;margin-top:8px}
 /* תמהיל */
-.mixlist{display:flex;flex-direction:column;gap:16px}
+.mixlist{display:flex;flex-direction:column;gap:20px}
+.mixnote{font-size:19px;color:#444;border-top:1px solid %(g)s;padding-top:14px}
+.mixnote .up{color:#186a2e;font-weight:700}
+.mixnote .down{color:#b42318;font-weight:700}
 .mixrow{display:flex;align-items:center;gap:14px}
 .my{font-size:19px;font-weight:700;width:48px;color:%(m)s;flex:none}
 .mt{font-size:19px;font-weight:700;width:60px;text-align:left;flex:none}
@@ -838,7 +871,7 @@ def render():
     slides = [s for s in slides if s]
     css = CSS % {'f': FONTS, 'a': ACCENT, 'ink': INK, 'm': MUTED, 'g': GRID}
     doc = ('<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8">'
-           '<title>הסושיאל של כאן חדשות — 2024 עד היום</title>'
+           '<title>הסושיאל של כאן חדשות — 2024 עד יולי 2026</title>'
            '<style>%s</style></head><body>%s</body></html>' % (css, ''.join(slides)))
     with open(OUT, 'w', encoding='utf-8') as f:
         f.write(doc)

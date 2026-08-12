@@ -161,11 +161,15 @@ def build():
         for _, r in sub[sub['month'] >= VIEWS_FROM].iterrows():
             if r.get('views_valid', True) and pd.notna(r.get('views')):
                 block['monthly_views'].append({'month': r['month'], 'views': int(r['views'])})
-        # תמהיל הפורמטים — העמודות שנוצרו מהפיבוט ב-build_history
+        # ינואר–יולי בכל שנה. בלי זה משווים שנה שלמה מול שבעה חודשים
+        # וקוראים לזה ירידה — וגם התמהיל עצמו נמדד על חלונות שונים.
+        ytd = sub[sub['month'].str[5:7] <= '07']
+        block['posts_ytd'] = {y: int(g['posts'].sum())
+                              for y, g in ytd.groupby('year')}
         mix = {}
         for fmt in ('רילס', 'תמונה', 'קרוסלה', 'וידאו', 'סטטוס', 'לינק'):
-            if fmt in sub.columns:
-                per_year = sub.groupby('year')[fmt].sum()
+            if fmt in ytd.columns:
+                per_year = ytd.groupby('year')[fmt].sum()
                 if per_year.sum():
                     mix[fmt] = {y: int(v) for y, v in per_year.items()}
         block['format_mix'] = mix
@@ -184,15 +188,18 @@ def build():
     # וכולו הזנב של יוטיוב, שהוא היחיד מהרשתות כאן שיש לו זנב אמיתי.
     deck['platforms']['youtube'].update(_youtube_studio())
     # Shorts מול רגיל — הפילוח היחיד שיש ביוטיוב
+    yt_ytd = _ytd(yt)
     deck['platforms']['youtube']['format_mix'] = {
         {'Regular': 'סרטון רגיל', 'Shorts': 'שורטס'}.get(t, t):
             {str(y): int(v) for y, v in g.groupby(g['dt'].dt.year).size().items()}
-        for t, g in yt.groupby('type')}
+        for t, g in yt_ytd.groupby('type')}
     for p, d in (('youtube', yt), ('tiktok', tt)):
         for y, g in d.groupby(d['dt'].dt.year):
             blk = deck['platforms'][p]['yearly'].get(str(y))
             if blk:
                 blk['posts_in_views_window'] = len(g)
+        deck['platforms'][p]['posts_ytd'] = {
+            str(y): len(g) for y, g in _ytd(d).groupby(d['dt'].dt.year)}
     # הצפיות וזמן הצפייה מגיעים מ-Studio ומכסים את כל התקופה. רק **ספירת
     # הפריטים** מגיעה מה-API, שחותך את פלייליסט ההעלאות ב-20,000.
     deck['platforms']['youtube']['coverage_note'] = (
@@ -205,6 +212,7 @@ def build():
     tw = pd.read_csv(os.path.join(PULLED, 'sheet_twitter.csv'), encoding='utf-8-sig')
     tw['dt'] = pd.to_datetime(tw['date'], errors='coerce')
     tw = tw.dropna(subset=['dt'])
+    tw = tw[tw['dt'] <= CUTOFF]
     tw['views'] = _num(tw.get('views')).fillna(0)
     deck['platforms']['twitter'] = {
         'from': str(tw['dt'].min().date()), 'to': str(tw['dt'].max().date()),
