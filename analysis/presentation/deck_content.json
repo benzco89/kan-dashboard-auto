@@ -1000,6 +1000,71 @@
       ]
     }
   },
+  "big_days": {
+    "typical_day": 5694848,
+    "days": [
+      {
+        "date": "2025-10-13",
+        "views": 62327564,
+        "vs_typical": 10.9,
+        "headline": "קצת חוצפה ישראלית מצליחה להוציא תשובות אפילו מהנשיא טראמפ",
+        "top_platform": "tiktok",
+        "top_views": 1837926,
+        "yt_subs": 362,
+        "fb_follows": 10200
+      },
+      {
+        "date": "2026-01-04",
+        "views": 42889254,
+        "vs_typical": 7.5,
+        "headline": "תיעוד משיראז שבדרום-מערב איראן: צעיר איראני מבעיר שוטרים באמצעות מטף כיבוי, ולאחר מרדף",
+        "top_platform": "tiktok",
+        "top_views": 16373446,
+        "yt_subs": 226,
+        "fb_follows": 892
+      },
+      {
+        "date": "2026-06-11",
+        "views": 26695060,
+        "vs_typical": 4.7,
+        "headline": "החרדים חסמו כבישים בגוש דן - עימותים פרצו במספר מוקדים בין המפגינים לנהגים שנתקעו",
+        "top_platform": "facebook",
+        "top_views": 8935390,
+        "yt_subs": 186,
+        "fb_follows": 305
+      },
+      {
+        "date": "2025-06-13",
+        "views": 24698453,
+        "vs_typical": 4.3,
+        "headline": "נויה עברה דירה רק אתמול - והיום ניצלה בנס מפג*עה בבניין שלה: \"הרגשתי כמו ברולטה\"",
+        "top_platform": "tiktok",
+        "top_views": 3117303,
+        "yt_subs": 642,
+        "fb_follows": 1335
+      },
+      {
+        "date": "2026-03-02",
+        "views": 22566249,
+        "vs_typical": 4.0,
+        "headline": "תמיר כהן איבד את אימו ברוריה כהן ואחיו יוסף כהן בפגיעת הטיל האיראני בבית שמש",
+        "top_platform": "tiktok",
+        "top_views": 2676529,
+        "yt_subs": 250,
+        "fb_follows": 4764
+      },
+      {
+        "date": "2026-03-03",
+        "views": 21744429,
+        "vs_typical": 3.8,
+        "headline": "נס: בזמן שהכול סביבה מתנפץ - שושנה בת ה-96 שרדה את ההדף העוצמתי של הטיל האיראני 🙏",
+        "top_platform": "tiktok",
+        "top_views": 2875853,
+        "yt_subs": 140,
+        "fb_follows": 1547
+      }
+    ]
+  },
   "editorial": {
     "cover_title": "הסושיאל של כאן חדשות",
     "cover_subtitle": "2024 עד היום",

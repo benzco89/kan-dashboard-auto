@@ -205,6 +205,7 @@ def build():
     # --- מנויי יוטיוב, סדרה יומית ---
     subs = pd.read_csv(os.path.join(SRC, 'youtube_studio', 'subscribers_daily.csv'))
     subs['Date'] = pd.to_datetime(subs['Date'])
+    deck['_subs'] = subs
     deck['youtube_subscribers'] = {
         'series': [{'month': str(m), 'subs': int(g['Subscribers'].iloc[-1])}
                    for m, g in subs.groupby(subs['Date'].dt.to_period('M'))],
@@ -223,12 +224,12 @@ def build():
                              encoding='utf-16')):
         if len(r) == 2 and r[0] not in ('Date', '') and r[1].strip():
             try:
-                rows.append((r[0][:7], float(r[1])))
+                rows.append((r[0][:10], float(r[1])))   # תאריך מלא: נדרש ליום
             except ValueError:
                 pass
     by_month = defaultdict(float)
-    for m, v in rows:
-        by_month[m] += v
+    for day, v in rows:
+        by_month[day[:7]] += v
     deck['facebook_follows'] = {
         'monthly': [{'month': m, 'follows': int(v)} for m, v in sorted(by_month.items())],
         'net_ratio': 0.75,
@@ -242,6 +243,12 @@ def build():
     # --- התוכן הגדול של כל שנה ---
     deck['top_content'] = top_content(yt, tt)
     deck['cross_platform'] = cross_platform(deck['top_content'])
+
+    # --- הימים הגדולים, ומה הם עשו לקהל ---
+    fb_daily = pd.DataFrame(rows, columns=['date', 'follows'])
+    fb_daily['date'] = pd.to_datetime(fb_daily['date'])
+    deck['big_days'] = big_days(yt, tt, subs, fb_daily)
+    deck.pop('_subs', None)
 
     return deck
 
@@ -270,6 +277,78 @@ def ig_follows_by_format():
         out[fmt] = {'posts': len(g), 'views': int(v), 'follows': int(f),
                     'per_1k_views': round(f / v * 1000, 2) if v else 0}
     return out
+
+
+def all_items(yt, tt):
+    """כל הפריטים מכל הרשתות בטבלה אחת: תאריך, צפיות, כותרת, רשת."""
+    frames = []
+    ig_files = [os.path.join(SRC, 'Jan-01-2024_Dec-31-2024_4588672571364735.csv'),
+                os.path.join(SRC, 'data_buisness_suit', '2025 חוץ מסטוריז.xlsx'),
+                os.path.join(SRC, 'data_buisness_suit',
+                             'Jan-01-2026_Aug-10-2026_1071135865260092.csv')]
+    for f in ig_files:
+        d = pd.read_excel(f) if f.endswith('.xlsx') else pd.read_csv(f, encoding='utf-8-sig')
+        d = d[d['Account username'] == 'kan_news']
+        frames.append(pd.DataFrame({
+            'dt': pd.to_datetime(d['Publish time'], format='mixed', errors='coerce'),
+            'views': _num(d['Views']), 'title': d['Description'].map(clean_title),
+            'platform': 'instagram'}))
+
+    fb25 = pd.read_csv(os.path.join(PULLED, 'fb_2025_metrics.csv'), encoding='utf-8-sig')
+    frames.append(pd.DataFrame({
+        'dt': pd.to_datetime(fb25['date'], errors='coerce'),
+        'views': _num(fb25['views']), 'title': '', 'platform': 'facebook'}))
+    for f in ('Jan-01-2024_Dec-31-2024_1509169891251840.csv',
+              'Jan-01-2026_Aug-11-2026_1369894801784288.csv'):
+        e = pd.read_csv(os.path.join(SRC, f), encoding='utf-8-sig', low_memory=False)
+        e = e[e['Page ID'].astype(str) == '100064467291406']
+        frames.append(pd.DataFrame({
+            'dt': pd.to_datetime(e['Publish time'], format='mixed', errors='coerce'),
+            'views': _num(e['Views']), 'title': e['Description'].map(clean_title),
+            'platform': 'facebook'}))
+    for d, name in ((yt, 'youtube'), (tt, 'tiktok')):
+        frames.append(pd.DataFrame({
+            'dt': d['dt'], 'views': d['views'],
+            'title': d['title'].map(clean_title), 'platform': name}))
+
+    a = pd.concat(frames, ignore_index=True).dropna(subset=['dt', 'views'])
+    return a[a['dt'] >= VIEWS_FROM]
+
+
+def big_days(yt, tt, subs, fb_follows, n=6):
+    """הימים שבהם התוכן עשה הכי הרבה — ומה קרה בהם.
+
+    לא מביאים ציר זמן של אירועים מבחוץ: **הנתונים מוצאים את היום והתוכן נותן
+    לו שם.** הכותרת של הפריט הגדול באותו יום היא התיאור המדויק ביותר של מה
+    שקרה, והיא גם מה שבאמת פורסם — בלי פרשנות שלנו.
+
+    לצד הצפיות נמדד גם מה האירוע עשה לקהל: מנויי יוטיוב שנוספו והצטרפויות
+    לפייסבוק *באותו יום*.
+    """
+    a = all_items(yt, tt)
+    a['day'] = a['dt'].dt.date
+    per_day = a.groupby('day')['views'].sum()
+    typical = float(per_day.median())
+
+    sub_gain = subs.set_index(subs['Date'].dt.date)['Subscribers'].diff()
+    fb_gain = fb_follows.set_index(fb_follows['date'].dt.date)['follows']
+
+    out = []
+    for day, total in per_day.nlargest(n).items():
+        g = a[a['day'] == day]
+        named = g[g['title'].astype(str).str.len() > 12]
+        top = (named if len(named) else g).nlargest(1, 'views').iloc[0]
+        out.append({
+            'date': str(day),
+            'views': int(total),
+            'vs_typical': round(total / typical, 1) if typical else 0,
+            'headline': str(top['title']),
+            'top_platform': top['platform'],
+            'top_views': int(top['views']),
+            'yt_subs': int(sub_gain.get(day, 0) or 0),
+            'fb_follows': int(fb_gain.get(day, 0) or 0),
+        })
+    return {'typical_day': int(typical), 'days': out}
 
 
 def top_content(yt, tt):

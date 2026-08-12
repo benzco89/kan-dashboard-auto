@@ -437,6 +437,49 @@ def s_thin(d):
                  ''.join(body))
 
 
+def s_events(d):
+    """מה אירוע חדשותי גדול עושה למספרים.
+
+    אין כאן ציר זמן שהובא מבחוץ: הימים נבחרו לפי הנתונים (סך הצפיות לתוכן
+    שפורסם באותו יום), והכותרת של הפריט הגדול באותו יום היא שנותנת להם שם.
+    זה גם מדויק יותר מרשימת אירועים שנכתבת מהזיכרון, וגם ניתן לבדיקה.
+    """
+    b = d.get('big_days') or {}
+    days = b.get('days') or []
+    if not days:
+        return ''
+    hi = max(x['views'] for x in days)
+    typ = b.get('typical_day', 0)
+    rows = []
+    for x in days:
+        gains = []
+        if x['fb_follows']:
+            gains.append('<span class="gpill">%s<i>עוקבי פייסבוק</i></span>'
+                         % num('+%s' % fmt(x['fb_follows'])))
+        if x['yt_subs']:
+            gains.append('<span class="gpill">%s<i>מנויי יוטיוב</i></span>'
+                         % num('+%s' % fmt(x['yt_subs'])))
+        rows.append(
+            '<div class="ev">'
+            '<div class="evd">%s</div>'
+            '<div class="evb"><div class="evfill" style="width:%.1f%%"></div>'
+            '<div class="evtxt">%s</div></div>'
+            '<div class="evv">%s<span>×%s מיום רגיל</span></div>'
+            '<div class="evg">%s</div>'
+            '</div>'
+            % (esc(x['date']), x['views'] / hi * 100, esc(x['headline']),
+               num(short(x['views'])),
+               esc('פי %.1f מיום רגיל' % x['vs_typical']), ''.join(gains)))
+    body = [head('כשקורה משהו גדול', 'הימים שבהם התוכן עשה הכי הרבה — ומה זה עשה לקהל',
+                 '<div class="rnum">%s</div><div class="rlab">צפיות ביום רגיל (חציון)</div>'
+                 % short(typ)),
+            '<div class="evlist">%s</div>' % ''.join(rows),
+            '<div class="foot">הימים נבחרו מהנתונים — סך הצפיות לתוכן שפורסם באותו יום — '
+            'והכותרת היא של הפריט הגדול ביותר באותו יום. לא רשימת אירועים שנכתבה מראש.</div>']
+    return slide('אירועים', 'מה אירוע גדול עושה למספרים. הנתונים בוחרים את היום, '
+                            'התוכן נותן לו שם.', ''.join(body))
+
+
 def s_top(d):
     blocks = []
     for y, items in sorted(d['top_content'].items()):
@@ -626,6 +669,22 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .tt{flex:1;font-size:17px;line-height:1.35}
 .tv{font-size:23px;font-weight:700}
 .todo{color:%(a)s;font-weight:700}
+/* אירועים */
+.evlist{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;padding:6px 0}
+.ev{display:grid;grid-template-columns:118px 1fr 190px 330px;gap:22px;align-items:center}
+.evd{font-size:20px;font-weight:700;color:%(m)s;direction:ltr;text-align:right}
+.evb{position:relative;height:62px;background:#ececec;border-radius:8px;overflow:hidden;
+  display:flex;align-items:center}
+.evfill{position:absolute;top:0;right:0;height:100%%;background:%(a)s;opacity:.16}
+.evtxt{position:relative;padding:0 18px;font-size:19px;line-height:1.3;
+  max-height:56px;overflow:hidden}
+.evv{text-align:left}
+.evv .mono{font-size:34px;font-weight:700;line-height:1}
+.evv span{display:block;font-size:15px;color:%(m)s;margin-top:3px;white-space:nowrap}
+.evg{display:flex;gap:10px;justify-content:flex-start}
+.gpill{background:#f0f4ff;border:1px solid #dbe4ff;border-radius:10px;padding:8px 14px;
+  font-size:22px;font-weight:700;color:#1D4ED8;text-align:center}
+.gpill i{display:block;font-size:13px;font-style:normal;font-weight:400;color:%(m)s;margin-top:2px}
 .xprow{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
 .xp{border-inline-start:3px solid %(a)s;padding-inline-start:16px}
 .xpy{font-size:19px;font-weight:700;color:%(m)s}
@@ -654,8 +713,9 @@ def render():
         s_cover(d), s_assets(d), s_growth(d), s_audience(d), s_output(d),
         s_platform(d, 'facebook'), s_platform(d, 'instagram', ig_extra),
         s_platform(d, 'youtube'), s_platform(d, 'tiktok'),
-        s_thin(d), s_top(d), s_method(d),
+        s_thin(d), s_events(d), s_top(d), s_method(d),
     ]
+    slides = [s for s in slides if s]
     css = CSS % {'f': FONTS, 'a': ACCENT, 'ink': INK, 'm': MUTED, 'g': GRID}
     doc = ('<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8">'
            '<title>הסושיאל של כאן חדשות — 2024 עד היום</title>'
