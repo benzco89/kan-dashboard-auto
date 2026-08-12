@@ -1,0 +1,419 @@
+#!/usr/bin/env python3
+"""מחשב את כל מספרי המצגת 2024→היום ל-`deck_content.json`.
+
+    python analysis/presentation/build_deck.py
+
+הפרדה מכוונת בין החישוב לבין הניסוח, כמו ב-`weekly_deck`: הסקריפט מחשב מספרים
+ולא כותב משפטים. הכותרות, המסקנות והמשפט של כל שקף יושבים ב-JSON תחת
+`editorial`, נכתבים ביד, ו**שורדים הרצה חוזרת** — ראו `_merge_editorial`.
+מצגת להנהלה נופלת או עומדת על הניסוח, וזה לא משהו שסקריפט צריך להמציא.
+
+## היחידה שכל המצגת מדברת בה
+
+"צפיות שנצברו לתוכן שפורסם בחודש X" — לא "צפיות בחודש X". בכל ארבע הרשתות
+המדד הוא מצטבר-עד-היום ברמת הפריט, ולכן הוא עקבי בין הפלטפורמות אבל מוטה
+לטובת תוכן ותיק שהספיק לצבור. ההטיה קטנה בפייסבוק/אינסטגרם/טיקטוק — פוסט גמור
+תוך ארבעה ימים (ROADMAP, שורה סגורה 27.7.2026) — וגדולה יותר ביוטיוב, שיש לו
+זנב אמיתי. נאמר על השקף ולא מוסתר.
+
+## מה לא נכנס לכאן, ולמה
+
+* **חשיפה בפייסבוק 2025** — לא נמשכה (המדד נשחק עם גיל הפוסט).
+* **טוויטר לפני 6/2026** — הספק מגיע 13 יום אחורה בלבד.
+* **הגיליון `נתוני פייסבוק`** — 38–53% מהשורות עם אפס צפיות לפני יוני 2026.
+* **צופים קבועים ביוטיוב** — מדד שהושק ב-20.3.2025.
+"""
+
+import csv
+import json
+import os
+import sys
+from collections import defaultdict
+
+import pandas as pd
+
+# הקונסולה של Windows היא cp1255 ונופלת על חץ יוניקוד באמצע דוח תקין
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SRC = os.path.join(HERE, '..', 'yearly_content')
+PULLED = os.path.join(HERE, 'pulled')
+OUT = os.path.join(HERE, 'deck_content.json')
+
+TODAY = '2026-08-11'
+YTD_CUT = (8, 11)          # התקופה המקבילה: 1 בינואר עד 11 באוגוסט
+VIEWS_FROM = '2024-09'     # מטא הגדירה מחדש צפיות/חשיפה באוג'–ספט' 2024
+
+PLATFORMS = ['facebook', 'youtube', 'tiktok', 'instagram', 'twitter', 'whatsapp']
+
+# עוקבים נכון ל-2026-08-11 (`מעקב עוקבים`); וואטסאפ נמסר ידנית — אין לו API
+FOLLOWERS = {
+    'facebook': 1183166, 'tiktok': 828200, 'youtube': 798000,
+    'twitter': 373889, 'whatsapp': 310905, 'instagram': 283818,
+}
+
+
+def _num(s):
+    return pd.to_numeric(s, errors='coerce')
+
+
+def clean_title(s, limit=88):
+    """כותרת לשקף: בלי סימני bidi, בגבול מילה, ובלי שובל של תיוג חתוך.
+
+    שלוש מלכודות שחוזרות בכל פעם שטקסט מהרשתות מגיע לתצוגה עברית:
+    הקאפשנים מכילים תווי כיווניות בלתי נראים (U+2066-2069, RLM/LRM) שמזיזים
+    חצי שורה; חיתוך לפי מספר תווים חותך באמצע מילה; ותיוג לטיני בסוף
+    (`@itayblumental`) נחתך מהצד הלא נכון ומשאיר `itayblumental@` תלוי באוויר.
+    """
+    s = str(s or '')
+    for ch in ('⁦', '⁧', '⁨', '⁩', '‎', '‏', '‪',
+               '‫', '‬', '­'):
+        s = s.replace(ch, '')
+    s = ' '.join(s.split())                      # טאבים וירידות שורה
+    if len(s) > limit:
+        cut = s[:limit]
+        if ' ' in cut:
+            cut = cut[:cut.rfind(' ')]
+        s = cut.rstrip(' ,.;:-–—') + '…'
+    # תיוג שנשאר חתוך בקצה — להוריד אותו ולא להציג חצי שם
+    words = s.split(' ')
+    while words and (words[-1].startswith('@') or words[-1].endswith('@')):
+        words.pop()
+    return ' '.join(words).rstrip(' ,.;:-–—…') or s
+
+
+def _ytd(d, col='dt'):
+    """אותו חלון בכל שנה, כדי ש-2026 לא תושווה לשנה שלמה."""
+    m, day = YTD_CUT
+    return d[(d[col].dt.month < m) | ((d[col].dt.month == m) & (d[col].dt.day <= day))]
+
+
+def load_meta():
+    """פייסבוק ואינסטגרם — מהבסיס החודשי ש-build_history בנה."""
+    p = os.path.join(HERE, 'history_monthly.csv')
+    if not os.path.exists(p):
+        raise SystemExit("❌ חסר history_monthly.csv — להריץ קודם build_history.py")
+    return pd.read_csv(p, encoding='utf-8-sig')
+
+
+def load_video(name):
+    """יוטיוב/טיקטוק — שורה לפריט, עם צפיות מצטברות."""
+    d = pd.read_csv(os.path.join(PULLED, name), encoding='utf-8-sig')
+    d['dt'] = pd.to_datetime(d['date'], errors='coerce')
+    d = d.dropna(subset=['dt'])
+    for c in ('views', 'likes', 'comments'):
+        if c in d.columns:
+            d[c] = _num(d[c]).fillna(0)
+    return d
+
+
+def yearly_from_video(d):
+    out = {}
+    for y, g in d.groupby(d['dt'].dt.year):
+        out[str(y)] = {'posts': len(g), 'views': int(g['views'].sum()),
+                       'likes': int(g['likes'].sum())}
+    ytd = {}
+    for y, g in _ytd(d).groupby(d['dt'].dt.year):
+        ytd[str(y)] = {'posts': len(g), 'views': int(g['views'].sum())}
+    return out, ytd
+
+
+def monthly_from_video(d, since='2024-09'):
+    s = d[d['dt'] >= since].groupby(d['dt'].dt.to_period('M'))['views'].sum()
+    return [{'month': str(m), 'views': int(v)} for m, v in s.items()]
+
+
+def build():
+    meta = load_meta()
+    yt = load_video('youtube_history.csv')
+    tt = load_video('tiktok_history.csv')
+
+    deck = {'generated_for': TODAY, 'followers': FOLLOWERS, 'platforms': {}}
+
+    # --- פייסבוק ואינסטגרם, מהבסיס החודשי ---
+    for plat in ('facebook', 'instagram'):
+        sub = meta[meta['platform'] == plat].copy()
+        sub['year'] = sub['month'].str[:4]
+        block = {'yearly': {}, 'monthly_views': []}
+        for y, g in sub.groupby('year'):
+            ok = g[g['views_valid']] if 'views_valid' in g else g
+            block['yearly'][y] = {
+                'posts': int(g['posts'].sum()),
+                # הפוסטים שהצפיות באמת מתייחסות אליהם. ב-2024 הצפיות מתחילות
+                # בספטמבר, ולהצמיד להן ספירה של שנה שלמה זה לומר שאלפי פוסטים
+                # הפיקו את מה שכמה מאות הפיקו.
+                'posts_in_views_window': int(ok['posts'].sum()),
+                'views_window': (ok['month'].min() if len(ok) else None),
+                'views': int(ok['views'].sum(skipna=True) or 0),
+                'likes': int(g['likes'].sum(skipna=True) or 0),
+                'comments': int(g['comments'].sum(skipna=True) or 0),
+                'shares': int(g['shares'].sum(skipna=True) or 0),
+            }
+            if 'watch_hours' in g:
+                block['yearly'][y]['watch_hours'] = int(g['watch_hours'].sum(skipna=True) or 0)
+        for _, r in sub[sub['month'] >= VIEWS_FROM].iterrows():
+            if r.get('views_valid', True) and pd.notna(r.get('views')):
+                block['monthly_views'].append({'month': r['month'], 'views': int(r['views'])})
+        # תמהיל הפורמטים — העמודות שנוצרו מהפיבוט ב-build_history
+        mix = {}
+        for fmt in ('רילס', 'תמונה', 'קרוסלה', 'וידאו', 'סטטוס', 'לינק'):
+            if fmt in sub.columns:
+                per_year = sub.groupby('year')[fmt].sum()
+                if per_year.sum():
+                    mix[fmt] = {y: int(v) for y, v in per_year.items()}
+        block['format_mix'] = mix
+        deck['platforms'][plat] = block
+
+    # --- יוטיוב וטיקטוק ---
+    for plat, d in (('youtube', yt), ('tiktok', tt)):
+        yearly, ytd = yearly_from_video(d)
+        deck['platforms'][plat] = {
+            'yearly': yearly, 'ytd': ytd,
+            'monthly_views': monthly_from_video(d),
+        }
+    # Shorts מול רגיל — הפילוח היחיד שיש ביוטיוב
+    deck['platforms']['youtube']['format_mix'] = {
+        {'Regular': 'סרטון רגיל', 'Shorts': 'שורטס'}.get(t, t):
+            {str(y): int(v) for y, v in g.groupby(g['dt'].dt.year).size().items()}
+        for t, g in yt.groupby('type')}
+    for p, d in (('youtube', yt), ('tiktok', tt)):
+        for y, g in d.groupby(d['dt'].dt.year):
+            blk = deck['platforms'][p]['yearly'].get(str(y))
+            if blk:
+                blk['posts_in_views_window'] = len(g)
+    deck['platforms']['youtube']['coverage_note'] = (
+        'פלייליסט ההעלאות נחתך ב-20,000 פריטים מתוך 51,517 שהערוץ מדווח; '
+        'הכיסוי מלא מ-2022-08 ואילך')
+    deck['platforms']['tiktok']['coverage_note'] = (
+        'נמשכו 3,993 מתוך 4,950 סרטונים; ההיסטוריה מתחילה ב-2025-02-17')
+
+    # --- טוויטר: רק מה שהגיליון מכסה ---
+    tw = pd.read_csv(os.path.join(PULLED, 'sheet_twitter.csv'), encoding='utf-8-sig')
+    tw['dt'] = pd.to_datetime(tw['date'], errors='coerce')
+    tw = tw.dropna(subset=['dt'])
+    tw['views'] = _num(tw.get('views')).fillna(0)
+    deck['platforms']['twitter'] = {
+        'from': str(tw['dt'].min().date()), 'to': str(tw['dt'].max().date()),
+        'posts': len(tw), 'views': int(tw['views'].sum()),
+        'coverage_note': 'ה-API של הספק מגיע 13 יום אחורה בלבד — אין היסטוריה לפני 6/2026',
+    }
+    deck['platforms']['whatsapp'] = {
+        'coverage_note': 'לערוץ אין API. גודל הקהל נמסר ידנית; אין נתוני צפיות',
+    }
+
+    # --- מנויי יוטיוב, סדרה יומית ---
+    subs = pd.read_csv(os.path.join(SRC, 'youtube_studio', 'subscribers_daily.csv'))
+    subs['Date'] = pd.to_datetime(subs['Date'])
+    deck['youtube_subscribers'] = {
+        'series': [{'month': str(m), 'subs': int(g['Subscribers'].iloc[-1])}
+                   for m, g in subs.groupby(subs['Date'].dt.to_period('M'))],
+        'start': int(subs['Subscribers'].iloc[0]), 'end': int(subs['Subscribers'].iloc[-1]),
+        'by_year': {str(y): int(g['Subscribers'].iloc[-1] - g['Subscribers'].iloc[0])
+                    for y, g in subs.groupby(subs['Date'].dt.year)},
+    }
+    aud = pd.read_csv(os.path.join(SRC, 'youtube_studio', 'monthly_audience.csv'))
+    aud['Date'] = pd.to_datetime(aud['Date'])
+    deck['youtube_audience'] = {str(y): int(g['Monthly audience'].mean())
+                                for y, g in aud.groupby(aud['Date'].dt.year)}
+
+    # --- גיוס עוקבים בפייסבוק (ברוטו — ראו meta_insights/README) ---
+    rows = []
+    for r in csv.reader(open(os.path.join(SRC, 'meta_insights', 'Follows.csv'),
+                             encoding='utf-16')):
+        if len(r) == 2 and r[0] not in ('Date', '') and r[1].strip():
+            try:
+                rows.append((r[0][:7], float(r[1])))
+            except ValueError:
+                pass
+    by_month = defaultdict(float)
+    for m, v in rows:
+        by_month[m] += v
+    deck['facebook_follows'] = {
+        'monthly': [{'month': m, 'follows': int(v)} for m, v in sorted(by_month.items())],
+        'net_ratio': 0.75,
+        'note': ('ברוטו. מול הגיליון על 8 חודשי חפיפה: 136,017 הצטרפויות מול '
+                 '102,061 גידול בפועל — אחד מכל ארבעה עוזב'),
+    }
+
+    # --- מה שאינסטגרם מלמד על גיוס עוקבים לפי פורמט ---
+    deck['instagram_follows_by_format'] = ig_follows_by_format()
+
+    # --- התוכן הגדול של כל שנה ---
+    deck['top_content'] = top_content(yt, tt)
+    deck['cross_platform'] = cross_platform(deck['top_content'])
+
+    return deck
+
+
+def ig_follows_by_format():
+    """עוקבים לכל 1,000 צפיות — המספר שמראה מה באמת מגייס."""
+    files = [os.path.join(SRC, 'Jan-01-2024_Dec-31-2024_4588672571364735.csv'),
+             os.path.join(SRC, 'data_buisness_suit', '2025 חוץ מסטוריז.xlsx'),
+             os.path.join(SRC, 'data_buisness_suit',
+                          'Jan-01-2026_Aug-10-2026_1071135865260092.csv')]
+    parts = []
+    for f in files:
+        d = pd.read_excel(f) if f.endswith('.xlsx') else pd.read_csv(f, encoding='utf-8-sig')
+        d = d[d['Account username'] == 'kan_news'].copy()
+        d['dt'] = pd.to_datetime(d['Publish time'], format='mixed', errors='coerce')
+        for c in ('Views', 'Follows'):
+            d[c] = _num(d[c])
+        parts.append(d[['dt', 'Post type', 'Views', 'Follows']])
+    d = pd.concat(parts, ignore_index=True)
+    d = d[d['dt'] >= VIEWS_FROM]          # לפני כן החשיפה/צפיות אינן תקפות
+    d['fmt'] = d['Post type'].map({'IG reel': 'רילס', 'IG image': 'תמונה',
+                                   'IG carousel': 'קרוסלה', 'IGTV': 'רילס'})
+    out = {}
+    for fmt, g in d.groupby('fmt'):
+        v, f = g['Views'].sum(), g['Follows'].sum()
+        out[fmt] = {'posts': len(g), 'views': int(v), 'follows': int(f),
+                    'per_1k_views': round(f / v * 1000, 2) if v else 0}
+    return out
+
+
+def top_content(yt, tt):
+    """הפריט הגדול של כל שנה בכל רשת. מספטמבר 2024 בלבד."""
+    out = defaultdict(list)
+
+    ig_files = [os.path.join(SRC, 'Jan-01-2024_Dec-31-2024_4588672571364735.csv'),
+                os.path.join(SRC, 'data_buisness_suit', '2025 חוץ מסטוריז.xlsx'),
+                os.path.join(SRC, 'data_buisness_suit',
+                             'Jan-01-2026_Aug-10-2026_1071135865260092.csv')]
+    parts = []
+    for f in ig_files:
+        d = pd.read_excel(f) if f.endswith('.xlsx') else pd.read_csv(f, encoding='utf-8-sig')
+        d = d[d['Account username'] == 'kan_news'].copy()
+        d['dt'] = pd.to_datetime(d['Publish time'], format='mixed', errors='coerce')
+        d['views'] = _num(d['Views'])
+        d['title'] = d['Description'].map(clean_title)
+        parts.append(d[['dt', 'views', 'title']])
+    ig = pd.concat(parts, ignore_index=True)
+
+    # 2025 מהבקפיל — אין בו טקסט הפוסט, ולכן הכותרת נשארת ריקה ונמסרת
+    # לשכבת הניסוח; ה-permalink הוא מה שמאפשר למלא אותה בלי לנחש.
+    fb25 = pd.read_csv(os.path.join(PULLED, 'fb_2025_metrics.csv'), encoding='utf-8-sig')
+    fb25['dt'] = pd.to_datetime(fb25['date'], errors='coerce')
+    fb25['views'] = _num(fb25['views'])
+    fb25['title'] = ''
+    fb25['link'] = fb25['permalink']
+
+    fb_exports = []
+    for f in ('Jan-01-2024_Dec-31-2024_1509169891251840.csv',
+              'Jan-01-2026_Aug-11-2026_1369894801784288.csv'):
+        e = pd.read_csv(os.path.join(SRC, f), encoding='utf-8-sig', low_memory=False)
+        e = e[e['Page ID'].astype(str) == '100064467291406'].copy()
+        e['dt'] = pd.to_datetime(e['Publish time'], format='mixed', errors='coerce')
+        e['views'] = _num(e['Views'])
+        # ב-2024 ה-Title לרוב ריק והטקסט יושב ב-Description
+        e['title'] = (e['Title'].fillna('').astype(str).str.strip()
+                      .where(lambda s: s.str.len() > 0,
+                             e['Description'].fillna('').astype(str))
+                      .map(clean_title))
+        e['link'] = e['Permalink']
+        fb_exports.append(e[['dt', 'views', 'title', 'link']])
+
+    fb = pd.concat([fb25[['dt', 'views', 'title', 'link']]] + fb_exports,
+                   ignore_index=True)
+    for d in (ig, yt, tt):
+        if 'link' not in d.columns:
+            d['link'] = ''
+
+    for name, d in (('instagram', ig), ('facebook', fb),
+                    ('youtube', yt[['dt', 'views', 'title', 'link']]),
+                    ('tiktok', tt[['dt', 'views', 'title', 'link']])):
+        d = d[(d['dt'] >= VIEWS_FROM) & d['views'].notna()]
+        for y, g in d.groupby(d['dt'].dt.year):
+            r = g.nlargest(1, 'views').iloc[0]
+            out[str(y)].append({'platform': name, 'views': int(r['views']),
+                                'title': clean_title(r['title']),
+                                'link': str(r.get('link', '') or ''),
+                                'date': str(r['dt'].date())})
+    out = {y: sorted(v, key=lambda x: -x['views']) for y, v in sorted(out.items())}
+    return out
+
+
+def _tokens(s):
+    """מילים משמעותיות בלבד — מילות קישור קצרות יוצרות התאמות שווא."""
+    bad = {'של', 'עם', 'את', 'על', 'לא', 'זה', 'הוא', 'היא', 'כי', 'גם'}
+    return {w.strip('.,:;"\'!?()״׳-') for w in str(s).split()
+            if len(w) > 2 and w not in bad}
+
+
+def cross_platform(top):
+    """אותו סיפור שהגיע לראש בכמה רשתות באותה שנה.
+
+    הכותרות לא זהות בין הרשתות (כל רשת נערכת בנפרד), ולכן ההשוואה היא לפי
+    חפיפת מילים ולא לפי טקסט מדויק. 0.5 — מתחת לזה נדבקים סיפורים שרק חולקים
+    נושא.
+    """
+    res = {}
+    for y, items in top.items():
+        best = None
+        for i, a in enumerate(items):
+            for b in items[i + 1:]:
+                ta, tb = _tokens(a['title']), _tokens(b['title'])
+                if not ta or not tb:
+                    continue
+                overlap = len(ta & tb) / min(len(ta), len(tb))
+                if overlap >= 0.5:
+                    grp = [a, b]
+                    tot = sum(x['views'] for x in grp)
+                    if not best or tot > best['views']:
+                        best = {'title': max(grp, key=lambda x: len(x['title']))['title'],
+                                'views': tot,
+                                'platforms': [x['platform'] for x in grp]}
+        if best:
+            res[y] = best
+    return res
+
+
+EDITORIAL_SEED = {
+    "cover_title": "הסושיאל של כאן חדשות",
+    "cover_subtitle": "2024 עד היום",
+    "slides": {},
+    "_how_to_edit": ("כל טקסט כאן נכתב ביד ושורד הרצה חוזרת של הסקריפט. "
+                     "המספרים מתעדכנים מהנתונים; המשפטים לא."),
+}
+
+
+def _merge_editorial(deck):
+    """שכבת הניסוח לא נדרסת. זה הלקח מ-weekly_deck, ששטף אותה פעמיים."""
+    prev = {}
+    if os.path.exists(OUT):
+        try:
+            prev = json.load(open(OUT, encoding='utf-8')).get('editorial', {})
+        except (ValueError, OSError):
+            prev = {}
+    ed = dict(EDITORIAL_SEED)
+    ed.update(prev)
+    deck['editorial'] = ed
+    return deck
+
+
+def main():
+    deck = _merge_editorial(build())
+    with open(OUT, 'w', encoding='utf-8') as f:
+        json.dump(deck, f, ensure_ascii=False, indent=2)
+
+    print("נכתב %s" % OUT)
+    print("\nעוקבים: %s בסך הכל" % format(sum(FOLLOWERS.values()), ','))
+    for p, n in sorted(FOLLOWERS.items(), key=lambda x: -x[1]):
+        print("   %-10s %10s" % (p, format(n, ',')))
+    print("\nצפיות לפי שנה (תוכן שפורסם באותה שנה, מצטבר עד היום):")
+    for p in ('facebook', 'instagram', 'youtube', 'tiktok'):
+        y = deck['platforms'][p].get('yearly', {})
+        parts = ["%s %s" % (k, format(v['views'], ',')) for k, v in sorted(y.items())
+                 if v.get('views')]
+        print("   %-10s %s" % (p, ' | '.join(parts)))
+    print("\nיוטיוב מנויים: %s → %s" % (
+        format(deck['youtube_subscribers']['start'], ','),
+        format(deck['youtube_subscribers']['end'], ',')))
+    print("אינסטגרם, עוקבים ל-1000 צפיות לפי פורמט:")
+    for fmt, v in sorted(deck['instagram_follows_by_format'].items(),
+                         key=lambda x: -x[1]['per_1k_views']):
+        print("   %-8s %5.2f  (%s פוסטים)" % (fmt, v['per_1k_views'], format(v['posts'], ',')))
+
+
+if __name__ == '__main__':
+    sys.exit(main())

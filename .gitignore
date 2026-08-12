@@ -65,3 +65,6 @@ mintty.*.png
 *.xlsx
 *.xls
 .verify/
+
+# צילומי שקפים — נוצרים מחדש ב-shoot.py
+analysis/presentation/shots/
