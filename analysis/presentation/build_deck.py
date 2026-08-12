@@ -289,7 +289,17 @@ def build():
     fb_daily = pd.DataFrame(rows, columns=['date', 'follows'])
     fb_daily['date'] = pd.to_datetime(fb_daily['date'])
     deck['big_days'] = big_days(yt, tt, subs, fb_daily)
+    deck['events'] = detect_events(yt, tt, subs, fb_daily)
     deck.pop('_subs', None)
+
+    # סך צפיות בחלון ינואר–יולי, לכל שנה — הבסיס לאחוזי הגידול בשקף השני.
+    # רק חלון זהה בכל השנים; אחרת משווים שנה שלמה לשבעה חודשים.
+    totals = defaultdict(int)
+    for plat, blk in deck['platforms'].items():
+        for m in blk.get('monthly_views', []):
+            if m['month'][5:7] <= '07':
+                totals[m['month'][:4]] += m['views']
+    deck['views_by_year_ytd'] = dict(sorted(totals.items()))
 
     # תיאור לכל קפיצה שמסומנת על העקומות — מאותה רשת, ולא כטענת סיבתיות
     for block, plat in ((deck['youtube_subscribers'], 'youtube'),
@@ -445,6 +455,58 @@ def month_headlines(yt, tt, platform=None):
     return {m: own.get(m) or everywhere.get(m) for m in everywhere}
 
 
+def detect_events(yt, tt, subs, fb_follows, floor=40_000_000):
+    """תקופות שבהן הצפייה הייתה גבוהה ברציפות — כלומר אירועים, לא פוסט מוצלח.
+
+    יום בודד גדול הוא סרטון שתפס. **אירוע חדשותי נמשך ימים**, ולכן החיפוש הוא
+    אחרי רצפים: ימים שחצו פי 2 מהחציון, מאוחדים כשהפער ביניהם עד 4 ימים.
+    הסף על סך הצפיות מסנן רצפים קצרים ולא משמעותיים.
+
+    השמות **לא** נקבעים כאן. הסקריפט מוצא את החלון ומודד אותו; איך קוראים לו
+    יושב ב-`editorial.events` ונכתב ביד — ראו הערה שם.
+    """
+    a = all_items(yt, tt)
+    a['d'] = a['dt'].dt.date
+    day = a.groupby('d')['views'].sum().sort_index()
+    med = float(day.median())
+
+    runs, cur = [], None
+    for d in day[day >= 2 * med].index:
+        if cur and (d - cur[1]).days <= 4:
+            cur = (cur[0], d)
+        else:
+            if cur:
+                runs.append(cur)
+            cur = (d, d)
+    if cur:
+        runs.append(cur)
+
+    sub_gain = subs.set_index(subs['Date'].dt.date)['Subscribers'].diff()
+    fb_gain = fb_follows.set_index(fb_follows['date'].dt.date)['follows']
+
+    out = []
+    for s, e in runs:
+        win = day[(day.index >= s) & (day.index <= e)]
+        tot = float(win.sum())
+        if tot < floor:
+            continue
+        days = (e - s).days + 1
+        g = a[(a['d'] >= s) & (a['d'] <= e)]
+        named = g[g['title'].astype(str).str.len() > 12]
+        tops = (named if len(named) else g).nlargest(3, 'views')
+        out.append({
+            'from': str(s), 'to': str(e), 'days': days,
+            'views': int(tot),
+            'per_day': int(tot / days),
+            'vs_typical': round(tot / days / med, 1),
+            'yt_subs': int(sub_gain[(sub_gain.index >= s) & (sub_gain.index <= e)].sum() or 0),
+            'fb_follows': int(fb_gain[(fb_gain.index >= s) & (fb_gain.index <= e)].sum() or 0),
+            'headlines': [str(r['title']) for _, r in tops.iterrows()],
+        })
+    out.sort(key=lambda x: -x['views'])
+    return {'typical_day': int(med), 'windows': out}
+
+
 def big_days(yt, tt, subs, fb_follows, n=6):
     """הימים שבהם התוכן עשה הכי הרבה — ומה קרה בהם.
 
@@ -579,8 +641,19 @@ def cross_platform(top):
 
 EDITORIAL_SEED = {
     "cover_title": "הסושיאל של כאן חדשות",
-    "cover_subtitle": "2024 עד היום",
+    "cover_subtitle": "ינואר 2024 – יולי 2026",
     "slides": {},
+    # החלונות אותרו מהנתונים (`detect_events`); **השמות נכתבו ביד וטעונים
+    # אימות** — חלקם נגזרו מהכותרות שפורסמו באותם ימים ולא ממקור חיצוני.
+    # לשנות שם, לאחד חלונות או להסתיר אחד: לערוך כאן. `show: false` מסתיר.
+    "events": {
+        "2026-02-25": {"name": "המערכה מול איראן", "show": True},
+        "2025-10-07": {"name": "שחרור החטופים וסיום המלחמה", "show": True},
+        "2025-06-10": {"name": "המערכה מול איראן — הסבב הראשון", "show": True},
+        "2026-04-21": {"name": "הסלמה בצפון", "show": True},
+        "2025-12-06": {"name": "פיגוע החנוכה וגל האנטישמיות", "show": True},
+        "2025-02-22": {"name": "שחרור חטופים — שלב א׳", "show": True},
+    },
     "_how_to_edit": ("כל טקסט כאן נכתב ביד ושורד הרצה חוזרת של הסקריפט. "
                      "המספרים מתעדכנים מהנתונים; המשפטים לא."),
 }

@@ -270,14 +270,35 @@ def s_assets(d):
     """דירוג הנכסים. צבעי מותג מותרים כאן — לכל בר אייקון, שם וערך צמודים."""
     rows = []
     for p in d['platforms']:
-        y = d['platforms'][p].get('yearly', {}).get('2026', {})
-        v = y.get('views') or d['platforms'][p].get('views') or 0
+        blk = d['platforms'][p]
+        # ליוטיוב הצפיות בתקופה (Studio) גוברות על הצבירה לפי שנת פרסום,
+        # אחרת אותו שקף מציג שני מספרים שונים לאותה רשת
+        y = (blk.get('yearly_period') or {}).get('2026') or blk.get('yearly', {}).get('2026', {})
+        v = y.get('views') or blk.get('views') or 0
         rows.append((p, v, d['followers'].get(p, 0)))
     rows.sort(key=lambda r: -r[1])
     hi = max(r[1] for r in rows) or 1
+    # גידול שנתי בחלון זהה (ינואר–יולי). 2024 חסרה כי מדדי מטא מתחילים
+    # בספטמבר — להציג לה אחוז היה להשוות שבעה חודשים ריקים לשנה מלאה.
+    ytd = d.get('views_by_year_ytd') or {}
+    years = sorted(ytd)
+    chips = ''
+    for i, y in enumerate(years):
+        delta = ''
+        if i and ytd[years[i - 1]]:
+            pct = (ytd[y] / ytd[years[i - 1]] - 1) * 100
+            delta = ('<span class="%s">%s</span>'
+                     % ('up' if pct >= 0 else 'down', num('%+.0f%%' % pct)))
+        chips += ('<div class="ychip"><div class="ycy">%s</div>'
+                  '<div class="ycv">%s</div>%s</div>' % (y, num(short(ytd[y])), delta))
     body = [head('הנכסים הדיגיטליים', 'שש רשתות · %s עוקבים' % fmt(sum(d['followers'].values())),
-                 '<div class="rnum">%s</div><div class="rlab">צפיות ב-2026 עד כה</div>'
-                 % short(sum(r[1] for r in rows)))]
+                 # X מוחרג מהסכום: שישה שבועות של מדידה בתוך סך שנתי היו
+                 # מנפחים את 2026 מול 2025 בלי שקרה כלום בפועל
+                 '<div class="rnum">%s</div><div class="rlab">צפיות ב-2026 עד יולי'
+                 '<br><span class="tiny">בארבע הרשתות עם היסטוריה מלאה</span></div>'
+                 % short(sum(v for p, v, _ in rows if p not in ('twitter', 'whatsapp')))),
+            ('<div class="ychips"><div class="ycl">צפיות בכל הרשתות, ינואר–יולי '
+             'בכל שנה</div>%s</div>' % chips) if chips else '']
     body.append('<div class="bhead"><div>רשת</div><div>נתח מהצפיות ב-2026</div>'
                 '<div>צפיות</div><div>עוקבים</div></div>')
     body.append('<div class="blist">')
@@ -551,47 +572,65 @@ def s_thin(d):
                  ''.join(body))
 
 
-def s_events(d):
-    """מה אירוע חדשותי גדול עושה למספרים.
+def _he_date(iso):
+    """2026-02-25 -> 25.2.26"""
+    y, m, dd = iso.split('-')
+    return '%d.%d.%s' % (int(dd), int(m), y[2:])
 
-    אין כאן ציר זמן שהובא מבחוץ: הימים נבחרו לפי הנתונים (סך הצפיות לתוכן
-    שפורסם באותו יום), והכותרת של הפריט הגדול באותו יום היא שנותנת להם שם.
-    זה גם מדויק יותר מרשימת אירועים שנכתבת מהזיכרון, וגם ניתן לבדיקה.
+
+def s_events(d):
+    """מה אירוע חדשותי עושה למספרים.
+
+    החלונות אותרו מהנתונים — רצפים של ימים שחצו פי 2 מהחציון — כדי שיהיו
+    **אירועים ולא פוסטים מוצלחים**: יום בודד גדול הוא סרטון שתפס, ואירוע
+    חדשותי נמשך ימים. השמות מגיעים מ-`editorial.events` ונכתבים ביד, כי מה
+    שקרה בעולם אינו משהו שהסקריפט יכול להסיק מכותרות.
     """
-    b = d.get('big_days') or {}
-    days = b.get('days') or []
-    if not days:
+    ev = d.get('events') or {}
+    wins = ev.get('windows') or []
+    names = ((d.get('editorial') or {}).get('events') or {})
+    shown = []
+    for w in wins:
+        meta = names.get(w['from'])
+        if meta and meta.get('show', True):
+            shown.append((w, meta))
+    if not shown:
         return ''
-    hi = max(x['views'] for x in days)
-    typ = b.get('typical_day', 0)
+    shown = shown[:5]
+    hi = max(w['views'] for w, _ in shown)
+    typ = ev.get('typical_day', 0)
     rows = []
-    for x in days:
+    for w, meta in shown:
         gains = []
-        if x['fb_follows']:
+        if w['fb_follows']:
             gains.append('<span class="gpill">%s<i>עוקבי פייסבוק</i></span>'
-                         % num('+%s' % fmt(x['fb_follows'])))
-        if x['yt_subs']:
+                         % num('+%s' % fmt(w['fb_follows'])))
+        if w['yt_subs']:
             gains.append('<span class="gpill">%s<i>מנויי יוטיוב</i></span>'
-                         % num('+%s' % fmt(x['yt_subs'])))
+                         % num('+%s' % fmt(w['yt_subs'])))
         rows.append(
             '<div class="ev">'
-            '<div class="evd">%s</div>'
+            '<div class="evd"><div class="evn">%s</div>'
+            '<div class="evr">%s – %s <span>%d ימים</span></div></div>'
             '<div class="evb"><div class="evfill" style="width:%.1f%%"></div>'
             '<div class="evtxt">%s</div></div>'
-            '<div class="evv">%s<span>×%s מיום רגיל</span></div>'
-            '<div class="evg">%s</div>'
-            '</div>'
-            % (esc(x['date']), x['views'] / hi * 100, esc(x['headline']),
-               num(short(x['views'])),
-               esc('פי %.1f מיום רגיל' % x['vs_typical']), ''.join(gains)))
-    body = [head('כשקורה משהו גדול', 'הימים שבהם התוכן עשה הכי הרבה — ומה זה עשה לקהל',
+            '<div class="evv">%s<span>%s</span></div>'
+            '<div class="evg">%s</div></div>'
+            % (esc(meta.get('name', '')),
+               _he_date(w['from']), _he_date(w['to']), w['days'],
+               w['views'] / hi * 100,
+               esc(meta.get('headline') or (w['headlines'] or [''])[0]),
+               num(short(w['views'])),
+               esc('פי %.1f מיום רגיל' % w['vs_typical']), ''.join(gains)))
+    body = [head('אירועים חדשותיים', 'מה קרה למספרים כשהחדשות התפוצצו',
                  '<div class="rnum">%s</div><div class="rlab">צפיות ביום רגיל (חציון)</div>'
                  % short(typ)),
             '<div class="evlist">%s</div>' % ''.join(rows),
-            '<div class="foot">הימים נבחרו מהנתונים — סך הצפיות לתוכן שפורסם באותו יום — '
-            'והכותרת היא של הפריט הגדול ביותר באותו יום. לא רשימת אירועים שנכתבה מראש.</div>']
-    return slide('אירועים', 'מה אירוע גדול עושה למספרים. הנתונים בוחרים את היום, '
-                            'התוכן נותן לו שם.', ''.join(body))
+            '<div class="foot">החלונות אותרו <b>מהנתונים</b> — רצף ימים שבהם הצפייה '
+            'חצתה פי 2 מהחציון, כך שמדובר באירוע מתמשך ולא בסרטון בודד שתפס. '
+            'הכותרת לצד כל שורה היא הפריט הגדול ביותר באותו חלון.</div>']
+    return slide('אירועים', 'האירועים החדשותיים הגדולים ומה הם עשו למספרים.',
+                 ''.join(body))
 
 
 def s_top(d):
@@ -704,7 +743,8 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .rule{width:44px;height:8px;background:%(a)s}
 .sright{text-align:left}
 .rnum{font-family:'SF Mono',Menlo,monospace;font-size:52px;font-weight:700;line-height:1}
-.rlab{font-size:16px;color:%(m)s;margin-top:2px}
+.rlab{font-size:16px;color:%(m)s;margin-top:2px;line-height:1.3}
+.tiny{font-size:13px;color:#9a9a9a}
 /* שער */
 .cover{flex:1;display:flex;flex-direction:column;justify-content:space-between}
 .cbar{position:absolute;top:0;right:0;width:8px;height:100%%;background:%(a)s}
@@ -825,8 +865,19 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .ytbar div{height:100%%;border-radius:6px}
 .ytv{font-size:22px;font-weight:700;text-align:left}
 .evlist{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;padding:6px 0}
-.ev{display:grid;grid-template-columns:118px 1fr 190px 330px;gap:22px;align-items:center}
-.evd{font-size:20px;font-weight:700;color:%(m)s;direction:ltr;text-align:right}
+.ev{display:grid;grid-template-columns:250px 1fr 190px 330px;gap:22px;align-items:center}
+.evd{text-align:right}
+.evn{font-size:22px;font-weight:700;line-height:1.15}
+.evr{font-size:14px;color:%(m)s;margin-top:3px;direction:ltr;text-align:right}
+.evr span{display:block}
+.ychips{display:flex;align-items:flex-end;gap:34px;margin:6px 0 18px;
+  border-bottom:1px solid %(g)s;padding-bottom:16px}
+.ycl{font-size:16px;color:%(m)s;font-weight:700;margin-inline-end:8px;max-width:190px;line-height:1.3}
+.ychip{display:flex;align-items:baseline;gap:10px}
+.ycy{font-size:17px;color:%(m)s;font-weight:700}
+.ycv{font-size:30px;font-weight:700}
+.ychip .up{font-size:19px;font-weight:700;color:#186a2e}
+.ychip .down{font-size:19px;font-weight:700;color:#b42318}
 .evb{position:relative;height:62px;background:#ececec;border-radius:8px;overflow:hidden;
   display:flex;align-items:center}
 .evfill{position:absolute;top:0;right:0;height:100%%;background:%(a)s;opacity:.16}
@@ -856,8 +907,45 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .pill.ok{background:#e7f5ea;color:#186a2e}
 .pill.part{background:#fff3e0;color:#8a4b00}
 .pill.no{background:#f2f2f2;color:#8a8a8a}
-@media print{body{background:#fff}section{margin:0;box-shadow:none;page-break-after:always}}
+/* מסך צר מ-1920: מכווצים את השקף כולו במקום לשבור את הפריסה. הדק בנוי
+   לפיקסלים קבועים, ופריסה נוזלית הייתה מזיזה כל גרף וכל תווית.
+   `zoom` ולא `transform`, כי transform לא משנה את הגובה שהאלמנט תופס
+   ומשאיר רווחים ענקיים בין השקפים. הערך המדויק נקבע בסקריפט שבתחתית;
+   נקודות השבירה כאן הן גיבוי למקרה שהוא לא רץ. */
+section{zoom:var(--z,1)}
+@media (max-width:1919px){section{zoom:var(--z,.88)}}
+@media (max-width:1700px){section{zoom:var(--z,.78)}}
+@media (max-width:1500px){section{zoom:var(--z,.70)}}
+@media (max-width:1360px){section{zoom:var(--z,.63)}}
+@media (max-width:1200px){section{zoom:var(--z,.55)}}
+@media (max-width:1000px){section{zoom:var(--z,.45)}}
+@media (max-width:820px){section{zoom:var(--z,.36)}}
+@media print{
+  body{background:#fff}
+  section{margin:0;box-shadow:none;page-break-after:always;zoom:1}
+}
 """
+
+
+FIT_SCRIPT = """
+<script>
+// מתאים את השקף לרוחב החלון בדיוק. 1920 הוא הרוחב שהדק בנוי בו, ו-40
+// פיקסלים נשמרים לשוליים כדי שלא ייווצר פס גלילה אופקי.
+(function () {
+  var W = 1920, PAD = 40;
+  function fit() {
+    var z = Math.min(1, (window.innerWidth - PAD) / W);
+    document.documentElement.style.setProperty('--z', z);
+  }
+  fit();
+  addEventListener('resize', fit);
+  // בהדפסה חוזרים לגודל מלא, אחרת ה-PDF יוצא מוקטן
+  addEventListener('beforeprint', function () {
+    document.documentElement.style.setProperty('--z', 1);
+  });
+  addEventListener('afterprint', fit);
+})();
+</script>"""
 
 
 def render():
@@ -872,7 +960,8 @@ def render():
     css = CSS % {'f': FONTS, 'a': ACCENT, 'ink': INK, 'm': MUTED, 'g': GRID}
     doc = ('<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="utf-8">'
            '<title>הסושיאל של כאן חדשות — 2024 עד יולי 2026</title>'
-           '<style>%s</style></head><body>%s</body></html>' % (css, ''.join(slides)))
+           '<style>%s</style></head><body>%s%s</body></html>'
+           % (css, ''.join(slides), FIT_SCRIPT))
     with open(OUT, 'w', encoding='utf-8') as f:
         f.write(doc)
     print('נכתב %s — %d שקפים, %d KB' % (OUT, len(slides), len(doc) // 1024))
