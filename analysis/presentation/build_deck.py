@@ -172,6 +172,11 @@ def build():
             'yearly': yearly, 'ytd': ytd,
             'monthly_views': monthly_from_video(d),
         }
+
+    # ליוטיוב יש מקור טוב יותר מה-API: ייצוא Studio נותן **צפיות בתקופה**
+    # ולא "מה שתוכן משנה X צבר עד היום". ההפרש אינו זניח — 642M מול 547M —
+    # וכולו הזנב של יוטיוב, שהוא היחיד מהרשתות כאן שיש לו זנב אמיתי.
+    deck['platforms']['youtube'].update(_youtube_studio())
     # Shorts מול רגיל — הפילוח היחיד שיש ביוטיוב
     deck['platforms']['youtube']['format_mix'] = {
         {'Regular': 'סרטון רגיל', 'Shorts': 'שורטס'}.get(t, t):
@@ -182,9 +187,11 @@ def build():
             blk = deck['platforms'][p]['yearly'].get(str(y))
             if blk:
                 blk['posts_in_views_window'] = len(g)
+    # הצפיות וזמן הצפייה מגיעים מ-Studio ומכסים את כל התקופה. רק **ספירת
+    # הפריטים** מגיעה מה-API, שחותך את פלייליסט ההעלאות ב-20,000.
     deck['platforms']['youtube']['coverage_note'] = (
-        'פלייליסט ההעלאות נחתך ב-20,000 פריטים מתוך 51,517 שהערוץ מדווח; '
-        'הכיסוי מלא מ-2022-08 ואילך')
+        'צפיות וזמן צפייה מייצוא Studio — 953 ימים רצופים, ללא פערים. '
+        'ספירת הפריטים מה-API, שחושף 20,000 סרטונים אחרונים (מ-08/2022)')
     deck['platforms']['tiktok']['coverage_note'] = (
         'נמשכו 3,993 מתוך 4,950 סרטונים; ההיסטוריה מתחילה ב-2025-02-17')
 
@@ -251,6 +258,55 @@ def build():
     deck.pop('_subs', None)
 
     return deck
+
+
+def _youtube_studio():
+    """צפיות, זמן צפייה ופילוח סוגי תוכן מייצוא Studio — 953 ימים, בלי פערים."""
+    ys = os.path.join(SRC, 'youtube_studio')
+    d = pd.read_csv(os.path.join(ys, 'daily_views.csv'))
+    d['Date'] = pd.to_datetime(d['Date'])
+
+    tot = pd.read_csv(os.path.join(ys, 'type_totals.csv'))
+    by_type = {}
+    for _, r in tot.iterrows():
+        name = {'Videos': 'סרטונים', 'Shorts': 'שורטס',
+                'Live stream': 'שידור חי'}.get(r['Content type'])
+        if not name:
+            continue
+        by_type[name] = {
+            'views': int(r['Views']),
+            'watch_hours': int(float(r['Watch time (hours)'])),
+            'avg_duration': str(r['Average view duration']),
+            'pct_viewed': float(r['Average percentage viewed (%)']),
+        }
+    total_watch = int(float(tot[tot['Content type'] == 'Total']
+                            ['Watch time (hours)'].iloc[0]))
+
+    bt = pd.read_csv(os.path.join(ys, 'daily_by_type.csv'))
+    bt['Date'] = pd.to_datetime(bt['Date'])
+    heb = {'Videos': 'סרטונים', 'Shorts': 'שורטס', 'Live stream': 'שידור חי'}
+    mix = {}
+    for t, g in bt.groupby('Content type'):
+        if t in heb:
+            mix[heb[t]] = {str(y): int(v) for y, v in
+                           g.groupby(g['Date'].dt.year)['Views'].sum().items()}
+
+    yearly = {}
+    for y, g in d.groupby(d['Date'].dt.year):
+        yearly[str(y)] = {'views': int(g['Views'].sum()), 'days': len(g)}
+
+    return {
+        'yearly_period': yearly,
+        'views_total': int(d['Views'].sum()),
+        'watch_hours': total_watch,
+        'by_type': by_type,
+        'views_mix': mix,
+        'monthly_views': [{'month': str(m), 'views': int(v)} for m, v in
+                          d.groupby(d['Date'].dt.to_period('M'))['Views'].sum().items()
+                          if str(m) >= VIEWS_FROM],
+        'source_note': ('צפיות בתקופה מייצוא YouTube Studio — לא "מה שתוכן '
+                        'השנה צבר עד היום"'),
+    }
 
 
 def ig_follows_by_format():

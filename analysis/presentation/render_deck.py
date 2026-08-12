@@ -53,8 +53,8 @@ HEB = {
 # בפייסבוק ובאינסטגרם, אחרת הצבע עוקב אחרי הסדר במקום אחרי הדבר עצמו.
 MIX_BY_NAME = {
     'וידאו': '#1D4ED8', 'רילס': '#1D4ED8', 'שורטס': '#1D4ED8',
-    'תמונה': '#B45309', 'סרטון רגיל': '#B45309',
-    'קרוסלה': '#15803D',
+    'תמונה': '#B45309', 'סרטון רגיל': '#B45309', 'סרטונים': '#B45309',
+    'קרוסלה': '#15803D', 'שידור חי': '#15803D',
     'סטטוס': '#6B7280', 'לינק': '#9CA3AF',
 }
 MIX = ['#1D4ED8', '#B45309', '#15803D', '#6B7280']
@@ -368,9 +368,40 @@ def s_output(d):
                  ''.join(body))
 
 
+def s_youtube_types(d):
+    """הפילוח שרק יוטיוב מאפשר: איפה הצפיות ואיפה זמן הצפייה — ואלה לא אותו מקום."""
+    b = d['platforms']['youtube']
+    types = b.get('by_type') or {}
+    if not types:
+        return ''
+    hi_v = max(t['views'] for t in types.values())
+    hi_w = max(t['watch_hours'] for t in types.values())
+    rows = ''
+    for i, (name, t) in enumerate(sorted(types.items(), key=lambda x: -x[1]['views'])):
+        c = mix_color(name, i)
+        rows += (
+            '<div class="ytr"><div class="ytn">%s<span>%s ממוצע · %.0f%% נצפו</span></div>'
+            '<div class="ytbar"><div style="width:%.1f%%;background:%s"></div></div>'
+            '<div class="ytv">%s</div>'
+            '<div class="ytbar"><div style="width:%.1f%%;background:%s"></div></div>'
+            '<div class="ytv">%s</div></div>'
+            % (esc(name), esc(t['avg_duration'].lstrip('0:') or t['avg_duration']),
+               t['pct_viewed'], t['views'] / hi_v * 100, c, num(short(t['views'])),
+               t['watch_hours'] / hi_w * 100, c, num(short(t['watch_hours']))))
+    return ('<div class="panel"><div class="ptitle">איפה הצפיות, ואיפה זמן הצפייה</div>'
+            '<div class="ythead"><div></div><div>צפיות</div><div></div>'
+            '<div>שעות צפייה</div><div></div></div>%s'
+            '<div class="foot">שורטס מביאים <b>34%% מהצפיות</b> אבל רק <b>4%% משעות '
+            'הצפייה</b>. שידור חי הוא ההפך: 1%% מהצפיות ו-7%% מהזמן. שתי מטרות שונות, '
+            'ומדידה לפי צפיות בלבד מסתירה את זה.</div></div>' % rows)
+
+
 def s_platform(d, p, extra_html=''):
     b = d['platforms'][p]
-    y = b.get('yearly', {})
+    y = dict(b.get('yearly', {}))
+    # ליוטיוב עדיפות לצפיות בתקופה מ-Studio על פני הצבירה לפי שנת פרסום
+    for k, v in (b.get('yearly_period') or {}).items():
+        y.setdefault(k, {}).update({'views': v['views']})
     years = [k for k in ('2024', '2025', '2026') if k in y]
     cells = []
     for k in years:
@@ -389,21 +420,27 @@ def s_platform(d, p, extra_html=''):
                      % (k, tag, num(short(v.get('views', 0))), num(fmt(n))))
     pts = b.get('monthly_views', [])
     note = b.get('coverage_note', '')
+    # כשיש פאנל ייעודי (יוטיוב), שורת ה-KPI מיותרת והשקף גולש בלעדיה
     extras = []
-    if y.get('2025', {}).get('watch_hours'):
-        tot_h = sum(v.get('watch_hours', 0) for v in y.values())
-        extras.append('<div class="kpi"><div class="kv">%s</div>'
-                      '<div class="kl">שעות צפייה מצטברות</div></div>' % num(fmt(tot_h)))
-    for lab, key in (('לייקים', 'likes'), ('תגובות', 'comments'), ('שיתופים', 'shares')):
-        tot = sum(v.get(key, 0) for v in y.values())
-        if tot:
+    if not extra_html:
+        tot_h = b.get('watch_hours') or sum(v.get('watch_hours', 0) for v in y.values())
+        if tot_h:
             extras.append('<div class="kpi"><div class="kv">%s</div>'
-                          '<div class="kl">%s</div></div>' % (num(short(tot)), lab))
+                          '<div class="kl">שעות צפייה</div></div>' % num(fmt(tot_h)))
+        for lab, key in (('לייקים', 'likes'), ('תגובות', 'comments'), ('שיתופים', 'shares')):
+            tot = sum(v.get(key, 0) for v in y.values())
+            if tot:
+                extras.append('<div class="kpi"><div class="kv">%s</div>'
+                              '<div class="kl">%s</div></div>' % (num(short(tot)), lab))
+    total_v = b.get('views_total') or sum(x['views'] for x in pts)
+    span = 'צפיות 2024–2026' if b.get('views_total') else 'צפיות מספטמבר 2024'
     body = [head(HEB[p], 'עוקבים: %s' % fmt(d['followers'].get(p, 0)),
-                 ('<div class="rnum">%s</div><div class="rlab">צפיות מספטמבר 2024</div>'
-                  % short(sum(x['views'] for x in pts))) if pts else ''),
+                 ('<div class="rnum">%s</div><div class="rlab">%s</div>'
+                  % (short(total_v), span)) if pts else ''),
             '<div class="yrow">%s</div>' % ''.join(cells),
-            ('<div class="panel grow">%s</div>' % sparkline(pts, BRAND[p], h=300)) if pts else '',
+            ('<div class="panel%s">%s</div>'
+             % ('' if extra_html else ' grow',
+                sparkline(pts, BRAND[p], h=200 if extra_html else 300))) if pts else '',
             ('<div class="kpirow">%s</div>' % ''.join(extras)) if extras else '',
             extra_html,
             ('<div class="foot">%s</div>' % esc(note)) if note else '']
@@ -529,9 +566,11 @@ def s_method(d):
             '<p>לכן: <b>ספירות, לייקים ותגובות</b> תקפים מינואר 2024. '
             '<b>צפיות וחשיפה</b> — מספטמבר 2024. קו שנמתח על פני הגבול הזה מראה צמיחה '
             'שהיא כולה שינוי מדידה.</p>'
-            '<p class="dim">היחידה בכל המצגת: <b>צפיות שנצברו לתוכן שפורסם באותה תקופה</b>, '
-            'מצטבר עד היום — ולא «צפיות באותו חודש». התוכן ותיק יותר צבר זמן רב יותר; '
-            'בפייסבוק, אינסטגרם וטיקטוק פוסט גמור תוך ארבעה ימים, וביוטיוב יש זנב אמיתי.</p>'
+            '<p class="dim">היחידה בפייסבוק, אינסטגרם וטיקטוק: <b>צפיות שנצברו לתוכן '
+            'שפורסם באותה תקופה</b>. פוסט שם גמור תוך ארבעה ימים, ולכן זה קרוב מאוד '
+            'ל«צפיות באותה תקופה». <b>יוטיוב נמדד אחרת ובכוונה</b> — צפיות בפועל '
+            'בתקופה, מייצוא Studio, כי לו יש זנב אמיתי: לפי שנת הפרסום הוא היה מסתכם '
+            'ב-547M, ובפועל נצפו 642M. בכל רשת נבחר המדד המדויק יותר עבורה.</p>'
             '</div>',
             _coverage_table()]
     return slide('הערת מדידה', 'השקף שמונע את השאלה מהקהל.', ''.join(body))
@@ -541,7 +580,8 @@ COVERAGE = [
     ('פייסבוק', 'ok:מספטמבר', 'ok:מלא', 'ok:מלא',
      'ייצוא Business Suite ל-2024 ו-2026; 2025 נמשך מה-Graph API'),
     ('אינסטגרם', 'ok:מספטמבר', 'ok:מלא', 'ok:מלא', 'שלושה ייצואי Business Suite'),
-    ('יוטיוב', 'ok:מלא', 'ok:מלא', 'ok:מלא', 'ה-API + ייצוא Studio למנויים'),
+    ('יוטיוב', 'ok:מלא', 'ok:מלא', 'ok:מלא',
+     'ייצוא Studio — צפיות, זמן צפייה ומנויים יומיים; ספירת פריטים מה-API'),
     ('טיקטוק', 'no:אין', 'part:מפברואר', 'ok:מלא', 'TikHub; הספק נעצר בפברואר 2025'),
     ('X', 'no:אין', 'no:אין', 'part:מיוני', 'הספק מגיע 13 יום אחורה בלבד'),
     ('ערוץ וואטסאפ', 'no:אין', 'no:אין', 'part:עוקבים', 'אין API כלל; גודל הקהל ידני'),
@@ -670,6 +710,17 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .tv{font-size:23px;font-weight:700}
 .todo{color:%(a)s;font-weight:700}
 /* אירועים */
+.ythead{display:grid;grid-template-columns:230px 1fr 110px 1fr 110px;gap:16px;
+  font-size:15px;color:%(m)s;font-weight:700;margin-bottom:10px}
+.ythead div:nth-child(2),.ythead div:nth-child(4){text-align:center}
+.ytr{display:grid;grid-template-columns:230px 1fr 110px 1fr 110px;gap:16px;
+  align-items:center;margin-bottom:12px}
+.ytn{font-size:22px;font-weight:700}
+.ytn span{display:block;font-size:14px;color:%(m)s;font-weight:400;margin-top:2px}
+.ytbar{height:26px;background:#ececec;border-radius:6px;overflow:hidden;
+  display:flex;justify-content:flex-end}
+.ytbar div{height:100%%;border-radius:6px}
+.ytv{font-size:22px;font-weight:700;text-align:left}
 .evlist{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;padding:6px 0}
 .ev{display:grid;grid-template-columns:118px 1fr 190px 330px;gap:22px;align-items:center}
 .evd{font-size:20px;font-weight:700;color:%(m)s;direction:ltr;text-align:right}
@@ -712,7 +763,7 @@ def render():
     slides = [
         s_cover(d), s_assets(d), s_growth(d), s_audience(d), s_output(d),
         s_platform(d, 'facebook'), s_platform(d, 'instagram', ig_extra),
-        s_platform(d, 'youtube'), s_platform(d, 'tiktok'),
+        s_platform(d, 'youtube', s_youtube_types(d)), s_platform(d, 'tiktok'),
         s_thin(d), s_events(d), s_top(d), s_method(d),
     ]
     slides = [s for s in slides if s]
