@@ -82,9 +82,22 @@ ICONS = {
     'instagram': '<rect x="3" y="3" width="18" height="18" rx="5.4" fill="none" stroke="#E4405F"'
                  ' stroke-width="1.9"/><circle cx="12" cy="12" r="4" fill="none" stroke="#E4405F"'
                  ' stroke-width="1.9"/><circle cx="17.4" cy="6.6" r="1.1" fill="#E4405F"/>',
-    'tiktok': '<rect width="24" height="24" rx="6" fill="#111"/><path d="M14 4c.3 1.9 1.5 3.1 3.4'
-              ' 3.3v2.4c-1.1 0-2.2-.3-3.1-.9v4.7c0 2.6-2 4.5-4.5 4.5S5.3 20.1 5.3 17.6c0-2.3 1.7'
-              '-4.2 4-4.4v2.5c-.9.2-1.6 1-1.6 1.9 0 1.1.9 2 2 2s2-.9 2-2V4z" fill="#FBBF24"/>',
+    # הלוגו האמיתי: תו מוזיקלי עם הדגלון, ובשלוש השכבות של המותג —
+    # ציאן ומג'נטה מוסטים מאחורי הלבן. הגרסה הקודמת הייתה צורה מומצאת בצהוב.
+    'tiktok': '<rect width="24" height="24" rx="6" fill="#010101"/>'
+              '<g transform="translate(3.2 3.2) scale(0.72)">'
+              '<path d="M16.6 5.82A4.28 4.28 0 0 1 15.54 3h-3.09v12.4a2.59 2.59 0 0 1-2.59 2.5'
+              'c-1.42 0-2.6-1.16-2.6-2.6 0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22'
+              '-6.47 5.64 0 3.33 2.76 5.7 5.69 5.7 3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0'
+              ' 4.3 1.38V7.3s-1.88.09-3.24-1.48z" fill="#25F4EE" transform="translate(-1 -1)"/>'
+              '<path d="M16.6 5.82A4.28 4.28 0 0 1 15.54 3h-3.09v12.4a2.59 2.59 0 0 1-2.59 2.5'
+              'c-1.42 0-2.6-1.16-2.6-2.6 0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22'
+              '-6.47 5.64 0 3.33 2.76 5.7 5.69 5.7 3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0'
+              ' 4.3 1.38V7.3s-1.88.09-3.24-1.48z" fill="#FE2C55" transform="translate(1 1)"/>'
+              '<path d="M16.6 5.82A4.28 4.28 0 0 1 15.54 3h-3.09v12.4a2.59 2.59 0 0 1-2.59 2.5'
+              'c-1.42 0-2.6-1.16-2.6-2.6 0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22'
+              '-6.47 5.64 0 3.33 2.76 5.7 5.69 5.7 3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0'
+              ' 4.3 1.38V7.3s-1.88.09-3.24-1.48z" fill="#fff"/></g>',
     'twitter': '<rect width="24" height="24" rx="6" fill="#000"/><path d="M6.3 6h2.7l3.1 4.2L15.6'
                ' 6h2.1l-4.3 5.7L18 18h-2.7l-3.3-4.5L8.4 18H6.3l4.5-6z" fill="#fff"/>',
     'whatsapp': '<rect width="24" height="24" rx="6" fill="#25D366"/><path d="M12 5.5c-3.6 0-6.5'
@@ -478,45 +491,24 @@ def s_output(d):
                  ''.join(body))
 
 
-def s_youtube_types(d):
-    """הפילוח שרק יוטיוב מאפשר: איפה הצפיות ואיפה זמן הצפייה — ואלה לא אותו מקום."""
-    b = d['platforms']['youtube']
-    types = b.get('by_type') or {}
-    if not types:
-        return ''
-    hi_v = max(t['views'] for t in types.values())
-    hi_w = max(t['watch_hours'] for t in types.values())
-    rows = ''
-    for i, (name, t) in enumerate(sorted(types.items(), key=lambda x: -x[1]['views'])):
-        c = mix_color(name, i)
-        rows += (
-            '<div class="ytr"><div class="ytn">%s<span>%s ממוצע · %.0f%% נצפו</span></div>'
-            '<div class="ytbar"><div style="width:%.1f%%;background:%s"></div></div>'
-            '<div class="ytv">%s</div>'
-            '<div class="ytbar"><div style="width:%.1f%%;background:%s"></div></div>'
-            '<div class="ytv">%s</div></div>'
-            % (esc(name), esc(t['avg_duration'].lstrip('0:') or t['avg_duration']),
-               t['pct_viewed'], t['views'] / hi_v * 100, c, num(short(t['views'])),
-               t['watch_hours'] / hi_w * 100, c, num(short(t['watch_hours']))))
-    return ('<div class="panel"><div class="ptitle">איפה הצפיות, ואיפה זמן הצפייה</div>'
-            '<div class="ythead"><div></div><div>צפיות</div><div></div>'
-            '<div>שעות צפייה</div><div></div></div>%s'
-            '<div class="foot">שורטס מביאים <b>34%% מהצפיות</b> אבל רק <b>4%% משעות '
-            'הצפייה</b>. שידור חי הוא ההפך: 1%% מהצפיות ו-7%% מהזמן. שתי מטרות שונות, '
-            'ומדידה לפי צפיות בלבד מסתירה את זה.</div></div>' % rows)
+def s_platform(d, p):
+    """שקף עומק לרשת אחת. כל מה שנוגע לרשת נמצא כאן ולא מפוזר בין שקפים.
 
-
-def s_platform(d, p, extra_html=''):
+    מבנה קבוע לכל הרשתות, כדי שהעין תלמד אותו פעם אחת: שלושה כרטיסי שנים,
+    גרף חודשי עם האירועים, ושתי לוחיות עומק — התמהיל, והמדד הייחודי לרשת.
+    בלי הערות שוליים מפוזרות: כל הסתייגויות המדידה מרוכזות בשקף האחרון.
+    """
     b = d['platforms'][p]
     y = dict(b.get('yearly', {}))
-    # ליוטיוב עדיפות לצפיות בתקופה מ-Studio על פני הצבירה לפי שנת פרסום
     for k, v in (b.get('yearly_period') or {}).items():
         y.setdefault(k, {}).update({'views': v['views']})
-    years = [k for k in ('2024', '2025', '2026') if k in y]
+    pts = b.get('monthly_views', [])
+    marks = [{'month': w['peak_date'][:7], 'label': w.get('short') or w['name']}
+             for w in ((d.get('events') or {}).get('windows') or [])]
+
     cells = []
-    for k in years:
+    for k in [k for k in ('2024', '2025', '2026') if k in y]:
         v = y[k]
-        # ספירת הפריטים שהצפיות באמת מתייחסות אליהם, לא של השנה כולה
         n = v.get('posts_in_views_window') or v.get('posts', 0)
         win = v.get('views_window')
         tag = ''
@@ -528,35 +520,111 @@ def s_platform(d, p, extra_html=''):
                      '<div class="yv">%s</div><div class="yl">צפיות</div>'
                      '<div class="ys">%s פריטים</div></div>'
                      % (k, tag, num(short(v.get('views', 0))), num(fmt(n))))
-    pts = b.get('monthly_views', [])
-    note = b.get('coverage_note', '')
-    # כשיש פאנל ייעודי (יוטיוב), שורת ה-KPI מיותרת והשקף גולש בלעדיה
-    extras = []
-    if not extra_html:
-        tot_h = b.get('watch_hours') or sum(v.get('watch_hours', 0) for v in y.values())
-        if tot_h:
-            extras.append('<div class="kpi"><div class="kv">%s</div>'
-                          '<div class="kl">שעות צפייה</div></div>' % num(fmt(tot_h)))
-        for lab, key in (('לייקים', 'likes'), ('תגובות', 'comments'), ('שיתופים', 'shares')):
-            tot = sum(v.get(key, 0) for v in y.values())
-            if tot:
-                extras.append('<div class="kpi"><div class="kv">%s</div>'
-                              '<div class="kl">%s</div></div>' % (num(short(tot)), lab))
-    total_v = b.get('views_total') or sum(x['views'] for x in pts)
-    span = 'צפיות 2024–2026' if b.get('views_total') else 'צפיות מספטמבר 2024'
+
     body = [head(HEB[p], 'עוקבים: %s' % fmt(d['followers'].get(p, 0)),
-                 ('<div class="rnum">%s</div><div class="rlab">%s</div>'
-                  % (short(total_v), span)) if pts else ''),
+                 ('<div class="rnum">%s</div><div class="rlab">סך הצפיות</div>'
+                  % short(b.get('views_total') or sum(x['views'] for x in pts)))
+                 if pts else ''),
             '<div class="yrow" style="grid-template-columns:repeat(%d,1fr)">%s</div>'
             % (len(cells), ''.join(cells)),
-            ('<div class="panel%s">%s</div>'
-             % ('' if extra_html else ' grow',
-                sparkline(pts, BRAND[p], h=200 if extra_html else 300))) if pts else '',
-            ('<div class="kpirow" style="grid-template-columns:repeat(%d,1fr)">%s</div>'
-             % (len(extras), ''.join(extras))) if extras else '',
-            extra_html,
-            ('<div class="foot">%s</div>' % esc(note)) if note else '']
+            ('<div class="panel chartpanel">%s</div>'
+             % sparkline(pts, BRAND[p], h=210, marks=marks, legend=False)) if pts else '',
+            _deep_row(d, p)]
     return slide(HEB[p], 'עומק לרשת %s.' % HEB[p], ''.join(body))
+
+
+def _deep_row(d, p):
+    """שתי לוחיות עומק — או אחת ברוחב מלא, אם לרשת אין תמהיל פורמטים."""
+    mix, depth = _mix_panel(d, p), _depth_panel(d, p)
+    if not mix:
+        return '<div class="grid1 deep">%s</div>' % depth
+    return '<div class="grid2 deep">%s%s</div>' % (mix, depth)
+
+
+def _mix_panel(d, p):
+    """תמהיל הפורמטים של הרשת, ינואר–יולי בכל שנה."""
+    mix = d['platforms'][p].get('format_mix') or {}
+    if not mix:
+        return ''
+    rows = ''
+    for yr in ('2024', '2025', '2026'):
+        seg = [(k, v.get(yr, 0), mix_color(k, i))
+               for i, (k, v) in enumerate(sorted(mix.items()))]
+        seg = [s for s in seg if s[1]]
+        if not seg:
+            continue
+        seg.sort(key=lambda s: -s[1])
+        rows += ('<div class="mixrow"><div class="my">%s</div>%s<div class="mt">%s</div></div>'
+                 % (yr, stacked(seg), num(fmt(sum(s[1] for s in seg)))))
+    ytd = d['platforms'][p].get('posts_ytd') or {}
+    note = ''
+    if ytd.get('2024') and ytd.get('2026'):
+        pct = (ytd['2026'] / ytd['2024'] - 1) * 100
+        note = ('<div class="mixnote">נפח הפרסום <span class="%s">%s</span> '
+                'מ-2024 ל-2026</div>'
+                % ('up' if pct >= 0 else 'down', num('%+.0f%%' % pct)))
+    return ('<div class="panel"><div class="ptitle">מה פרסמנו · ינואר–יולי</div>'
+            '<div class="mixlist">%s</div>%s</div>' % (rows, note))
+
+
+def _depth_panel(d, p):
+    """המדד הייחודי לכל רשת — מה שרק היא יודעת לספר."""
+    b = d['platforms'][p]
+    top = ''
+    for yr, items in sorted((d.get('top_content') or {}).items(), reverse=True):
+        for it in items:
+            if it['platform'] == p:
+                written = (d.get('editorial') or {}).get('slides') or {}
+                t = it['title'] or written.get('top_%s_%s' % (yr, p), '')
+                top = ('<div class="topitem"><div class="tl">הפריט הגדול · %s</div>'
+                       '<div class="tx">%s</div><div class="tn">%s צפיות</div></div>'
+                       % (yr, esc(t), num(short(it['views']))))
+                break
+        if top:
+            break
+
+    if p == 'youtube':
+        types = b.get('by_type') or {}
+        hi_v = max((t['views'] for t in types.values()), default=1)
+        hi_w = max((t['watch_hours'] for t in types.values()), default=1)
+        rows = ''
+        for i, (name, t) in enumerate(sorted(types.items(), key=lambda x: -x[1]['views'])):
+            c = mix_color(name, i)
+            rows += ('<div class="ytr"><div class="ytn">%s</div>'
+                     '<div class="ytbar"><div style="width:%.1f%%;background:%s"></div></div>'
+                     '<div class="ytv">%s</div>'
+                     '<div class="ytbar"><div style="width:%.1f%%;background:%s"></div></div>'
+                     '<div class="ytv">%s</div></div>'
+                     % (esc(name), t['views'] / hi_v * 100, c, num(short(t['views'])),
+                        t['watch_hours'] / hi_w * 100, c, num(short(t['watch_hours']))))
+        return ('<div class="panel"><div class="ptitle">צפיות מול זמן צפייה</div>'
+                '<div class="ythead"><div></div><div>צפיות</div><div></div>'
+                '<div>שעות</div><div></div></div>%s'
+                '<div class="mixnote">שורטס מביאים שליש מהצפיות ו-4%% מהזמן.</div>'
+                '</div>' % rows)
+
+    if p == 'instagram':
+        f = d.get('instagram_follows_by_format') or {}
+        order = sorted(f.items(), key=lambda x: -x[1]['per_1k_views'])
+        hi = order[0][1]['per_1k_views'] if order else 1
+        bars = ''.join(
+            bar_row('<div class="pl"><div class="pn">%s</div></div>' % esc(k),
+                    v['per_1k_views'], hi, mix_color(k, i),
+                    num('%.2f' % v['per_1k_views']), '')
+            for i, (k, v) in enumerate(order))
+        return ('<div class="panel"><div class="ptitle">מה ממיר צופה לעוקב · '
+                'עוקבים לכל 1,000 צפיות</div><div class="barlist">%s</div>%s</div>'
+                % (bars, top))
+
+    if p == 'facebook':
+        fb = d.get('facebook_follows') or {}
+        pts = [{'month': c['month'], 'views': c['total']} for c in fb.get('cumulative', [])]
+        return ('<div class="panel"><div class="ptitle">הצטרפויות לעמוד · מצטבר</div>'
+                '%s<div class="mixnote">%s הצטרפו מינואר 2024 (ברוטו)</div>%s</div>'
+                % (sparkline(pts, BRAND['facebook'], h=150, legend=False),
+                   num('+%s' % fmt(fb.get('total_gross', 0))), top))
+
+    return '<div class="panel">%s</div>' % (top or '')
 
 
 def s_thin(d):
@@ -812,6 +880,16 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .cs{font-size:16px;color:%(m)s;margin-top:2px}
 .panel{background:#fff;border:1px solid %(g)s;border-radius:14px;padding:24px 26px;margin-top:18px}
 .panel.grow{flex:1;display:flex;flex-direction:column;justify-content:center}
+.panel.chartpanel{flex:1;display:flex;flex-direction:column;justify-content:center;
+  margin-top:16px;margin-bottom:16px}
+.grid2.deep{flex:none;gap:22px}
+.grid1.deep{display:grid;grid-template-columns:1fr}
+.grid1.deep .panel{margin-top:0}
+.grid2.deep .panel{margin-top:0;display:flex;flex-direction:column}
+.topitem{margin-top:auto;padding-top:14px;border-top:1px solid %(g)s}
+.tl{font-size:14px;color:%(m)s;font-weight:700}
+.tx{font-size:18px;line-height:1.35;margin:5px 0 6px}
+.tn{font-size:20px;font-weight:700}
 .panel.grow .barlist{flex:1;justify-content:space-evenly}
 /* גרף: ה-SVG נמתח, התוויות לא — לכן הן מחוצה לו */
 .chart{position:relative;padding:0 0 22px 0}
@@ -982,11 +1060,19 @@ FIT_SCRIPT = """
 
 def render():
     d = json.load(open(DATA, encoding='utf-8'))
+    # הסדר הוא הסיפור: מי אנחנו, מה המספרים, מה הניע אותם, ואז לעומק
+    # בכל רשת. כל מה שנוגע לרשת אחת יושב בשקף שלה ולא חוזר במקום אחר.
     slides = [
-        s_cover(d), s_assets(d), s_growth(d), s_audience(d), s_output(d),
-        s_platform(d, 'facebook'), s_platform(d, 'instagram', s_ig_conversion(d)),
-        s_platform(d, 'youtube', s_youtube_types(d)), s_platform(d, 'tiktok'),
-        s_thin(d), s_events(d), s_top(d), s_method(d),
+        s_cover(d),
+        s_assets(d),          # מבט כללי — מה מצבנו
+        s_growth(d),          # המספרים והעלייה בכל שנה
+        s_events(d),          # מה הניע אותם
+        s_platform(d, 'facebook'),
+        s_platform(d, 'instagram'),
+        s_platform(d, 'youtube'),
+        s_platform(d, 'tiktok'),
+        s_thin(d),
+        s_method(d),
     ]
     slides = [s for s in slides if s]
     css = CSS % {'f': FONTS, 'a': ACCENT, 'ink': INK, 'm': MUTED, 'g': GRID}

@@ -13,6 +13,10 @@ import sys
 
 from playwright.sync_api import sync_playwright
 
+# הקונסולה של Windows היא cp1255 ונופלת על אמוג'י באמצע דוח תקין
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 DECK = os.path.join(HERE, 'deck.html')
 SHOTS = os.path.join(HERE, 'shots')
@@ -30,6 +34,16 @@ def main():
         page.wait_for_timeout(1200)          # שהגופנים ייטענו
 
         n = page.locator('section').count()
+        # גלישה מתחת לקו 1080 לא נראית בצילום — הצילום חותך בדיוק שם.
+        # לכן נמדדת כאן במפורש, אחרת שקף "נראה תקין" ומאבד את השורה האחרונה.
+        over = page.evaluate("""() => [...document.querySelectorAll('section')].map(s => {
+            let low = 0;
+            s.querySelectorAll('*').forEach(el => {
+              const b = el.getBoundingClientRect(), p = s.getBoundingClientRect();
+              low = Math.max(low, b.bottom - p.top);
+            });
+            return Math.round(low);
+        })""")
         for i in range(n):
             if want and (i + 1) not in want:
                 continue
@@ -37,7 +51,9 @@ def main():
             label = sec.get_attribute('data-label') or str(i + 1)
             path = os.path.join(SHOTS, '%02d.png' % (i + 1))
             sec.screenshot(path=path)
-            print('  %02d  %s' % (i + 1, label))
+            spill = over[i] - 1080
+            flag = '  << גלישה %dpx' % spill if spill > 2 else ''
+            print('  %02d  %-22s תחתית %4d%s' % (i + 1, label, over[i], flag))
 
         if '--pdf' in sys.argv:
             pdf = os.path.join(HERE, 'deck.pdf')

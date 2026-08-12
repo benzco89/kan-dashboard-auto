@@ -188,6 +188,12 @@ def build():
     # וכולו הזנב של יוטיוב, שהוא היחיד מהרשתות כאן שיש לו זנב אמיתי.
     deck['platforms']['youtube'].update(_youtube_studio())
     # Shorts מול רגיל — הפילוח היחיד שיש ביוטיוב
+    # לטיקטוק יש פילוח משלו — וידאו מול קרוסלת תמונות
+    tt_ytd = _ytd(tt)
+    deck['platforms']['tiktok']['format_mix'] = {
+        {'Video': 'וידאו', 'Photo': 'קרוסלה'}.get(t, t):
+            {str(y): int(v) for y, v in g.groupby(g['dt'].dt.year).size().items()}
+        for t, g in tt_ytd.groupby('type')}
     yt_ytd = _ytd(yt)
     deck['platforms']['youtube']['format_mix'] = {
         {'Regular': 'סרטון רגיל', 'Shorts': 'שורטס'}.get(t, t):
