@@ -365,9 +365,11 @@ def _youtube_studio():
         'watch_hours': total_watch,
         'by_type': by_type,
         'views_mix': mix,
+        # **לא** מוגבל ל-VIEWS_FROM: גבול ספטמבר 2024 הוא של מטא בלבד.
+        # להחיל אותו כאן היה מסתיר 153,867,031 צפיות אמיתיות של ינואר–אוגוסט.
         'monthly_views': [{'month': str(m), 'views': int(v)} for m, v in
                           d.groupby(d['Date'].dt.to_period('M'))['Views'].sum().items()
-                          if VIEWS_FROM <= str(m) <= CUTOFF_MONTH],
+                          if str(m) <= CUTOFF_MONTH],
         'source_note': ('צפיות בתקופה מייצוא YouTube Studio — לא "מה שתוכן '
                         'השנה צבר עד היום"'),
     }
@@ -499,6 +501,7 @@ def measure_events(yt, tt, subs, fb_follows, events):
         peak = win.idxmax()
         out.append({
             'key': key, 'name': meta.get('name', ''),
+            'short': meta.get('short') or meta.get('name', ''),
             'from': str(s), 'to': str(e), 'days': days,
             'views': int(win.sum()),
             'vs_typical': round(float(win.sum()) / days / med, 1),
@@ -685,12 +688,16 @@ EDITORIAL_SEED = {
     # להוסיף אירוע: מפתח כלשהו עם from/to/name. `show: false` מסתיר.
     "events": {
         "am_kelavia": {"name": "מבצע «עם כלביא» — מלחמת 12 הימים",
+                       "short": "עם כלביא",
                        "from": "2025-06-13", "to": "2025-06-24", "show": True},
         "hostages_end": {"name": "שחרור החטופים וסיום מלחמת חרבות ברזל",
+                         "short": "שחרור החטופים",
                          "from": "2025-10-09", "to": "2025-10-20", "show": True},
         "shaagat_haari": {"name": "מבצע «שאגת הארי»",
+                          "short": "שאגת הארי",
                           "from": "2026-02-28", "to": "2026-03-31", "show": True},
         "bibas": {"name": "החזרת חללי משפחת ביבס ושחרור אברה מנגיסטו",
+                  "short": "ביבס ומנגיסטו",
                   "from": "2025-02-20", "to": "2025-02-27", "show": True},
     },
     "_how_to_edit": ("כל טקסט כאן נכתב ביד ושורד הרצה חוזרת של הסקריפט. "

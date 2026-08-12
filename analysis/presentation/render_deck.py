@@ -123,7 +123,8 @@ def icon(p, size=44):
 
 # ---------- גרפים ----------
 
-def sparkline(points, color, h=250, key='views', zero_base=True, marks=None):
+def sparkline(points, color, h=250, key='views', zero_base=True, marks=None,
+              legend=True):
     """סדרה אחת, נמתחת לרוחב ההורה. אין מקרא — הכותרת מעל מזהה אותה.
 
     ה-SVG נשלט ב-viewBox ו-`width:100%%` ולא ברוחב קבוע: רוחב קבוע בתוך גריד
@@ -179,20 +180,20 @@ def sparkline(points, color, h=250, key='views', zero_base=True, marks=None):
                'stroke-width="2"/>' % (x, y, color))
     out.append('</svg>')
     # התוויות מחוץ ל-SVG: preserveAspectRatio="none" היה מותח אותן לרוחב
-    legend = ''
-    if flags:
-        legend = ('<div class="marks"><div class="mkh">החודשים הגדולים — '
+    leg = ''
+    if flags and legend:
+        leg = ('<div class="marks"><div class="mkh">החודשים הגדולים — '
                   'ולצדם התוכן הגדול באותו חודש</div>%s</div>') % ''.join(
             '<div class="mk"><span class="mkn">%s</span>'
             '<span class="mkm">%s</span><span class="mkt">%s%s</span></div>'
             % (num('+%s' % fmt(mk['gain'])), esc(mk['month']),
                icon(mk['headline_platform'], 18) if mk.get('headline_platform') else '',
                esc(mk.get('headline', '')))
-            for _, mk in sorted(flags, key=lambda f: -f[1]['gain']))
+            for _, mk in sorted(flags, key=lambda f: -f[1].get('gain', 0)))
     return ('<div class="chart"><div class="cy"><span>%s</span><span>%s</span></div>%s'
             '<div class="cx"><span>%s</span><span>%s</span></div></div>%s'
             % (short(hi), short(lo) if lo else '0', ''.join(out),
-               esc(points[0]['month']), esc(points[-1]['month']), legend))
+               esc(points[0]['month']), esc(points[-1]['month']), leg))
 
 
 def bar_row(label_html, value, hi, color, right_text, sub='', missing=False):
@@ -318,24 +319,51 @@ def s_assets(d):
 
 
 def s_growth(d):
-    """סדרות קטנות. שש רשתות בגרף אחד היו נכשלות בהפרדת צבע — ראו התיעוד."""
+    """סדרות קטנות, עם האירועים מסומנים על כל אחת.
+
+    הסימון הוא מה שהופך את השקף מ"מי עלה ומי ירד" ל"למה": הפסגות יושבות על
+    המלחמות ועל שחרור החטופים, וכשרואים את זה על ארבעת הגרפים יחד ברור
+    שהתנועה היא מחזור חדשותי ולא הישג או כישלון ניהולי. אין צורך לכתוב את
+    זה במילים — הגרף אומר את זה.
+    """
+    # חודש השיא של כל אירוע, לסימון על הסדרות החודשיות
+    marks = [{'month': w['peak_date'][:7], 'label': w.get('short') or w['name']}
+             for w in ((d.get('events') or {}).get('windows') or [])]
     cards = []
     for p in ('facebook', 'instagram', 'youtube', 'tiktok'):
         pts = d['platforms'][p].get('monthly_views', [])
         if not pts:
             continue
         tot = sum(x['views'] for x in pts)
+        # ינואר–יולי מול אותו חלון אשתקד — מי שמחפש את זה ימצא, בלי שקף
+        # נפרד שצועק «נכשלנו כאן»
+        ytd = {}
+        for m in pts:
+            if m['month'][5:7] <= '07':
+                ytd[m['month'][:4]] = ytd.get(m['month'][:4], 0) + m['views']
+        yrs = sorted(ytd)
+        delta = ''
+        if len(yrs) >= 2 and ytd[yrs[-2]]:
+            pct = (ytd[yrs[-1]] / ytd[yrs[-2]] - 1) * 100
+            delta = ('<div class="cd %s">%s <span>ינואר–יולי, %s מול %s</span></div>'
+                     % ('up' if pct >= 0 else 'down', num('%+.0f%%' % pct),
+                        yrs[-1], yrs[-2]))
         cards.append(
             '<div class="card"><div class="ch">%s<div><div class="pn">%s</div>'
-            '<div class="cs">%s צפיות · %s עד %s</div></div></div>%s</div>'
+            '<div class="cs">%s צפיות · %s עד %s</div></div>%s</div>%s</div>'
             % (icon(p, 34), esc(HEB[p]), short(tot),
-               esc(pts[0]['month']), esc(pts[-1]['month']),
-               sparkline(pts, BRAND[p], h=210)))
-    body = [head('הצמיחה', 'צפיות חודשיות, ספטמבר 2024 – יולי 2026', ''),
+               esc(pts[0]['month']), esc(pts[-1]['month']), delta,
+               sparkline(pts, BRAND[p], h=210, marks=marks, legend=False)))
+    ev = ((d.get('events') or {}).get('windows') or [])
+    legend = ''.join('<span class="elg"><i></i>%s</span>' % esc(w.get('short') or w['name'])
+                     for w in ev)
+    body = [head('הצמיחה', 'צפיות חודשיות · האירועים מסומנים על כל גרף', ''),
+            ('<div class="elegend">%s</div>' % legend) if legend else '',
             '<div class="grid2">%s</div>' % ''.join(cards),
             '<div class="foot">כל גרף בקנה מידה משלו — ההשוואה היא של <b>מגמה</b>, '
-            'לא של גובה; הערך המרבי מסומן על ציר ה-Y. הערכים המוחלטים בשקף הקודם. '
-            'טיקטוק מתחיל בפברואר 2025, מגבלת הספק.</div>']
+            'לא של גובה; הערך המרבי מסומן על ציר ה-Y. הקווים המקווקווים הם חודשי '
+            'השיא של האירועים. יוטיוב מתחיל בינואר 2024 (לו יש סדרה מלאה), '
+            'פייסבוק ואינסטגרם בספטמבר 2024 וטיקטוק בפברואר 2025 — ראו שקף המדידה.</div>']
     return slide('הצמיחה', 'ארבע רשתות, כל אחת בקנה המידה שלה. משווים מגמה.', ''.join(body))
 
 
@@ -798,6 +826,13 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .delta .mono{font-size:32px;font-weight:700;line-height:1;color:#186a2e}
 .delta span{display:block;font-size:14px;color:%(m)s;margin-top:2px;font-weight:400}
 .delta span .mono{font-size:14px;font-weight:400;color:%(m)s}
+.cd{margin-inline-start:auto;text-align:left;font-size:24px;font-weight:700;white-space:nowrap}
+.cd span{display:block;font-size:13px;color:%(m)s;font-weight:400;margin-top:1px}
+.cd.up{color:#186a2e}
+.cd.down{color:#b42318}
+.elegend{display:flex;gap:26px;margin-bottom:14px;font-size:16px;color:#444}
+.elg{display:flex;align-items:center;gap:8px}
+.elg i{width:18px;height:0;border-top:2px dashed %(a)s;display:inline-block}
 .marks{display:flex;flex-direction:column;gap:7px;margin-top:10px;
   border-top:1px solid %(g)s;padding-top:10px}
 .mk{display:grid;grid-template-columns:96px 74px 1fr;gap:10px;align-items:baseline}
