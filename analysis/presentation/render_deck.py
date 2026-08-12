@@ -123,7 +123,7 @@ def icon(p, size=44):
 
 # ---------- גרפים ----------
 
-def sparkline(points, color, h=250, key='views', zero_base=True):
+def sparkline(points, color, h=250, key='views', zero_base=True, marks=None):
     """סדרה אחת, נמתחת לרוחב ההורה. אין מקרא — הכותרת מעל מזהה אותה.
 
     ה-SVG נשלט ב-viewBox ו-`width:100%%` ולא ברוחב קבוע: רוחב קבוע בתוך גריד
@@ -159,15 +159,40 @@ def sparkline(points, color, h=250, key='views', zero_base=True):
     out.append('<polyline points="%s" fill="none" stroke="%s" stroke-width="2.5" '
                'stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'
                % (' '.join('%.1f,%.1f' % xy for xy in pts), color))
+    # סימוני אירועים: קו אנכי + נקודה על החודש שבו הייתה הקפיצה
+    idx = {p['month']: i for i, p in enumerate(points)}
+    flags = []
+    for mk in (marks or []):
+        i = idx.get(mk['month'])
+        if i is None:
+            continue
+        mx, my = pts[i]
+        out.append('<line x1="%.1f" y1="%.1f" x2="%.1f" y2="%.1f" stroke="%s" '
+                   'stroke-width="1.5" stroke-dasharray="4 4" opacity=".55"/>'
+                   % (mx, pad_t, mx, base, ACCENT))
+        out.append('<circle cx="%.1f" cy="%.1f" r="6" fill="%s" stroke="#fff" '
+                   'stroke-width="2.5"/>' % (mx, my, ACCENT))
+        flags.append((mx / W * 100, mk))
+
     x, y = pts[-1]
     out.append('<circle cx="%.1f" cy="%.1f" r="5" fill="%s" stroke="#fff" '
                'stroke-width="2"/>' % (x, y, color))
     out.append('</svg>')
     # התוויות מחוץ ל-SVG: preserveAspectRatio="none" היה מותח אותן לרוחב
+    legend = ''
+    if flags:
+        legend = ('<div class="marks"><div class="mkh">החודשים הגדולים — '
+                  'ולצדם התוכן הגדול באותו חודש</div>%s</div>') % ''.join(
+            '<div class="mk"><span class="mkn">%s</span>'
+            '<span class="mkm">%s</span><span class="mkt">%s%s</span></div>'
+            % (num('+%s' % fmt(mk['gain'])), esc(mk['month']),
+               icon(mk['headline_platform'], 18) if mk.get('headline_platform') else '',
+               esc(mk.get('headline', '')))
+            for _, mk in sorted(flags, key=lambda f: -f[1]['gain']))
     return ('<div class="chart"><div class="cy"><span>%s</span><span>%s</span></div>%s'
-            '<div class="cx"><span>%s</span><span>%s</span></div></div>'
+            '<div class="cx"><span>%s</span><span>%s</span></div></div>%s'
             % (short(hi), short(lo) if lo else '0', ''.join(out),
-               esc(points[0]['month']), esc(points[-1]['month'])))
+               esc(points[0]['month']), esc(points[-1]['month']), legend))
 
 
 def bar_row(label_html, value, hi, color, right_text, sub='', missing=False):
@@ -294,35 +319,61 @@ def s_growth(d):
 
 
 def s_audience(d):
+    """כמה גדלנו, ומתי — לא כמה נוספו אתמול.
+
+    שתי העקומות מצטברות בכוונה: השאלה היא «בכמה גדל הקהל בשנתיים», והקצב
+    היומי עונה על שאלה אחרת. הקפיצות מסומנות על העקומה עצמה, וכל אחת נושאת
+    את הכותרת של הפריט הגדול באותו חודש.
+    """
     ys = d['youtube_subscribers']
     fb = d['facebook_follows']
     pts = [{'month': s['month'], 'views': s['subs']} for s in ys['series']]
-    growth = [(y, v) for y, v in sorted(ys['by_year'].items())]
-    rows = ''.join('<tr><td>%s%s</td><td>%s</td></tr>'
-                   % (y, ' <span class="dimx">(חלקית)</span>' if y == '2026' else '',
-                      signed(v)) for y, v in growth)
-    fb_pts = [{'month': m['month'], 'views': m['follows']} for m in fb['monthly']]
-    body = [head('הקהל', 'מי מצטרף, ובאיזה קצב', ''),
+    fb_pts = [{'month': c['month'], 'views': c['total']} for c in fb['cumulative']]
+    gross = fb['total_gross']
+    net = int(gross * fb['net_ratio'])
+
+    body = [head('בכמה גדלנו', 'ינואר 2024 עד יולי 2026',
+                 '<div class="rnum">%s</div><div class="rlab">קהל בכל הרשתות היום</div>'
+                 % fmt(sum(d['followers'].values()))),
             '<div class="grid2">'
             '<div class="card"><div class="ch">%s<div><div class="pn">מנויי יוטיוב</div>'
-            '<div class="cs">%s ל-%s · %s (%s)</div></div></div>%s'
-            '<table class="mini">%s</table>'
-            '<div class="note">הקצב מואט משנה לשנה — וזאת בזמן שהקהל החודשי '
-            'מצטמצם מ-%s ל-%s. הערוץ ממיר חלק גדול יותר מקהל קטן יותר.</div></div>'
+            '<div class="cs">%s ← %s</div></div>'
+            '<div class="delta">%s<span>%s</span></div></div>%s</div>'
             % (icon('youtube', 34), num(fmt(ys['start'])), num(fmt(ys['end'])),
                signed(ys['end'] - ys['start']),
                num('%.0f%%' % ((ys['end'] / ys['start'] - 1) * 100)),
-               sparkline(pts, BRAND['youtube'], h=200, zero_base=False), rows,
-               short(d['youtube_audience'].get('2024', 0)),
-               short(d['youtube_audience'].get('2026', 0))),
+               sparkline(pts, BRAND['youtube'], h=210, zero_base=False,
+                         marks=ys.get('top_months'))),
             '<div class="card"><div class="ch">%s<div><div class="pn">הצטרפויות לפייסבוק</div>'
-            '<div class="cs">%s הצטרפויות מינואר 2024</div></div></div>%s'
-            '<div class="note"><b>ברוטו.</b> %s</div></div>'
-            % (icon('facebook', 34), short(sum(m['follows'] for m in fb['monthly'])),
-               sparkline(fb_pts, BRAND['facebook'], h=200), esc(fb['note'])),
-            '</div>']
+            '<div class="cs">מצטבר מינואר 2024</div></div>'
+            '<div class="delta">%s<span>ברוטו</span></div></div>%s</div>'
+            % (icon('facebook', 34), num('+%s' % fmt(gross)),
+               sparkline(fb_pts, BRAND['facebook'], h=210,
+                         marks=fb.get('top_months'))),
+            '</div>',
+            '<div class="panel"><div class="ptitle">מה המספרים האלה אומרים</div>'
+            '<div class="grid3">'
+            '<div class="fact"><b>%s</b> מנויים נוספו ליוטיוב, גידול של <b>%s</b>. '
+            'זה הנתון המדויק היחיד שיש לנו לאורך כל התקופה.</div>'
+            '<div class="fact"><b>%s</b> הצטרפו לעמוד הפייסבוק — אבל זה מספר '
+            '<b>ברוטו</b>. לפי היחס שנמדד על שמונה חודשי חפיפה, הגידול נטו הוא '
+            'כ-<b>%s</b>: אחד מכל ארבעה מצטרפים עוזב.</div>'
+            '<div class="fact">לאינסטגרם, טיקטוק ו-X <b>אין היסטוריית עוקבים</b> — '
+            'מטא חושפת שנה אחורה בלבד והשאר לא חושפים כלל. יש רק המספר של היום.</div>'
+            '</div></div>'
+            % (signed(ys['end'] - ys['start']),
+               num('%.0f%%' % ((ys['end'] / ys['start'] - 1) * 100)),
+               num(fmt(gross)), num('~%s' % fmt(net)))]
     # מה שמגייס: עוקבים ל-1000 צפיות
-    f = d['instagram_follows_by_format']
+    return slide('בכמה גדלנו', 'הצמיחה המצטברת, והחודשים שבהם היא קפצה.',
+                 ''.join(body))
+
+
+def s_ig_conversion(d):
+    """מה ממיר צופה לעוקב. שייך לשקף אינסטגרם, לא לשקף הצמיחה."""
+    f = d.get('instagram_follows_by_format') or {}
+    if not f:
+        return ''
     order = sorted(f.items(), key=lambda x: -x[1]['per_1k_views'])
     hi = order[0][1]['per_1k_views'] or 1
     bars = ''.join(bar_row('<div class="pl"><div class="pn">%s</div></div>' % esc(k),
@@ -330,12 +381,11 @@ def s_audience(d):
                            num('%.2f' % v['per_1k_views']),
                            '%s פוסטים' % num(fmt(v['posts'])))
                    for i, (k, v) in enumerate(order))
-    body.append('<div class="panel"><div class="ptitle">מה באמת מגייס עוקבים — '
-                'אינסטגרם, עוקבים לכל 1,000 צפיות</div>%s'
-                '<div class="foot">רילס ממירים פי %.0f מתמונה. עקבי בשלוש השנים בנפרד.</div>'
-                '</div>' % (bars, order[0][1]['per_1k_views'] / max(order[-1][1]['per_1k_views'], .01)))
-    return slide('הקהל', 'מנויי יוטיוב, הצטרפויות לפייסבוק, ומה מגייס באינסטגרם.',
-                 ''.join(body))
+    ratio = order[0][1]['per_1k_views'] / max(order[-1][1]['per_1k_views'], .01)
+    return ('<div class="panel"><div class="ptitle">מה ממיר צופה לעוקב — '
+            'עוקבים לכל 1,000 צפיות</div>%s'
+            '<div class="foot">רילס ממירים פי %.0f מקרוסלה. הפער עקבי בשלוש '
+            'השנים בנפרד, ולא נובע משנה חריגה אחת.</div></div>' % (bars, ratio))
 
 
 def s_output(d):
@@ -518,15 +568,19 @@ def s_events(d):
 
 
 def s_top(d):
+    # כותרות שנכתבו ביד ממלאות חורים שהנתונים לא מכסים — לפייסבוק 2025 אין
+    # טקסט פוסטים, כי הבקפיל מה-API לא שומר אותו.
+    written = (d.get('editorial') or {}).get('slides') or {}
     blocks = []
     for y, items in sorted(d['top_content'].items()):
-        rows = ''.join(
-            '<div class="trow"><div class="tp">%s</div>'
-            '<div class="tt">%s</div><div class="tv mono">%s</div></div>'
-            % (icon(i['platform'], 28),
-               esc(i['title']) or '<span class="todo">— למלא כותרת —</span>',
-               short(i['views']))
-            for i in items)
+        rows = ''
+        for i in items:
+            title = i['title'] or written.get('top_%s_%s' % (y, i['platform']), '')
+            rows += ('<div class="trow"><div class="tp">%s</div>'
+                     '<div class="tt">%s</div><div class="tv">%s</div></div>'
+                     % (icon(i['platform'], 28),
+                        esc(title) or '<span class="todo">— למלא כותרת —</span>',
+                        num(short(i['views']))))
         blocks.append('<div class="card"><div class="yhead">%s</div>%s</div>' % (y, rows))
     body = [head('רגעי השיא', 'הפריט הגדול של כל שנה, בכל רשת', ''),
             '<div class="grid3">%s</div>' % ''.join(blocks)]
@@ -672,6 +726,22 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
   text-align:left;direction:ltr}
 .cx{display:flex;justify-content:space-between;font-size:14px;color:%(m)s;
   margin-top:6px;padding-left:62px;direction:ltr}
+.delta{margin-inline-start:auto;text-align:left}
+.delta{white-space:nowrap}
+.delta .mono{font-size:32px;font-weight:700;line-height:1;color:#186a2e}
+.delta span{display:block;font-size:14px;color:%(m)s;margin-top:2px;font-weight:400}
+.delta span .mono{font-size:14px;font-weight:400;color:%(m)s}
+.marks{display:flex;flex-direction:column;gap:7px;margin-top:10px;
+  border-top:1px solid %(g)s;padding-top:10px}
+.mk{display:grid;grid-template-columns:96px 74px 1fr;gap:10px;align-items:baseline}
+.mkn{font-size:19px;font-weight:700;color:%(a)s;text-align:left}
+.mkm{font-size:15px;color:%(m)s;direction:ltr;text-align:left}
+.mkt{font-size:15px;line-height:1.4;color:#444;overflow:hidden;max-height:40px;
+  display:flex;align-items:flex-start;gap:7px}
+.mkt svg{flex:none;margin-top:1px}
+.mkh{font-size:15px;color:%(m)s;font-weight:700;margin-bottom:6px}
+.fact{font-size:19px;line-height:1.5;color:#333;border-inline-start:3px solid %(g)s;
+  padding-inline-start:16px}
 .kpirow{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:18px}
 .kpi{background:#fff;border:1px solid %(g)s;border-radius:14px;padding:18px 22px}
 .kv{font-size:40px;font-weight:700;line-height:1.05}
@@ -759,10 +829,9 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 
 def render():
     d = json.load(open(DATA, encoding='utf-8'))
-    ig_extra = ''
     slides = [
         s_cover(d), s_assets(d), s_growth(d), s_audience(d), s_output(d),
-        s_platform(d, 'facebook'), s_platform(d, 'instagram', ig_extra),
+        s_platform(d, 'facebook'), s_platform(d, 'instagram', s_ig_conversion(d)),
         s_platform(d, 'youtube', s_youtube_types(d)), s_platform(d, 'tiktok'),
         s_thin(d), s_events(d), s_top(d), s_method(d),
     ]

@@ -42,7 +42,11 @@ PULLED = os.path.join(HERE, 'pulled')
 OUT = os.path.join(HERE, 'deck_content.json')
 
 TODAY = '2026-08-11'
-YTD_CUT = (8, 11)          # התקופה המקבילה: 1 בינואר עד 11 באוגוסט
+# הכל נחתך בסוף יולי 2026. אוגוסט הוא חודש חלקי, ובכל גרף חודשי הוא מצייר
+# צניחה שהיא רק «החודש עוד לא נגמר» — הקורא רואה נפילה שלא קרתה.
+CUTOFF = '2026-07-31'
+CUTOFF_MONTH = '2026-07'
+YTD_CUT = (7, 31)          # התקופה המקבילה: 1 בינואר עד 31 ביולי
 VIEWS_FROM = '2024-09'     # מטא הגדירה מחדש צפיות/חשיפה באוג'–ספט' 2024
 
 PLATFORMS = ['facebook', 'youtube', 'tiktok', 'instagram', 'twitter', 'whatsapp']
@@ -102,6 +106,7 @@ def load_video(name):
     d = pd.read_csv(os.path.join(PULLED, name), encoding='utf-8-sig')
     d['dt'] = pd.to_datetime(d['date'], errors='coerce')
     d = d.dropna(subset=['dt'])
+    d = d[d['dt'] <= CUTOFF]
     for c in ('views', 'likes', 'comments'):
         if c in d.columns:
             d[c] = _num(d[c]).fillna(0)
@@ -134,6 +139,7 @@ def build():
     # --- פייסבוק ואינסטגרם, מהבסיס החודשי ---
     for plat in ('facebook', 'instagram'):
         sub = meta[meta['platform'] == plat].copy()
+        sub = sub[sub['month'] <= CUTOFF_MONTH]     # לפני כל חישוב, לא אחריו
         sub['year'] = sub['month'].str[:4]
         block = {'yearly': {}, 'monthly_views': []}
         for y, g in sub.groupby('year'):
@@ -212,16 +218,23 @@ def build():
     # --- מנויי יוטיוב, סדרה יומית ---
     subs = pd.read_csv(os.path.join(SRC, 'youtube_studio', 'subscribers_daily.csv'))
     subs['Date'] = pd.to_datetime(subs['Date'])
+    subs = subs[subs['Date'] <= CUTOFF]
     deck['_subs'] = subs
+    # החודשים שבהם נוספו הכי הרבה מנויים — לסימון על העקומה. השאלה היא
+    # "מתי קפצנו", לא "כמה נוספו אתמול".
+    m_subs = subs.groupby(subs['Date'].dt.to_period('M'))['Subscribers'].last()
+    m_gain = m_subs.diff().dropna()
     deck['youtube_subscribers'] = {
-        'series': [{'month': str(m), 'subs': int(g['Subscribers'].iloc[-1])}
-                   for m, g in subs.groupby(subs['Date'].dt.to_period('M'))],
+        'series': [{'month': str(m), 'subs': int(v)} for m, v in m_subs.items()],
         'start': int(subs['Subscribers'].iloc[0]), 'end': int(subs['Subscribers'].iloc[-1]),
         'by_year': {str(y): int(g['Subscribers'].iloc[-1] - g['Subscribers'].iloc[0])
                     for y, g in subs.groupby(subs['Date'].dt.year)},
+        'top_months': [{'month': str(m), 'gain': int(v)}
+                       for m, v in m_gain.nlargest(3).items()],
     }
     aud = pd.read_csv(os.path.join(SRC, 'youtube_studio', 'monthly_audience.csv'))
     aud['Date'] = pd.to_datetime(aud['Date'])
+    aud = aud[aud['Date'] <= CUTOFF]
     deck['youtube_audience'] = {str(y): int(g['Monthly audience'].mean())
                                 for y, g in aud.groupby(aud['Date'].dt.year)}
 
@@ -234,11 +247,24 @@ def build():
                 rows.append((r[0][:10], float(r[1])))   # תאריך מלא: נדרש ליום
             except ValueError:
                 pass
+    rows = [(d0, v) for d0, v in rows if d0 <= CUTOFF]
     by_month = defaultdict(float)
     for day, v in rows:
         by_month[day[:7]] += v
+    fb_monthly = [{'month': m, 'follows': int(v)} for m, v in sorted(by_month.items())]
+    # עקומה מצטברת: "כמה עוקבים הצטרפו מתחילת 2024 ועד כל נקודה" — זה מה
+    # שהשאלה «בכמה גדלנו» באמת מבקשת, ולא הקצב היומי.
+    run = 0
+    cum = []
+    for m in fb_monthly:
+        run += m['follows']
+        cum.append({'month': m['month'], 'total': run})
+    top_fb = sorted(fb_monthly, key=lambda x: -x['follows'])[:3]
     deck['facebook_follows'] = {
-        'monthly': [{'month': m, 'follows': int(v)} for m, v in sorted(by_month.items())],
+        'monthly': fb_monthly,
+        'cumulative': cum,
+        'top_months': [{'month': m['month'], 'gain': m['follows']} for m in top_fb],
+        'total_gross': run,
         'net_ratio': 0.75,
         'note': ('ברוטו. מול הגיליון על 8 חודשי חפיפה: 136,017 הצטרפויות מול '
                  '102,061 גידול בפועל — אחד מכל ארבעה עוזב'),
@@ -257,6 +283,15 @@ def build():
     deck['big_days'] = big_days(yt, tt, subs, fb_daily)
     deck.pop('_subs', None)
 
+    # תיאור לכל קפיצה שמסומנת על העקומות — מאותה רשת, ולא כטענת סיבתיות
+    for block, plat in ((deck['youtube_subscribers'], 'youtube'),
+                        (deck['facebook_follows'], 'facebook')):
+        heads = month_headlines(yt, tt, plat)
+        for m in block.get('top_months', []):
+            h = heads.get(m['month']) or {}
+            m['headline'] = h.get('title', '')
+            m['headline_platform'] = h.get('platform', '')
+
     return deck
 
 
@@ -265,6 +300,7 @@ def _youtube_studio():
     ys = os.path.join(SRC, 'youtube_studio')
     d = pd.read_csv(os.path.join(ys, 'daily_views.csv'))
     d['Date'] = pd.to_datetime(d['Date'])
+    d = d[d['Date'] <= CUTOFF]
 
     tot = pd.read_csv(os.path.join(ys, 'type_totals.csv'))
     by_type = {}
@@ -284,6 +320,7 @@ def _youtube_studio():
 
     bt = pd.read_csv(os.path.join(ys, 'daily_by_type.csv'))
     bt['Date'] = pd.to_datetime(bt['Date'])
+    bt = bt[bt['Date'] <= CUTOFF]
     heb = {'Videos': 'סרטונים', 'Shorts': 'שורטס', 'Live stream': 'שידור חי'}
     mix = {}
     for t, g in bt.groupby('Content type'):
@@ -303,7 +340,7 @@ def _youtube_studio():
         'views_mix': mix,
         'monthly_views': [{'month': str(m), 'views': int(v)} for m, v in
                           d.groupby(d['Date'].dt.to_period('M'))['Views'].sum().items()
-                          if str(m) >= VIEWS_FROM],
+                          if VIEWS_FROM <= str(m) <= CUTOFF_MONTH],
         'source_note': ('צפיות בתקופה מייצוא YouTube Studio — לא "מה שתוכן '
                         'השנה צבר עד היום"'),
     }
@@ -324,7 +361,7 @@ def ig_follows_by_format():
             d[c] = _num(d[c])
         parts.append(d[['dt', 'Post type', 'Views', 'Follows']])
     d = pd.concat(parts, ignore_index=True)
-    d = d[d['dt'] >= VIEWS_FROM]          # לפני כן החשיפה/צפיות אינן תקפות
+    d = d[(d['dt'] >= VIEWS_FROM) & (d['dt'] <= CUTOFF)]  # לפני כן אינן תקפות
     d['fmt'] = d['Post type'].map({'IG reel': 'רילס', 'IG image': 'תמונה',
                                    'IG carousel': 'קרוסלה', 'IGTV': 'רילס'})
     out = {}
@@ -368,7 +405,36 @@ def all_items(yt, tt):
             'title': d['title'].map(clean_title), 'platform': name}))
 
     a = pd.concat(frames, ignore_index=True).dropna(subset=['dt', 'views'])
-    return a[a['dt'] >= VIEWS_FROM]
+    return a[(a['dt'] >= VIEWS_FROM) & (a['dt'] <= CUTOFF)]
+
+
+def month_headlines(yt, tt, platform=None):
+    """לכל חודש — הפריט הגדול ביותר שפורסם בו, ברשת המבוקשת.
+
+    **זה תיאור, לא הסבר.** הפריט הגדול בחודש אינו בהכרח מה שגרם לאנשים
+    להירשם, ולכן הוא מוצג כ"התוכן הגדול באותו חודש" ולא כסיבה. הסינון לפי
+    רשת הוא המינימום: לסמן קפיצה במנויי יוטיוב ולהצמיד לה פוסט מטיקטוק היה
+    שגוי פעמיים.
+    """
+    a = all_items(yt, tt)
+    a = a[a['title'].astype(str).str.len() > 12]
+    a['m'] = a['dt'].dt.to_period('M').astype(str)
+
+    def _top(frame):
+        out = {}
+        for m, g in frame.groupby('m'):
+            r = g.nlargest(1, 'views').iloc[0]
+            out[m] = {'title': str(r['title']), 'platform': str(r['platform'])}
+        return out
+
+    everywhere = _top(a)
+    if not platform:
+        return everywhere
+    # לפייסבוק 2025 אין טקסט פוסטים (הבקפיל מה-API לא שומר אותו), ולכן
+    # נופלים לפריט הגדול בכל הרשתות — אבל **מציינים מאיזו רשת הוא**, כדי
+    # שלא ייראה כאילו הוא של הרשת שהעקומה מתארת.
+    own = _top(a[a['platform'] == platform])
+    return {m: own.get(m) or everywhere.get(m) for m in everywhere}
 
 
 def big_days(yt, tt, subs, fb_follows, n=6):
@@ -457,7 +523,7 @@ def top_content(yt, tt):
     for name, d in (('instagram', ig), ('facebook', fb),
                     ('youtube', yt[['dt', 'views', 'title', 'link']]),
                     ('tiktok', tt[['dt', 'views', 'title', 'link']])):
-        d = d[(d['dt'] >= VIEWS_FROM) & d['views'].notna()]
+        d = d[(d['dt'] >= VIEWS_FROM) & (d['dt'] <= CUTOFF) & d['views'].notna()]
         for y, g in d.groupby(d['dt'].dt.year):
             r = g.nlargest(1, 'views').iloc[0]
             out[str(y)].append({'platform': name, 'views': int(r['views']),
