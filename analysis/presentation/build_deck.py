@@ -308,13 +308,22 @@ def build():
     deck.pop('_subs', None)
 
     # סך צפיות בחלון ינואר–יולי, לכל שנה — הבסיס לאחוזי הגידול בשקף השני.
-    # רק חלון זהה בכל השנים; אחרת משווים שנה שלמה לשבעה חודשים.
+    #
+    # **רק שנים שכל הרשתות מכסות.** ליוטיוב יש ינואר–יולי 2024 ולפייסבוק
+    # ולאינסטגרם אין (הגבול של מטא), אז סכימה נאיבית ייצרה "2024 = 136.5M"
+    # שהוא יוטיוב לבדו, ומשם "+744%" ל-2025 — מספר שנראה מרהיב ומשווה רשת
+    # אחת מול ארבע. שנה נכנסת רק אם כל רשת עם היסטוריה תרמה לה חודשים.
+    have = {p: {m['month'][:4] for m in blk.get('monthly_views', [])
+                if m['month'][5:7] <= '07'}
+            for p, blk in deck['platforms'].items() if blk.get('monthly_views')}
+    full = set.intersection(*have.values()) if have else set()
     totals = defaultdict(int)
     for plat, blk in deck['platforms'].items():
         for m in blk.get('monthly_views', []):
-            if m['month'][5:7] <= '07':
+            if m['month'][5:7] <= '07' and m['month'][:4] in full:
                 totals[m['month'][:4]] += m['views']
     deck['views_by_year_ytd'] = dict(sorted(totals.items()))
+    deck['views_ytd_platforms'] = sorted(have)
 
     # תיאור לכל קפיצה שמסומנת על העקומות — מאותה רשת, ולא כטענת סיבתיות
     for block, plat in ((deck['youtube_subscribers'], 'youtube'),

@@ -1456,10 +1456,15 @@
     ]
   ],
   "views_by_year_ytd": {
-    "2024": 136533975,
     "2025": 1152592634,
     "2026": 1897309752
   },
+  "views_ytd_platforms": [
+    "facebook",
+    "instagram",
+    "tiktok",
+    "youtube"
+  ],
   "editorial": {
     "cover_title": "הסושיאל של כאן חדשות",
     "cover_subtitle": "ינואר 2024 – יולי 2026",

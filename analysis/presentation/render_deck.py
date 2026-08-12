@@ -280,6 +280,78 @@ def s_cover(d):
                  body, 'radial-gradient(120% 120% at 78% 12%,#fff 0%,#f7f7f7 55%,#ececec 100%)')
 
 
+def s_thesis(d):
+    """הטענה של המצגת, בשקף אחד.
+
+    שאר השקפים מתארים; זה טוען. בלעדיו עשרה שקפים של מספרים לא משאירים
+    משפט אחד שאפשר לחזור עליו אחרי הישיבה.
+
+    שני ברים מוערמים = נתח הצפיות של כל רשת, ינואר–יולי, שנה מול שנה. צבעי
+    המותג מותרים כאן כי כל מקטע נושא את שם הרשת ואת האחוז שלו — הזהות אינה
+    נשענת על הצבע.
+    """
+    ytd = d.get('views_by_year_ytd') or {}
+    years = sorted(ytd)
+    if len(years) < 2:
+        return ''
+    plats = ('facebook', 'tiktok', 'instagram', 'youtube')
+    share = {}
+    for yr in years:
+        tot = {}
+        for p in plats:
+            tot[p] = sum(m['views'] for m in d['platforms'][p].get('monthly_views', [])
+                         if m['month'][:4] == yr and m['month'][5:7] <= '07')
+        s = sum(tot.values()) or 1
+        share[yr] = (tot, s)
+
+    bars = ''
+    for yr in years:
+        tot, s = share[yr]
+        segs = ''
+        for p, v in sorted(tot.items(), key=lambda x: -x[1]):
+            pct = v / s * 100
+            segs += ('<div class="tseg" style="width:%.3f%%;background:%s">'
+                     '%s</div>'
+                     % (pct, BRAND[p],
+                        '<span>%s<i>%d%%</i></span>' % (esc(HEB[p]), round(pct))
+                        if pct >= 8 else ''))
+        bars += ('<div class="trow2"><div class="ty">%s</div>'
+                 '<div class="tbar">%s</div><div class="tt2">%s</div></div>'
+                 % (yr, segs, num(short(s))))
+
+    fb = share[years[-1]][0]['facebook'] / share[years[-1]][1] * 100
+    fb_prev = share[years[0]][0]['facebook'] / share[years[0]][1] * 100
+    yt = share[years[-1]][0]['youtube'] / share[years[-1]][1] * 100
+    yt_prev = share[years[0]][0]['youtube'] / share[years[0]][1] * 100
+    tt_total = sum(m['views'] for m in d['platforms']['tiktok'].get('monthly_views', []))
+
+    ed = (d.get('editorial') or {}).get('thesis') or {}
+    body = [
+        '<div class="thesis">'
+        '<div class="kicker">%s</div>'
+        '<h2 class="tclaim">%s</h2>'
+        '<div class="tsub">%s</div>' % (
+            esc(ed.get('kicker', 'מה שקרה בשנתיים')),
+            esc(ed.get('claim', 'התיק הדיגיטלי השתנה')),
+            esc(ed.get('sub', 'נתח הצפיות של כל רשת · ינואר–יולי'))),
+        '<div class="tbars">%s</div>' % bars,
+        '<div class="tfacts">'
+        '<div class="tf"><b>%s</b> נתח הצפיות של פייסבוק — מ-%s. '
+        'הוא נושא היום כמעט מחצית מהכול.</div>'
+        # לא "לא הייתה קיימת": הפרופיל מדווח 4,950 סרטונים ובידינו 3,993
+        # מפברואר 2025, כלומר ~950 קדמו לנו. לא נמדדה ≠ לא הייתה.
+        '<div class="tf"><b>%s</b> מהצפיות מגיעות מטיקטוק — רשת שלא נמדדה '
+        'אצלנו כלל עד 2025, והיום היא רבע מהתיק.</div>'
+        '<div class="tf">יוטיוב ירד מ-<b>%s</b> ל-<b>%s</b> מהנתח — לא כי הוא '
+        'קטן, אלא כי השאר גדלו סביבו.</div>'
+        '</div></div>' % (num('%.0f%%' % fb), num('%.0f%%' % fb_prev),
+                          num('%.0f%%' % (share[years[-1]][0]['tiktok']
+                                          / share[years[-1]][1] * 100)),
+                          num('%.0f%%' % yt_prev), num('%.0f%%' % yt)),
+    ]
+    return slide('הטענה', 'המשפט שההנהלה צריכה לקחת מהמצגת.', ''.join(body))
+
+
 def s_assets(d):
     """דירוג הנכסים. צבעי מותג מותרים כאן — לכל בר אייקון, שם וערך צמודים."""
     rows = []
@@ -620,11 +692,11 @@ def _depth_panel(d, p):
         fb = d.get('facebook_follows') or {}
         pts = [{'month': c['month'], 'views': c['total']} for c in fb.get('cumulative', [])]
         return ('<div class="panel"><div class="ptitle">הצטרפויות לעמוד · מצטבר</div>'
-                '%s<div class="mixnote">%s הצטרפו מינואר 2024 (ברוטו)</div>%s</div>'
-                % (sparkline(pts, BRAND['facebook'], h=150, legend=False),
-                   num('+%s' % fmt(fb.get('total_gross', 0))), top))
+                '%s<div class="mixnote">%s הצטרפו מינואר 2024 (ברוטו)</div></div>'
+                % (sparkline(pts, BRAND['facebook'], h=170, legend=False),
+                   num('+%s' % fmt(fb.get('total_gross', 0)))))
 
-    return '<div class="panel">%s</div>' % (top or '')
+    return ''
 
 
 def s_thin(d):
@@ -904,6 +976,21 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .delta .mono{font-size:32px;font-weight:700;line-height:1;color:#186a2e}
 .delta span{display:block;font-size:14px;color:%(m)s;margin-top:2px;font-weight:400}
 .delta span .mono{font-size:14px;font-weight:400;color:%(m)s}
+.thesis{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;gap:20px;padding:10px 0}
+.tclaim{margin:6px 0 0;font-size:86px;font-weight:900;letter-spacing:-.02em;line-height:1}
+.tsub{font-size:24px;color:%(m)s}
+.tbars{display:flex;flex-direction:column;gap:20px;margin-top:6px}
+.trow2{display:grid;grid-template-columns:78px 1fr 130px;gap:22px;align-items:center}
+.ty{font-size:30px;font-weight:700;color:%(m)s}
+.tbar{display:flex;gap:3px;height:86px;border-radius:10px;overflow:hidden}
+.tseg{display:flex;align-items:center;justify-content:center;color:#fff;overflow:hidden}
+.tseg span{text-align:center;font-size:19px;font-weight:700;line-height:1.2}
+.tseg i{display:block;font-style:normal;font-size:26px;font-weight:900}
+.tt2{font-size:32px;font-weight:700;text-align:left}
+.tfacts{display:grid;grid-template-columns:repeat(3,1fr);gap:34px;
+  border-top:1px solid %(g)s;padding-top:26px}
+.tf{font-size:22px;line-height:1.5;color:#333}
+.tf b{font-size:26px;color:%(ink)s}
 .cd{margin-inline-start:auto;text-align:left;font-size:24px;font-weight:700;white-space:nowrap}
 .cd span{display:block;font-size:13px;color:%(m)s;font-weight:400;margin-top:1px}
 .cd.up{color:#186a2e}
@@ -1064,6 +1151,7 @@ def render():
     # בכל רשת. כל מה שנוגע לרשת אחת יושב בשקף שלה ולא חוזר במקום אחר.
     slides = [
         s_cover(d),
+        s_thesis(d),          # הטענה — מה שקרה בשנתיים
         s_assets(d),          # מבט כללי — מה מצבנו
         s_growth(d),          # המספרים והעלייה בכל שנה
         s_events(d),          # מה הניע אותם
@@ -1071,7 +1159,6 @@ def render():
         s_platform(d, 'instagram'),
         s_platform(d, 'youtube'),
         s_platform(d, 'tiktok'),
-        s_thin(d),
         s_method(d),
     ]
     slides = [s for s in slides if s]
