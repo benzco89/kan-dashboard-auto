@@ -593,9 +593,22 @@ def s_platform(d, p):
                      '<div class="ys">%s פריטים</div></div>'
                      % (k, tag, num(short(v.get('views', 0))), num(fmt(n))))
 
+    # כרטיסי השנים מציגים 2025 מלאה מול 2026 חלקית, ומי שקורא רק את השקף
+    # הזה רואה קריסה שלא קרתה — באינסטגרם 566M מול 345M נראה כמו ‎-40%‎
+    # בזמן שההשוואה ההוגנת היא ‎+8%‎. לכן החלון הזהה יושב ליד הכותרת.
+    ytd = {}
+    for m in pts:
+        if m['month'][5:7] <= '07':
+            ytd[m['month'][:4]] = ytd.get(m['month'][:4], 0) + m['views']
+    yrs = sorted(ytd)
+    fair = ''
+    if len(yrs) >= 2 and ytd[yrs[-2]]:
+        pct = (ytd[yrs[-1]] / ytd[yrs[-2]] - 1) * 100
+        fair = ('<div class="fair %s">%s<span>ינואר–יולי, %s מול %s</span></div>'
+                % ('up' if pct >= 0 else 'down', num('%+.0f%%' % pct), yrs[-1], yrs[-2]))
     body = [head(HEB[p], 'עוקבים: %s' % fmt(d['followers'].get(p, 0)),
-                 ('<div class="rnum">%s</div><div class="rlab">סך הצפיות</div>'
-                  % short(b.get('views_total') or sum(x['views'] for x in pts)))
+                 ('%s<div class="rnum">%s</div><div class="rlab">סך הצפיות</div>'
+                  % (fair, short(b.get('views_total') or sum(x['views'] for x in pts))))
                  if pts else ''),
             '<div class="yrow" style="grid-template-columns:repeat(%d,1fr)">%s</div>'
             % (len(cells), ''.join(cells)),
@@ -642,18 +655,6 @@ def _mix_panel(d, p):
 def _depth_panel(d, p):
     """המדד הייחודי לכל רשת — מה שרק היא יודעת לספר."""
     b = d['platforms'][p]
-    top = ''
-    for yr, items in sorted((d.get('top_content') or {}).items(), reverse=True):
-        for it in items:
-            if it['platform'] == p:
-                written = (d.get('editorial') or {}).get('slides') or {}
-                t = it['title'] or written.get('top_%s_%s' % (yr, p), '')
-                top = ('<div class="topitem"><div class="tl">הפריט הגדול · %s</div>'
-                       '<div class="tx">%s</div><div class="tn">%s צפיות</div></div>'
-                       % (yr, esc(t), num(short(it['views']))))
-                break
-        if top:
-            break
 
     if p == 'youtube':
         types = b.get('by_type') or {}
@@ -685,8 +686,8 @@ def _depth_panel(d, p):
                     num('%.2f' % v['per_1k_views']), '')
             for i, (k, v) in enumerate(order))
         return ('<div class="panel"><div class="ptitle">מה ממיר צופה לעוקב · '
-                'עוקבים לכל 1,000 צפיות</div><div class="barlist">%s</div>%s</div>'
-                % (bars, top))
+                'עוקבים לכל 1,000 צפיות</div><div class="barlist">%s</div></div>'
+                % bars)
 
     if p == 'facebook':
         fb = d.get('facebook_follows') or {}
@@ -991,6 +992,10 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
   border-top:1px solid %(g)s;padding-top:26px}
 .tf{font-size:22px;line-height:1.5;color:#333}
 .tf b{font-size:26px;color:%(ink)s}
+.fair{font-size:26px;font-weight:700;line-height:1;margin-bottom:6px;white-space:nowrap}
+.fair span{display:block;font-size:13px;color:%(m)s;font-weight:400;margin-top:2px}
+.fair.up{color:#186a2e}
+.fair.down{color:#b42318}
 .cd{margin-inline-start:auto;text-align:left;font-size:24px;font-weight:700;white-space:nowrap}
 .cd span{display:block;font-size:13px;color:%(m)s;font-weight:400;margin-top:1px}
 .cd.up{color:#186a2e}
