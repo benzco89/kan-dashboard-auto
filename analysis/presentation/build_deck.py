@@ -289,7 +289,16 @@ def build():
     fb_daily = pd.DataFrame(rows, columns=['date', 'follows'])
     fb_daily['date'] = pd.to_datetime(fb_daily['date'])
     deck['big_days'] = big_days(yt, tt, subs, fb_daily)
-    deck['events'] = detect_events(yt, tt, subs, fb_daily)
+    # החלונות מגיעים משכבת הניסוח, ולכן חייבים להתמזג לפני המדידה
+    prev_ed = {}
+    if os.path.exists(OUT):
+        try:
+            prev_ed = json.load(open(OUT, encoding='utf-8')).get('editorial', {})
+        except (ValueError, OSError):
+            prev_ed = {}
+    ev_cfg = prev_ed.get('events') or EDITORIAL_SEED['events']
+    deck['events'] = measure_events(yt, tt, subs, fb_daily, ev_cfg)
+    deck['_candidates'] = candidate_windows(yt, tt)
     deck.pop('_subs', None)
 
     # סך צפיות בחלון ינואר–יולי, לכל שנה — הבסיס לאחוזי הגידול בשקף השני.
@@ -455,21 +464,62 @@ def month_headlines(yt, tt, platform=None):
     return {m: own.get(m) or everywhere.get(m) for m in everywhere}
 
 
-def detect_events(yt, tt, subs, fb_follows, floor=40_000_000):
-    """תקופות שבהן הצפייה הייתה גבוהה ברציפות — כלומר אירועים, לא פוסט מוצלח.
+def measure_events(yt, tt, subs, fb_follows, events):
+    """מודד חלונות שנקבעו ביד. **התאריכים אינם מתגלים מהנתונים — הם נקבעים.**
 
-    יום בודד גדול הוא סרטון שתפס. **אירוע חדשותי נמשך ימים**, ולכן החיפוש הוא
-    אחרי רצפים: ימים שחצו פי 2 מהחציון, מאוחדים כשהפער ביניהם עד 4 ימים.
-    הסף על סך הצפיות מסנן רצפים קצרים ולא משמעותיים.
+    הניסיון הקודם איתר חלונות אוטומטית (רצפים מעל פי 2 מהחציון) והוא טעה
+    בדיוק במקום שבו זה חשוב: הוא פתח את מלחמת יוני 2025 ב-10.6 כי באותו יום
+    היה קליפ ויראלי על בריחה משוטר, בזמן שהמבצע התחיל ב-13.6. אלגוריתם מוצא
+    שיאים; רק אדם יודע מה האירוע. לכן החלונות מגיעים מ-`editorial.events`,
+    והסקריפט רק מודד אותם.
 
-    השמות **לא** נקבעים כאן. הסקריפט מוצא את החלון ומודד אותו; איך קוראים לו
-    יושב ב-`editorial.events` ונכתב ביד — ראו הערה שם.
+    `candidate_windows()` נשאר ככלי גילוי — להצעת חלונות שטרם נבדקו — אבל
+    שום דבר במצגת לא מסתמך עליו.
     """
     a = all_items(yt, tt)
     a['d'] = a['dt'].dt.date
     day = a.groupby('d')['views'].sum().sort_index()
     med = float(day.median())
+    sub_gain = subs.set_index(subs['Date'].dt.date)['Subscribers'].diff()
+    fb_gain = fb_follows.set_index(fb_follows['date'].dt.date)['follows']
 
+    out = []
+    for key, meta in (events or {}).items():
+        if not meta.get('show', True):
+            continue
+        s = pd.to_datetime(meta.get('from', key)).date()
+        e = pd.to_datetime(meta.get('to', key)).date()
+        win = day[(day.index >= s) & (day.index <= e)]
+        if not len(win):
+            continue
+        days = (e - s).days + 1
+        g = a[(a['d'] >= s) & (a['d'] <= e)]
+        named = g[g['title'].astype(str).str.len() > 12]
+        tops = (named if len(named) else g).nlargest(3, 'views')
+        peak = win.idxmax()
+        out.append({
+            'key': key, 'name': meta.get('name', ''),
+            'from': str(s), 'to': str(e), 'days': days,
+            'views': int(win.sum()),
+            'vs_typical': round(float(win.sum()) / days / med, 1),
+            'peak_date': str(peak), 'peak_x': round(float(win.max()) / med, 1),
+            'yt_subs': int(sub_gain[(sub_gain.index >= s) & (sub_gain.index <= e)].sum() or 0),
+            'fb_follows': int(fb_gain[(fb_gain.index >= s) & (fb_gain.index <= e)].sum() or 0),
+            'headlines': [str(r['title']) for _, r in tops.iterrows()],
+        })
+    out.sort(key=lambda x: -x['views'])
+    return {'typical_day': int(med), 'windows': out}
+
+
+def candidate_windows(yt, tt, floor=40_000_000):
+    """כלי גילוי בלבד: רצפים חשודים לאירוע, להצגה בפלט הריצה.
+
+    לא נכנס למצגת — ראו ההסבר ב-`measure_events`.
+    """
+    a = all_items(yt, tt)
+    a['d'] = a['dt'].dt.date
+    day = a.groupby('d')['views'].sum().sort_index()
+    med = float(day.median())
     runs, cur = [], None
     for d in day[day >= 2 * med].index:
         if cur and (d - cur[1]).days <= 4:
@@ -480,31 +530,17 @@ def detect_events(yt, tt, subs, fb_follows, floor=40_000_000):
             cur = (d, d)
     if cur:
         runs.append(cur)
-
-    sub_gain = subs.set_index(subs['Date'].dt.date)['Subscribers'].diff()
-    fb_gain = fb_follows.set_index(fb_follows['date'].dt.date)['follows']
-
     out = []
     for s, e in runs:
         win = day[(day.index >= s) & (day.index <= e)]
-        tot = float(win.sum())
-        if tot < floor:
+        if win.sum() < floor:
             continue
-        days = (e - s).days + 1
         g = a[(a['d'] >= s) & (a['d'] <= e)]
         named = g[g['title'].astype(str).str.len() > 12]
-        tops = (named if len(named) else g).nlargest(3, 'views')
-        out.append({
-            'from': str(s), 'to': str(e), 'days': days,
-            'views': int(tot),
-            'per_day': int(tot / days),
-            'vs_typical': round(tot / days / med, 1),
-            'yt_subs': int(sub_gain[(sub_gain.index >= s) & (sub_gain.index <= e)].sum() or 0),
-            'fb_follows': int(fb_gain[(fb_gain.index >= s) & (fb_gain.index <= e)].sum() or 0),
-            'headlines': [str(r['title']) for _, r in tops.iterrows()],
-        })
-    out.sort(key=lambda x: -x['views'])
-    return {'typical_day': int(med), 'windows': out}
+        top = (named if len(named) else g).nlargest(1, 'views')
+        out.append((int(win.sum()), str(s), str(e),
+                    str(top.iloc[0]['title'])[:60] if len(top) else ''))
+    return sorted(out, reverse=True)
 
 
 def big_days(yt, tt, subs, fb_follows, n=6):
@@ -643,16 +679,19 @@ EDITORIAL_SEED = {
     "cover_title": "הסושיאל של כאן חדשות",
     "cover_subtitle": "ינואר 2024 – יולי 2026",
     "slides": {},
-    # החלונות אותרו מהנתונים (`detect_events`); **השמות נכתבו ביד וטעונים
-    # אימות** — חלקם נגזרו מהכותרות שפורסמו באותם ימים ולא ממקור חיצוני.
-    # לשנות שם, לאחד חלונות או להסתיר אחד: לערוך כאן. `show: false` מסתיר.
+    # אירועים חדשותיים. **התאריכים כאן קובעים** — הסקריפט רק מודד אותם.
+    # שמות ותאריכי המבצעים אומתו מול מקורות חיצוניים, ולא נגזרו מהכותרות:
+    # "עם כלביא" 13–24.6.2025 (מלחמת 12 הימים), "שאגת הארי" מ-28.2.2026.
+    # להוסיף אירוע: מפתח כלשהו עם from/to/name. `show: false` מסתיר.
     "events": {
-        "2026-02-25": {"name": "המערכה מול איראן", "show": True},
-        "2025-10-07": {"name": "שחרור החטופים וסיום המלחמה", "show": True},
-        "2025-06-10": {"name": "המערכה מול איראן — הסבב הראשון", "show": True},
-        "2026-04-21": {"name": "הסלמה בצפון", "show": True},
-        "2025-12-06": {"name": "פיגוע החנוכה וגל האנטישמיות", "show": True},
-        "2025-02-22": {"name": "שחרור חטופים — שלב א׳", "show": True},
+        "am_kelavia": {"name": "מבצע «עם כלביא» — מלחמת 12 הימים",
+                       "from": "2025-06-13", "to": "2025-06-24", "show": True},
+        "hostages_end": {"name": "שחרור החטופים וסיום מלחמת חרבות ברזל",
+                         "from": "2025-10-09", "to": "2025-10-20", "show": True},
+        "shaagat_haari": {"name": "מבצע «שאגת הארי»",
+                          "from": "2026-02-28", "to": "2026-03-31", "show": True},
+        "bibas": {"name": "החזרת חללי משפחת ביבס ושחרור אברה מנגיסטו",
+                  "from": "2025-02-20", "to": "2025-02-27", "show": True},
     },
     "_how_to_edit": ("כל טקסט כאן נכתב ביד ושורד הרצה חוזרת של הסקריפט. "
                      "המספרים מתעדכנים מהנתונים; המשפטים לא."),
@@ -691,6 +730,20 @@ def main():
     print("\nיוטיוב מנויים: %s → %s" % (
         format(deck['youtube_subscribers']['start'], ','),
         format(deck['youtube_subscribers']['end'], ',')))
+    cands = deck.pop('_candidates', [])
+    if cands:
+        print("\nחלונות מועמדים שאותרו בנתונים (לא נכנסים למצגת — לבדיקה בלבד):")
+        for tot, s0, e0, ttl in cands[:8]:
+            mark = '' if any(w['from'] <= e0 and w['to'] >= s0
+                             for w in deck['events']['windows']) else '  ← לא מכוסה'
+            print("   %s → %s  %14s%s" % (s0, e0, format(tot, ','), mark))
+            print("      %s" % ttl)
+    print("\nאירועים שנמדדו:")
+    for w in deck['events']['windows']:
+        print("   %-46s %s → %s  %14s  שיא x%.1f ב-%s"
+              % (w['name'], w['from'], w['to'], format(w['views'], ','),
+                 w['peak_x'], w['peak_date']))
+    print()
     print("אינסטגרם, עוקבים ל-1000 צפיות לפי פורמט:")
     for fmt, v in sorted(deck['instagram_follows_by_format'].items(),
                          key=lambda x: -x[1]['per_1k_views']):

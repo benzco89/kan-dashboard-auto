@@ -589,14 +589,10 @@ def s_events(d):
     ev = d.get('events') or {}
     wins = ev.get('windows') or []
     names = ((d.get('editorial') or {}).get('events') or {})
-    shown = []
-    for w in wins:
-        meta = names.get(w['from'])
-        if meta and meta.get('show', True):
-            shown.append((w, meta))
+    # השם והתאריכים כבר נמדדו לפי שכבת הניסוח; כאן רק דריסת הכותרת אופציונלית
+    shown = [(w, names.get(w.get('key'), {})) for w in wins][:5]
     if not shown:
         return ''
-    shown = shown[:5]
     hi = max(w['views'] for w, _ in shown)
     typ = ev.get('typical_day', 0)
     rows = []
@@ -616,7 +612,7 @@ def s_events(d):
             '<div class="evtxt">%s</div></div>'
             '<div class="evv">%s<span>%s</span></div>'
             '<div class="evg">%s</div></div>'
-            % (esc(meta.get('name', '')),
+            % (esc(w.get('name') or meta.get('name', '')),
                _he_date(w['from']), _he_date(w['to']), w['days'],
                w['views'] / hi * 100,
                esc(meta.get('headline') or (w['headlines'] or [''])[0]),
@@ -626,9 +622,10 @@ def s_events(d):
                  '<div class="rnum">%s</div><div class="rlab">צפיות ביום רגיל (חציון)</div>'
                  % short(typ)),
             '<div class="evlist">%s</div>' % ''.join(rows),
-            '<div class="foot">החלונות אותרו <b>מהנתונים</b> — רצף ימים שבהם הצפייה '
-            'חצתה פי 2 מהחציון, כך שמדובר באירוע מתמשך ולא בסרטון בודד שתפס. '
-            'הכותרת לצד כל שורה היא הפריט הגדול ביותר באותו חלון.</div>']
+            '<div class="foot">תאריכי המבצעים אומתו מול מקורות חיצוניים — «עם כלביא» '
+            '13–24.6.2025, «שאגת הארי» מ-28.2.2026 — ולא נגזרו מהנתונים. '
+            'איתור אוטומטי פתח את מלחמת יוני ב-10.6, כי באותו יום היה קליפ ויראלי '
+            'על בריחה משוטר; אלגוריתם מוצא שיאים, לא אירועים.</div>']
     return slide('אירועים', 'האירועים החדשותיים הגדולים ומה הם עשו למספרים.',
                  ''.join(body))
 
