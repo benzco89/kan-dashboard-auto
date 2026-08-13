@@ -722,7 +722,9 @@ def s_assets(d):
             change = ('<div class="axnote">%s</div>'
                       % ('נמדד מ-21.6.2026 בלבד' if p == 'twitter'
                          else 'אין נתוני צפיות'))
-            nums = '' if p == 'whatsapp' else '<div class="axv now">%s</div>' % heb(cur)
+            nums = ('' if p == 'whatsapp' else
+                    '<div class="axv now partial">%s<span class="pw2">שישה שבועות</span></div>'
+                    % heb(cur))
             out += ('<div class="axrow thin"><div class="axl">%s<div class="pn">%s</div></div>'
                     '<div class="axf">%s</div><div class="axspan">%s%s</div></div>'
                     % (icon(p, 46), esc(HEB[p]), num(fmt(fol)), nums, change))
@@ -751,9 +753,9 @@ def s_assets(d):
 
     ed = ((d.get('editorial') or {}).get('titles') or {})
     body = [head(ed.get('assets', 'שש רשתות, 3.8 מיליון עוקבים'),
-                 'צפיות ינואר–יולי, שנה מול שנה', ''),
-            '<div class="axhead"><div>רשת</div><div>עוקבים</div>'
-            '<div>2025</div><div>2026</div><div>שינוי</div></div>',
+                 'הצפיות נמדדות בחלון ינואר–יולי בכל שנה', ''),
+            '<div class="axhead"><div>רשת</div><div>עוקבים היום</div>'
+            '<div>צפיות 2025</div><div>צפיות 2026</div><div>שינוי</div></div>',
             '<div class="axlist">%s%s</div>' % (out, tot)]
     return slide('הנכסים', 'הנכסים והצמיחה שלהם בשקף אחד.', ''.join(body),
                  section='הנכסים והצמיחה')
@@ -874,28 +876,32 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .ach2v{font-size:36px;font-weight:700;line-height:1;white-space:nowrap}
 .ach2l{font-size:17px;color:#444;font-weight:700;line-height:1.25}
 /* צמיחה */
-.axhead{display:grid;grid-template-columns:300px 220px 200px 220px 1fr;gap:24px;
+.axhead{display:grid;grid-template-columns:360px 300px 260px 300px 300px;gap:26px;
   font-size:15px;font-weight:700;color:%(m)s;letter-spacing:.03em;
   padding-bottom:14px;border-bottom:1px solid %(g)s}
-.axhead div:nth-child(3),.axhead div:nth-child(4){text-align:left}
 .axhead div:nth-child(5){text-align:right}
 .axlist{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;padding:6px 0}
-.axrow{display:grid;grid-template-columns:300px 220px 200px 220px 1fr;gap:24px;align-items:center}
-.axrow.total{border-top:2px solid %(ink)s;padding-top:22px;margin-top:6px}
+.axrow{display:grid;grid-template-columns:360px 300px 260px 300px 300px;gap:26px;
+  align-items:center;padding:18px 0;border-bottom:1px solid #ededed}
+.axrow.total{border-top:2px solid %(ink)s;border-bottom:none;
+  padding-top:26px;margin-top:8px}
 .axrow.total .axl{font-size:28px;font-weight:900}
 .axl{display:flex;align-items:center;gap:18px}
-.axf{font-size:27px;font-weight:700;text-align:left;color:#333}
-.axv{font-size:30px;font-weight:700;color:%(m)s;text-align:left}
+.axf{font-size:27px;font-weight:700;text-align:right;color:#333}
+.axv{font-size:30px;font-weight:700;color:%(m)s;text-align:right}
 .axv.now{font-size:38px;color:%(ink)s}
+.axv.now .pw2{display:block;font-size:14px;font-weight:400;
+  color:#8a4b00;margin-top:4px}
 .axc{display:flex;align-items:center;gap:12px;justify-content:flex-end;
   direction:ltr}
 .axc span{font-size:42px;font-weight:900}
 .axrow.total .axc span{color:%(a)s}
 .chev{display:block;flex:none}
-.axspan{grid-column:span 3;display:grid;grid-template-columns:200px 220px 1fr;
-  gap:24px;align-items:center}
+.axspan{grid-column:span 3;display:grid;grid-template-columns:260px 300px 300px;
+  gap:26px;align-items:center}
 .axspan .axv{grid-column:2}
 .axspan .axnote{grid-column:3;justify-self:end}
+.axrow.thin{color:#666}
 .axnote{font-size:19px;color:#8a4b00;background:#fff6e8;border-radius:8px;padding:8px 14px}
 .axrow.thin .axv.now{margin-inline-end:8px}
 .ghero{display:grid;grid-template-columns:auto auto auto 1fr;gap:34px;align-items:center;
