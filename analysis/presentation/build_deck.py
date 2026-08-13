@@ -304,6 +304,14 @@ def build():
             prev_ed = {}
     ev_cfg = prev_ed.get('events') or EDITORIAL_SEED['events']
     deck['events'] = measure_events(yt, tt, subs, fb_daily, ev_cfg)
+
+    # יום השיא נופל בתוך אחד האירועים המוגדרים — לקשר במקום להסביר בנפרד,
+    # כדי שהשם על השקף השני יהיה בדיוק השם שמופיע בשקף האירועים.
+    for day in deck.get('big_days', {}).get('days', []):
+        for w in deck['events']['windows']:
+            if w['from'] <= day['date'] <= w['to']:
+                day['event'] = w.get('short') or w['name']
+                break
     deck['_candidates'] = candidate_windows(yt, tt)
     deck.pop('_subs', None)
 
