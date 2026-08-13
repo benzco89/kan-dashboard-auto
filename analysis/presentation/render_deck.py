@@ -260,11 +260,20 @@ def head(title, kicker='', right=''):
                esc(title), right))
 
 
+def total_views(d):
+    """סך הצפיות — **הגדרה אחת לכל המסמך**.
+
+    השער חישב מ-`yearly` והשקף השלישי מ-`monthly_views`, ושניהם הופיעו על
+    אותו מסמך: 4.78B מול 4.80B. הסדרה החודשית היא הבסיס הנכון — היא כבר
+    מסוננת לחודשים תקפים, חתוכה ביולי, וביוטיוב מגיעה מ-Studio.
+    """
+    return sum(sum(m['views'] for m in blk.get('monthly_views', []))
+               for blk in d['platforms'].values() if blk.get('monthly_views'))
+
+
 def s_cover(d):
-    tot = sum(p.get('yearly', {}).get(y, {}).get('views', 0)
-              for p in d['platforms'].values() if isinstance(p.get('yearly'), dict)
-              for y in ('2024', '2025', '2026'))
     ed = d['editorial']
+    tot = total_views(d)
     strip = ''.join(
         '<div class="cp">%s<div><div class="cpn">%s</div><div class="cpf">%s</div></div></div>'
         % (icon(p, 40), esc(HEB[p]), num(fmt(n)))
@@ -273,21 +282,20 @@ def s_cover(d):
         '<div class="cover">'
         '<div class="cbar"></div>'
         '<div>'
-        '<div class="kicker">סיכום פעילות</div>'
         '<h1>%s</h1>'
         '<div class="csub">%s</div>'
         '</div>'
         '<div class="cstrip">%s</div>'
-        '<div class="cfoot">'
-        '<div><div class="clab">סך הצפיות בכל הרשתות</div>'
-        '<div class="cbig">%s<span>%s</span></div></div>'
-        '<div class="cright"><div class="clab">קהל עוקבים</div>'
-        '<div class="cnum">%s</div></div>'
+        '<div class="chero">'
+        '<div class="cbig">%s<span>%s</span></div>'
+        '<div class="clab">צפיות בכל הרשתות</div>'
+        '<div class="cfol">%s עוקבים</div>'
         '</div></div>'
         % (esc(ed.get('cover_title')), esc(ed.get('cover_subtitle')), strip,
            short(tot)[:-1], short(tot)[-1], num(fmt(sum(d['followers'].values())))))
-    return slide('שער', 'המספר הגדול: כמה צפיות הפיקו כל הנכסים יחד, וכמה עוקבים יש.',
-                 body, 'radial-gradient(120% 120% at 78% 12%,#fff 0%,#f7f7f7 55%,#ececec 100%)')
+    return slide('שער', 'מספר גיבור אחד: סך הצפיות, והקהל כשורה מתחתיו.',
+                 body, 'radial-gradient(120% 120% at 78% 12%,#fff 0%,#f7f7f7 55%,#ececec 100%)',
+                 chrome=False)
 
 
 def s_assets(d):
@@ -629,9 +637,7 @@ def s_contents(d):
 
 def s_achievements(d):
     """המספרים הגדולים על שקף אחד — מה שהמחלקה השיגה בשנתיים."""
-    tot_views = sum(
-        sum(m['views'] for m in blk.get('monthly_views', []))
-        for blk in d['platforms'].values() if blk.get('monthly_views'))
+    tot_views = total_views(d)
     ytd = d.get('views_by_year_ytd') or {}
     yrs = sorted(ytd)
     growth = ((ytd[yrs[-1]] / ytd[yrs[-2]] - 1) * 100) if len(yrs) >= 2 else 0
@@ -784,12 +790,15 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .csub{margin-top:28px;font-size:32px;color:#404040}
 .cfoot{display:flex;align-items:flex-end;justify-content:space-between;
   border-top:1px solid %(g)s;padding-top:44px}
-.clab{font-size:23px;font-weight:600;color:%(m)s;margin-bottom:10px}
-.cbig{font-family:'SF Mono',Menlo,monospace;font-size:190px;font-weight:700;line-height:.85;letter-spacing:-.03em}
-.cbig span{font-size:92px;color:%(a)s}
+.clab{font-size:26px;font-weight:600;color:%(m)s;margin-top:16px}
+.chero{text-align:center}
+.cbig{font-family:'SF Mono',Menlo,monospace;font-size:250px;font-weight:700;line-height:.82;
+  letter-spacing:-.04em}
+.cbig span{font-size:118px;color:%(a)s}
+.cfol{font-size:34px;color:#404040;margin-top:18px}
 .cright{text-align:left}
 .cnum{font-size:76px;font-weight:700;line-height:1}
-.cstrip{display:flex;gap:44px;align-items:center;flex-wrap:wrap}
+.cstrip{display:flex;gap:44px;align-items:center;flex-wrap:wrap;justify-content:center}
 .cp{display:flex;align-items:center;gap:13px}
 .cpn{font-size:21px;font-weight:700}
 .cpf{font-size:19px;color:%(m)s}
