@@ -237,9 +237,19 @@ def stacked(series, h=48):
 
 # ---------- שקפים ----------
 
-def slide(label, notes, body, bg=SURFACE):
-    return ('<section data-label="%s" data-notes="%s" dir="rtl" style="background:%s">%s</section>'
-            % (esc(label), esc(notes), bg, body))
+_PAGE = {'n': 0}
+
+
+def slide(label, notes, body, bg=SURFACE, section='', chrome=True):
+    """שקף. `section` הוא שם הפרק שיודפס בפינה יחד עם מספר העמוד."""
+    _PAGE['n'] += 1
+    foot = ''
+    if chrome:
+        foot = ('<div class="chrome"><span>%s</span><span class="pg">%d</span></div>'
+                % (esc(section), _PAGE['n']))
+    return ('<section data-label="%s" data-notes="%s" dir="rtl" style="background:%s">'
+            '%s%s</section>'
+            % (esc(label), esc(notes), bg, body, foot))
 
 
 def head(title, kicker='', right=''):
@@ -278,78 +288,6 @@ def s_cover(d):
            short(tot)[:-1], short(tot)[-1], num(fmt(sum(d['followers'].values())))))
     return slide('שער', 'המספר הגדול: כמה צפיות הפיקו כל הנכסים יחד, וכמה עוקבים יש.',
                  body, 'radial-gradient(120% 120% at 78% 12%,#fff 0%,#f7f7f7 55%,#ececec 100%)')
-
-
-def s_thesis(d):
-    """הטענה של המצגת, בשקף אחד.
-
-    שאר השקפים מתארים; זה טוען. בלעדיו עשרה שקפים של מספרים לא משאירים
-    משפט אחד שאפשר לחזור עליו אחרי הישיבה.
-
-    שני ברים מוערמים = נתח הצפיות של כל רשת, ינואר–יולי, שנה מול שנה. צבעי
-    המותג מותרים כאן כי כל מקטע נושא את שם הרשת ואת האחוז שלו — הזהות אינה
-    נשענת על הצבע.
-    """
-    ytd = d.get('views_by_year_ytd') or {}
-    years = sorted(ytd)
-    if len(years) < 2:
-        return ''
-    plats = ('facebook', 'tiktok', 'instagram', 'youtube')
-    share = {}
-    for yr in years:
-        tot = {}
-        for p in plats:
-            tot[p] = sum(m['views'] for m in d['platforms'][p].get('monthly_views', [])
-                         if m['month'][:4] == yr and m['month'][5:7] <= '07')
-        s = sum(tot.values()) or 1
-        share[yr] = (tot, s)
-
-    bars = ''
-    for yr in years:
-        tot, s = share[yr]
-        segs = ''
-        for p, v in sorted(tot.items(), key=lambda x: -x[1]):
-            pct = v / s * 100
-            segs += ('<div class="tseg" style="width:%.3f%%;background:%s">'
-                     '%s</div>'
-                     % (pct, BRAND[p],
-                        '<span>%s<i>%d%%</i></span>' % (esc(HEB[p]), round(pct))
-                        if pct >= 8 else ''))
-        bars += ('<div class="trow2"><div class="ty">%s</div>'
-                 '<div class="tbar">%s</div><div class="tt2">%s</div></div>'
-                 % (yr, segs, num(short(s))))
-
-    fb = share[years[-1]][0]['facebook'] / share[years[-1]][1] * 100
-    fb_prev = share[years[0]][0]['facebook'] / share[years[0]][1] * 100
-    yt = share[years[-1]][0]['youtube'] / share[years[-1]][1] * 100
-    yt_prev = share[years[0]][0]['youtube'] / share[years[0]][1] * 100
-    tt_total = sum(m['views'] for m in d['platforms']['tiktok'].get('monthly_views', []))
-
-    ed = (d.get('editorial') or {}).get('thesis') or {}
-    body = [
-        '<div class="thesis">'
-        '<div class="kicker">%s</div>'
-        '<h2 class="tclaim">%s</h2>'
-        '<div class="tsub">%s</div>' % (
-            esc(ed.get('kicker', 'מה שקרה בשנתיים')),
-            esc(ed.get('claim', 'התיק הדיגיטלי השתנה')),
-            esc(ed.get('sub', 'נתח הצפיות של כל רשת · ינואר–יולי'))),
-        '<div class="tbars">%s</div>' % bars,
-        '<div class="tfacts">'
-        '<div class="tf"><b>%s</b> נתח הצפיות של פייסבוק — מ-%s. '
-        'הוא נושא היום כמעט מחצית מהכול.</div>'
-        # לא "לא הייתה קיימת": הפרופיל מדווח 4,950 סרטונים ובידינו 3,993
-        # מפברואר 2025, כלומר ~950 קדמו לנו. לא נמדדה ≠ לא הייתה.
-        '<div class="tf"><b>%s</b> מהצפיות מגיעות מטיקטוק — רשת שלא נמדדה '
-        'אצלנו כלל עד 2025, והיום היא רבע מהתיק.</div>'
-        '<div class="tf">יוטיוב ירד מ-<b>%s</b> ל-<b>%s</b> מהנתח — לא כי הוא '
-        'קטן, אלא כי השאר גדלו סביבו.</div>'
-        '</div></div>' % (num('%.0f%%' % fb), num('%.0f%%' % fb_prev),
-                          num('%.0f%%' % (share[years[-1]][0]['tiktok']
-                                          / share[years[-1]][1] * 100)),
-                          num('%.0f%%' % yt_prev), num('%.0f%%' % yt)),
-    ]
-    return slide('הטענה', 'המשפט שההנהלה צריכה לקחת מהמצגת.', ''.join(body))
 
 
 def s_assets(d):
@@ -400,167 +338,8 @@ def s_assets(d):
     body.append('</div>')
     body.append('<div class="foot">ערוץ הוואטסאפ אינו חושף צפיות כלל, ו-X נמדד רק '
                 'משבעה שבועות — שניהם אינם ברי-השוואה כאן. ראו שקף המדידה.</div>')
-    return slide('הנכסים', 'מבט עילי. אורך הבר = נתח מהצפיות ב-2026.', ''.join(body))
-
-
-def s_growth(d):
-    """סדרות קטנות, עם האירועים מסומנים על כל אחת.
-
-    הסימון הוא מה שהופך את השקף מ"מי עלה ומי ירד" ל"למה": הפסגות יושבות על
-    המלחמות ועל שחרור החטופים, וכשרואים את זה על ארבעת הגרפים יחד ברור
-    שהתנועה היא מחזור חדשותי ולא הישג או כישלון ניהולי. אין צורך לכתוב את
-    זה במילים — הגרף אומר את זה.
-    """
-    # חודש השיא של כל אירוע, לסימון על הסדרות החודשיות
-    marks = [{'month': w['peak_date'][:7], 'label': w.get('short') or w['name']}
-             for w in ((d.get('events') or {}).get('windows') or [])]
-    cards = []
-    for p in ('facebook', 'instagram', 'youtube', 'tiktok'):
-        pts = d['platforms'][p].get('monthly_views', [])
-        if not pts:
-            continue
-        tot = sum(x['views'] for x in pts)
-        # ינואר–יולי מול אותו חלון אשתקד — מי שמחפש את זה ימצא, בלי שקף
-        # נפרד שצועק «נכשלנו כאן»
-        ytd = {}
-        for m in pts:
-            if m['month'][5:7] <= '07':
-                ytd[m['month'][:4]] = ytd.get(m['month'][:4], 0) + m['views']
-        yrs = sorted(ytd)
-        delta = ''
-        if len(yrs) >= 2 and ytd[yrs[-2]]:
-            pct = (ytd[yrs[-1]] / ytd[yrs[-2]] - 1) * 100
-            delta = ('<div class="cd %s">%s <span>ינואר–יולי, %s מול %s</span></div>'
-                     % ('up' if pct >= 0 else 'down', num('%+.0f%%' % pct),
-                        yrs[-1], yrs[-2]))
-        cards.append(
-            '<div class="card"><div class="ch">%s<div><div class="pn">%s</div>'
-            '<div class="cs">%s צפיות · %s עד %s</div></div>%s</div>%s</div>'
-            % (icon(p, 34), esc(HEB[p]), short(tot),
-               esc(pts[0]['month']), esc(pts[-1]['month']), delta,
-               sparkline(pts, BRAND[p], h=210, marks=marks, legend=False)))
-    ev = ((d.get('events') or {}).get('windows') or [])
-    legend = ''.join('<span class="elg"><i></i>%s</span>' % esc(w.get('short') or w['name'])
-                     for w in ev)
-    body = [head('הצמיחה', 'צפיות חודשיות · האירועים מסומנים על כל גרף', ''),
-            ('<div class="elegend">%s</div>' % legend) if legend else '',
-            '<div class="grid2">%s</div>' % ''.join(cards),
-            '<div class="foot">כל גרף בקנה מידה משלו — ההשוואה היא של <b>מגמה</b>, '
-            'לא של גובה; הערך המרבי מסומן על ציר ה-Y. הקווים המקווקווים הם חודשי '
-            'השיא של האירועים. יוטיוב מתחיל בינואר 2024 (לו יש סדרה מלאה), '
-            'פייסבוק ואינסטגרם בספטמבר 2024 וטיקטוק בפברואר 2025 — ראו שקף המדידה.</div>']
-    return slide('הצמיחה', 'ארבע רשתות, כל אחת בקנה המידה שלה. משווים מגמה.', ''.join(body))
-
-
-def s_audience(d):
-    """כמה גדלנו, ומתי — לא כמה נוספו אתמול.
-
-    שתי העקומות מצטברות בכוונה: השאלה היא «בכמה גדל הקהל בשנתיים», והקצב
-    היומי עונה על שאלה אחרת. הקפיצות מסומנות על העקומה עצמה, וכל אחת נושאת
-    את הכותרת של הפריט הגדול באותו חודש.
-    """
-    ys = d['youtube_subscribers']
-    fb = d['facebook_follows']
-    pts = [{'month': s['month'], 'views': s['subs']} for s in ys['series']]
-    fb_pts = [{'month': c['month'], 'views': c['total']} for c in fb['cumulative']]
-    gross = fb['total_gross']
-    net = int(gross * fb['net_ratio'])
-
-    body = [head('בכמה גדלנו', 'ינואר 2024 עד יולי 2026',
-                 '<div class="rnum">%s</div><div class="rlab">קהל בכל הרשתות היום</div>'
-                 % fmt(sum(d['followers'].values()))),
-            '<div class="grid2">'
-            '<div class="card"><div class="ch">%s<div><div class="pn">מנויי יוטיוב</div>'
-            '<div class="cs">%s ← %s</div></div>'
-            '<div class="delta">%s<span>%s</span></div></div>%s</div>'
-            % (icon('youtube', 34), num(fmt(ys['start'])), num(fmt(ys['end'])),
-               signed(ys['end'] - ys['start']),
-               num('%.0f%%' % ((ys['end'] / ys['start'] - 1) * 100)),
-               sparkline(pts, BRAND['youtube'], h=210, zero_base=False,
-                         marks=ys.get('top_months'))),
-            '<div class="card"><div class="ch">%s<div><div class="pn">הצטרפויות לפייסבוק</div>'
-            '<div class="cs">מצטבר מינואר 2024</div></div>'
-            '<div class="delta">%s<span>ברוטו</span></div></div>%s</div>'
-            % (icon('facebook', 34), num('+%s' % fmt(gross)),
-               sparkline(fb_pts, BRAND['facebook'], h=210,
-                         marks=fb.get('top_months'))),
-            '</div>',
-            '<div class="panel"><div class="ptitle">מה המספרים האלה אומרים</div>'
-            '<div class="grid3">'
-            '<div class="fact"><b>%s</b> מנויים נוספו ליוטיוב, גידול של <b>%s</b>. '
-            'זה הנתון המדויק היחיד שיש לנו לאורך כל התקופה.</div>'
-            '<div class="fact"><b>%s</b> הצטרפו לעמוד הפייסבוק — אבל זה מספר '
-            '<b>ברוטו</b>. לפי היחס שנמדד על שמונה חודשי חפיפה, הגידול נטו הוא '
-            'כ-<b>%s</b>: אחד מכל ארבעה מצטרפים עוזב.</div>'
-            '<div class="fact">לאינסטגרם, טיקטוק ו-X <b>אין היסטוריית עוקבים</b> — '
-            'מטא חושפת שנה אחורה בלבד והשאר לא חושפים כלל. יש רק המספר של היום.</div>'
-            '</div></div>'
-            % (signed(ys['end'] - ys['start']),
-               num('%.0f%%' % ((ys['end'] / ys['start'] - 1) * 100)),
-               num(fmt(gross)), num('~%s' % fmt(net)))]
-    # מה שמגייס: עוקבים ל-1000 צפיות
-    return slide('בכמה גדלנו', 'הצמיחה המצטברת, והחודשים שבהם היא קפצה.',
-                 ''.join(body))
-
-
-def s_ig_conversion(d):
-    """מה ממיר צופה לעוקב. שייך לשקף אינסטגרם, לא לשקף הצמיחה."""
-    f = d.get('instagram_follows_by_format') or {}
-    if not f:
-        return ''
-    order = sorted(f.items(), key=lambda x: -x[1]['per_1k_views'])
-    hi = order[0][1]['per_1k_views'] or 1
-    bars = ''.join(bar_row('<div class="pl"><div class="pn">%s</div></div>' % esc(k),
-                           v['per_1k_views'], hi, mix_color(k, i),
-                           num('%.2f' % v['per_1k_views']),
-                           '%s פוסטים' % num(fmt(v['posts'])))
-                   for i, (k, v) in enumerate(order))
-    ratio = order[0][1]['per_1k_views'] / max(order[-1][1]['per_1k_views'], .01)
-    return ('<div class="panel"><div class="ptitle">מה ממיר צופה לעוקב — '
-            'עוקבים לכל 1,000 צפיות</div>%s'
-            '<div class="foot">רילס ממירים פי %.0f מקרוסלה. הפער עקבי בשלוש '
-            'השנים בנפרד, ולא נובע משנה חריגה אחת.</div></div>' % (bars, ratio))
-
-
-def s_output(d):
-    """נפח ותמהיל — הסיפור של המעבר לווידאו."""
-    cards = []
-    for p in ('facebook', 'instagram', 'youtube'):
-        mix = d['platforms'][p].get('format_mix', {})
-        if not mix:
-            continue
-        rows = []
-        for y in ('2024', '2025', '2026'):
-            seg = [(k, v.get(y, 0), mix_color(k, i))
-                   for i, (k, v) in enumerate(sorted(mix.items()))]
-            seg = [s for s in seg if s[1]]
-            if not seg:
-                continue
-            seg.sort(key=lambda s: -s[1])
-            rows.append('<div class="mixrow"><div class="my">%s</div>%s'
-                        '<div class="mt">%s</div></div>'
-                        % (y, stacked(seg), num(fmt(sum(s[1] for s in seg)))))
-        # השוואה הוגנת: ינואר–יולי בכל שנה, ולא שנה שלמה מול שבעה חודשים
-        ytd = d['platforms'][p].get('posts_ytd') or {}
-        note = ''
-        if ytd.get('2024') and ytd.get('2026'):
-            a, b = ytd['2024'], ytd['2026']
-            pct = (b / a - 1) * 100
-            note = ('<div class="mixnote"><b>ינואר–יולי:</b> %s ← %s פריטים '
-                    '<span class="%s">%s</span></div>'
-                    % (num(fmt(a)), num(fmt(b)),
-                       'up' if pct >= 0 else 'down',
-                       num('%+.0f%%' % pct)))
-        cards.append('<div class="card"><div class="ch">%s<div class="pn">%s</div></div>'
-                     '<div class="mixlist">%s</div>%s</div>'
-                     % (icon(p, 34), esc(HEB[p]), ''.join(rows), note))
-    body = [head('מה פרסמנו', 'ינואר–יולי בכל שנה · נפח ותמהיל הפורמטים', ''),
-            '<div class="grid3">%s</div>' % ''.join(cards),
-            '<div class="foot">בפייסבוק <b>וידאו</b> מאחד רילס וּוידאו: מטא מפרסמת כל וידאו '
-            'כרילס מאמצע 2025, וההפרדה בנתונים הגולמיים היא שינוי שלה ולא שינוי בעמוד. '
-            'כל השנים נמדדות באותו חלון — ינואר עד יולי.</div>']
-    return slide('מה פרסמנו', 'הנפח והתמהיל בשלוש הרשתות שיש להן פילוח פורמטים.',
-                 ''.join(body))
+    return slide('הנכסים', 'מבט עילי. אורך הבר = נתח מהצפיות ב-2026.', ''.join(body),
+                 section='הנכסים הדיגיטליים')
 
 
 def s_platform(d, p):
@@ -615,7 +394,8 @@ def s_platform(d, p):
             ('<div class="panel chartpanel">%s</div>'
              % sparkline(pts, BRAND[p], h=210, marks=marks, legend=False)) if pts else '',
             _deep_row(d, p)]
-    return slide(HEB[p], 'עומק לרשת %s.' % HEB[p], ''.join(body))
+    return slide(HEB[p], 'עומק לרשת %s.' % HEB[p], ''.join(body),
+                 section='רשת אחר רשת')
 
 
 def _deep_row(d, p):
@@ -738,7 +518,7 @@ def s_thin(d):
                 'הוותיקות, כבר גדול מ-39%% ממנויי יוטיוב ומתקרב ל-X. שניהם נכסים '
                 'אמיתיים שאין עליהם היסטוריה למדוד.</div></div>' % bars)
     return slide('X ווואטסאפ', 'שתי רשתות בלי היסטוריה. אומרים את זה ולא מותחים.',
-                 ''.join(body))
+                 ''.join(body), section='רשת אחר רשת')
 
 
 def _he_date(iso):
@@ -796,70 +576,7 @@ def s_events(d):
             'איתור אוטומטי פתח את מלחמת יוני ב-10.6, כי באותו יום היה קליפ ויראלי '
             'על בריחה משוטר; אלגוריתם מוצא שיאים, לא אירועים.</div>']
     return slide('אירועים', 'האירועים החדשותיים הגדולים ומה הם עשו למספרים.',
-                 ''.join(body))
-
-
-def s_top(d):
-    # כותרות שנכתבו ביד ממלאות חורים שהנתונים לא מכסים — לפייסבוק 2025 אין
-    # טקסט פוסטים, כי הבקפיל מה-API לא שומר אותו.
-    written = (d.get('editorial') or {}).get('slides') or {}
-    blocks = []
-    for y, items in sorted(d['top_content'].items()):
-        rows = ''
-        for i in items:
-            title = i['title'] or written.get('top_%s_%s' % (y, i['platform']), '')
-            rows += ('<div class="trow"><div class="tp">%s</div>'
-                     '<div class="tt">%s</div><div class="tv">%s</div></div>'
-                     % (icon(i['platform'], 28),
-                        esc(title) or '<span class="todo">— למלא כותרת —</span>',
-                        num(short(i['views']))))
-        blocks.append('<div class="card"><div class="yhead">%s</div>%s</div>' % (y, rows))
-    body = [head('רגעי השיא', 'הפריט הגדול של כל שנה, בכל רשת', ''),
-            '<div class="grid3">%s</div>' % ''.join(blocks)]
-    xp = d.get('cross_platform') or {}
-    if xp:
-        cards = ''.join(
-            '<div class="xp"><div class="xpy">%s</div>'
-            '<div class="xpi">%s</div>'
-            '<div class="xpt">%s</div><div class="xpv">%s <span>צפיות יחד</span></div></div>'
-            % (y, ''.join(icon(p, 26) for p in v['platforms']),
-               esc(v['title']), num(short(v['views'])))
-            for y, v in sorted(xp.items()))
-        body.append('<div class="panel"><div class="ptitle">הסיפורים הגדולים עוברים '
-                    'בין הרשתות</div><div class="xprow">%s</div>'
-                    '<div class="foot">זוהה לפי חפיפת מילים בכותרות (0.5 ומעלה) — '
-                    'כל רשת עורכת את הכותרת בנפרד, אז טקסט זהה לא היה תופס.</div>'
-                    '</div>' % cards)
-    body.append('<div class="foot">מספטמבר 2024 בלבד — לפני כן מטא לא מספקת צפיות '
-                'ברמת פריט.</div>')
-    return slide('רגעי שיא', 'התוכן הגדול של כל שנה.', ''.join(body))
-
-
-def s_method(d):
-    body = [head('הערת מדידה', 'למה הגרפים מתחילים בספטמבר 2024', ''),
-            '<div class="panel wide">'
-            '<p>מטא שינתה את הגדרת הצפיות והחשיפה באוגוסט–ספטמבר 2024, ומוחקת מדדים '
-            'ברמת פריט אחרי כ-23 חודשים. נמדד על הייצואים עצמם:</p>'
-            '<ul>'
-            '<li><b>צפיות באינסטגרם</b> — התא ריק לפני יולי 2024.</li>'
-            '<li><b>חשיפה באינסטגרם</b> — לפני ספטמבר 2024 חציון 3–24, על פוסטים עם '
-            '1,500 לייקים ומעלה. זה לא נתון.</li>'
-            '<li><b>פייסבוק</b> — «חשיפה אורגנית» שווה ל«חשיפה» עד אוגוסט 2024 ואז קופצת '
-            'לפי 2 ממנה, כשהקידום אפס. אורגני לא יכול לעלות על הסך הכל.</li>'
-            '<li>אותה בדיקה מול ה-API החזירה את אותם ערכים <b>ספרה בספרה</b> — כלומר '
-            'הנתון עצמו אבד, לא הייצוא.</li>'
-            '</ul>'
-            '<p>לכן: <b>ספירות, לייקים ותגובות</b> תקפים מינואר 2024. '
-            '<b>צפיות וחשיפה</b> — מספטמבר 2024. קו שנמתח על פני הגבול הזה מראה צמיחה '
-            'שהיא כולה שינוי מדידה.</p>'
-            '<p class="dim">היחידה בפייסבוק, אינסטגרם וטיקטוק: <b>צפיות שנצברו לתוכן '
-            'שפורסם באותה תקופה</b>. פוסט שם גמור תוך ארבעה ימים, ולכן זה קרוב מאוד '
-            'ל«צפיות באותה תקופה». <b>יוטיוב נמדד אחרת ובכוונה</b> — צפיות בפועל '
-            'בתקופה, מייצוא Studio, כי לו יש זנב אמיתי: לפי שנת הפרסום הוא היה מסתכם '
-            'ב-547M, ובפועל נצפו 642M. בכל רשת נבחר המדד המדויק יותר עבורה.</p>'
-            '</div>',
-            _coverage_table()]
-    return slide('הערת מדידה', 'השקף שמונע את השאלה מהקהל.', ''.join(body))
+                 ''.join(body), section='מה הניע את המספרים')
 
 
 COVERAGE = [
@@ -887,6 +604,156 @@ def _coverage_table():
     return ('<div class="panel"><div class="ptitle">מה מכוסה, ומאיפה</div>'
             '<table class="cov"><tr><th></th><th>2024</th><th>2025</th><th>2026</th>'
             '<th>מקור</th></tr>%s</table></div>' % ''.join(rows))
+
+
+SECTIONS = [
+    ('הישגי התקופה', 3),
+    ('הנכסים הדיגיטליים', 4),
+    ('הצמיחה', 5),
+    ('מה הניע את המספרים', 6),
+    ('רשת אחר רשת', 7),
+    ('נספח', 12),
+]
+
+
+def s_contents(d):
+    """תוכן עניינים. במסמך שנקרא לבד זה מה שמונע «הלכתי לאיבוד»."""
+    rows = ''.join(
+        '<div class="tocrow"><span class="tocn">%d</span>'
+        '<span class="toct">%s</span><span class="tocd"></span></div>'
+        % (pg, esc(name)) for name, pg in SECTIONS)
+    body = ('<div class="toc"><div class="kicker">מה יש במסמך</div>'
+            '<h2 class="tochead">תוכן</h2>%s</div>' % rows)
+    return slide('תוכן', 'ניווט למסמך שנקרא לבד.', body, section='')
+
+
+def s_achievements(d):
+    """המספרים הגדולים על שקף אחד — מה שהמחלקה השיגה בשנתיים."""
+    tot_views = sum(
+        sum(m['views'] for m in blk.get('monthly_views', []))
+        for blk in d['platforms'].values() if blk.get('monthly_views'))
+    ytd = d.get('views_by_year_ytd') or {}
+    yrs = sorted(ytd)
+    growth = ((ytd[yrs[-1]] / ytd[yrs[-2]] - 1) * 100) if len(yrs) >= 2 else 0
+    yt = d['platforms']['youtube']
+    ys = d['youtube_subscribers']
+    fb_gross = (d.get('facebook_follows') or {}).get('total_gross', 0)
+    tt_total = sum(m['views'] for m in d['platforms']['tiktok'].get('monthly_views', []))
+
+    tiles = [
+        (short(tot_views), 'צפיות בכל הרשתות', 'ינואר 2024 – יולי 2026'),
+        (num('%+.0f%%' % growth), 'גידול בצפיות', 'ינואר–יולי, 2026 מול 2025'),
+        (fmt(sum(d['followers'].values())), 'עוקבים', 'בשש רשתות'),
+        (fmt(yt.get('watch_hours', 0)), 'שעות צפייה ביוטיוב', 'בתקופה'),
+        (signed(ys['end'] - ys['start']), 'מנויי יוטיוב', 'גידול של 30%'),
+        (num('+%s' % fmt(fb_gross)), 'הצטרפויות לפייסבוק', 'מינואר 2024'),
+    ]
+    cards = ''.join(
+        '<div class="ach"><div class="achv">%s</div>'
+        '<div class="achl">%s</div><div class="achs">%s</div></div>'
+        % (v if v.startswith('<') else num(v), esc(lab), esc(sub))
+        for v, lab, sub in tiles)
+    ed = ((d.get('editorial') or {}).get('titles') or {})
+    body = [head(ed.get('achievements', 'שנתיים של צמיחה'), 'הישגי התקופה', ''),
+            '<div class="achgrid">%s</div>' % cards,
+            '<div class="foot">%s</div>'
+            % esc('טיקטוק לבדו הביא %s צפיות — רשת שלא נמדדה אצלנו עד 2025.'
+                  % short(tt_total))]
+    return slide('הישגים', 'המספרים הגדולים של התקופה.', ''.join(body),
+                 section='הישגי התקופה')
+
+
+def s_growth(d):
+    """כמה גדלנו — לא איך השתנו הנתחים. שקף הישג, לא ניתוח."""
+    plats = ('facebook', 'tiktok', 'instagram', 'youtube')
+    rows = []
+    for p in plats:
+        ytd = {}
+        for m in d['platforms'][p].get('monthly_views', []):
+            if m['month'][5:7] <= '07':
+                ytd[m['month'][:4]] = ytd.get(m['month'][:4], 0) + m['views']
+        yrs = sorted(ytd)
+        if len(yrs) < 2:
+            continue
+        a, b = ytd[yrs[-2]], ytd[yrs[-1]]
+        rows.append((p, a, b, (b / a - 1) * 100 if a else 0))
+    rows.sort(key=lambda r: -r[3])
+    hi = max(max(r[1], r[2]) for r in rows) or 1
+
+    bars = ''
+    for p, a, b, pct in rows:
+        bars += (
+            '<div class="grow"><div class="gl">%s<div class="pn">%s</div></div>'
+            '<div class="gbars">'
+            '<div class="gb"><div class="gf prev" style="width:%.1f%%"></div>'
+            '<span>%s</span><i>2025</i></div>'
+            '<div class="gb"><div class="gf" style="width:%.1f%%;background:%s"></div>'
+            '<span>%s</span><i>2026</i></div></div>'
+            '<div class="gp %s">%s</div></div>'
+            % (icon(p, 38), esc(HEB[p]), a / hi * 100, num(short(a)),
+               b / hi * 100, BRAND[p], num(short(b)),
+               'up' if pct >= 0 else 'down', num('%+.0f%%' % pct)))
+
+    ytd = d.get('views_by_year_ytd') or {}
+    yrs = sorted(ytd)
+    total = ''
+    if len(yrs) >= 2:
+        total = ('<div class="gtot"><div class="gtl">סך הצפיות בכל הרשתות</div>'
+                 '<div class="gtv">%s <span>←</span> %s</div>'
+                 '<div class="gtp">%s</div></div>'
+                 % (num(short(ytd[yrs[-2]])), num(short(ytd[yrs[-1]])),
+                    num('%+.0f%%' % ((ytd[yrs[-1]] / ytd[yrs[-2]] - 1) * 100))))
+    ed = ((d.get('editorial') or {}).get('titles') or {})
+    body = [head(ed.get('growth', 'הצפיות גדלו ב-65% בשנה'),
+                 'ינואר–יולי, אותו חלון בשתי השנים', ''),
+            total,
+            '<div class="growlist">%s</div>' % bars]
+    return slide('הצמיחה', 'כמה גדלנו, שנה מול שנה, באותו חלון.', ''.join(body),
+                 section='הצמיחה')
+
+
+def s_divider(d):
+    """מפריד פרק. במסמך ארוך זה מה שאומר לקורא שהוא עובר שלב."""
+    items = ''.join('<div class="dvi">%s<span>%s</span></div>'
+                    % (icon(p, 40), esc(HEB[p]))
+                    for p in ('facebook', 'tiktok', 'instagram', 'youtube'))
+    body = ('<div class="divider"><div class="kicker">החלק השני</div>'
+            '<h2 class="dvh">רשת אחר רשת</h2>'
+            '<div class="dvsub">כל רשת: כמה צפיות, מה פרסמנו, ומה ייחודי לה</div>'
+            '<div class="dvrow">%s</div></div>' % items)
+    return slide('מפריד', 'מעבר לחלק השני.', body, section='רשת אחר רשת')
+
+
+def s_appendix(d):
+    """כל הסתייגויות המדידה במקום אחד, בסוף — לא מפוזרות על השקפים."""
+    rows = ''
+    for name, y24, y25, y26, src in COVERAGE:
+        cells = ''
+        for cell in (y24, y25, y26):
+            kind, text = cell.split(':', 1)
+            cells += '<td><span class="pill %s">%s</span></td>' % (kind, esc(text))
+        rows += '<tr><th>%s</th>%s<td class="src">%s</td></tr>' % (esc(name), cells, esc(src))
+    body = [head('נספח', 'מאיפה המספרים, ומה הגבולות שלהם', ''),
+            '<div class="grid2 deep">'
+            '<div class="panel"><div class="ptitle">מה מכוסה, ומאיפה</div>'
+            '<table class="cov"><tr><th></th><th>2024</th><th>2025</th><th>2026</th>'
+            '<th>מקור</th></tr>%s</table></div>' % rows,
+            '<div class="panel"><div class="ptitle">שלוש הערות מדידה</div>'
+            '<div class="note2"><b>למה חלק מהגרפים מתחילים בספטמבר 2024.</b> '
+            'מטא שינתה את הגדרת הצפיות והחשיפה באוגוסט–ספטמבר 2024, ומוחקת מדדים '
+            'ברמת פוסט אחרי כ-23 חודשים. לפני ספטמבר החשיפה באינסטגרם היא חציון '
+            '3–24 על פוסטים עם 1,500 לייקים — כלומר לא נתון. בדיקה מול ה-API '
+            'החזירה את אותם ערכים בדיוק, כך שהנתון עצמו אבד ולא הייצוא. '
+            'יוטיוב אינו כפוף לזה ומתחיל בינואר 2024.</div>'
+            '<div class="note2"><b>למה הכל נחתך ביולי 2026.</b> אוגוסט הוא חודש '
+            'חלקי, וכל גרף חודשי היה מצייר בסופו צניחה שהיא רק «החודש עוד לא '
+            'נגמר». ההשוואות השנתיות הן ינואר–יולי בשתי השנים.</div>'
+            '<div class="note2"><b>מה נמדד בכל רשת.</b> בפייסבוק, אינסטגרם '
+            'וטיקטוק — צפיות שנצברו לתוכן שפורסם בתקופה; פוסט שם גמור תוך ארבעה '
+            'ימים, אז זה קרוב לצפיות בתקופה. ביוטיוב — צפיות בפועל בתקופה מייצוא '
+            'Studio, כי לו יש זנב אמיתי. בכל רשת נבחר המדד המדויק יותר עבורה.</div>'
+            '</div></div>']
+    return slide('נספח', 'מקורות והסתייגויות.', ''.join(body), section='נספח')
 
 
 CSS = """
@@ -977,6 +844,53 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .delta .mono{font-size:32px;font-weight:700;line-height:1;color:#186a2e}
 .delta span{display:block;font-size:14px;color:%(m)s;margin-top:2px;font-weight:400}
 .delta span .mono{font-size:14px;font-weight:400;color:%(m)s}
+/* כרומת מסמך */
+.chrome{position:absolute;bottom:34px;left:84px;right:84px;display:flex;
+  justify-content:space-between;align-items:baseline;font-size:15px;color:#a8a8a8}
+.chrome .pg{font-family:'SF Mono',Menlo,monospace;font-size:17px;font-weight:700;color:#8a8a8a}
+/* תוכן עניינים */
+.toc{flex:1;display:flex;flex-direction:column;justify-content:center;max-width:1100px}
+.tochead{margin:6px 0 40px;font-size:76px;font-weight:900;letter-spacing:-.02em}
+.tocrow{display:grid;grid-template-columns:64px auto 1fr;gap:20px;align-items:baseline;
+  padding:18px 0;border-bottom:1px solid %(g)s}
+.tocn{font-family:'SF Mono',Menlo,monospace;font-size:26px;font-weight:700;color:%(a)s}
+.toct{font-size:34px;font-weight:700}
+/* הישגים */
+.achgrid{flex:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr;
+  gap:26px;align-content:center}
+.ach{background:#fff;border:1px solid %(g)s;border-radius:14px;padding:34px 36px;
+  display:flex;flex-direction:column;justify-content:center}
+.achv{font-size:64px;font-weight:700;line-height:1;letter-spacing:-.02em}
+.achl{font-size:24px;font-weight:700;margin-top:12px}
+.achs{font-size:17px;color:%(m)s;margin-top:4px}
+/* צמיחה */
+.gtot{display:flex;align-items:baseline;gap:22px;background:#fff;border:1px solid %(g)s;
+  border-radius:14px;padding:22px 28px;margin-bottom:22px}
+.gtl{font-size:20px;color:%(m)s;font-weight:700}
+.gtv{font-size:44px;font-weight:700;margin-inline-start:auto}
+.gtv span{color:%(m)s;font-size:30px;padding:0 8px}
+.gtp{font-size:44px;font-weight:900;color:#186a2e}
+.growlist{flex:1;display:flex;flex-direction:column;justify-content:space-evenly}
+.grow{display:grid;grid-template-columns:240px 1fr 150px;gap:26px;align-items:center}
+.gl{display:flex;align-items:center;gap:16px}
+.gbars{display:flex;flex-direction:column;gap:8px}
+.gb{position:relative;height:38px;background:#ececec;border-radius:7px;display:flex;
+  align-items:center}
+.gf{position:absolute;top:0;right:0;height:100%%;border-radius:7px}
+.gf.prev{background:#c9c9c9}
+.gb span{position:relative;font-family:'SF Mono',Menlo,monospace;font-size:20px;
+  font-weight:700;padding-inline-start:14px;margin-inline-start:auto;color:#333}
+.gb i{position:relative;font-style:normal;font-size:14px;color:%(m)s;padding:0 12px}
+.gp{font-size:38px;font-weight:900;text-align:left}
+.gp.up{color:#186a2e}
+.gp.down{color:#b42318}
+/* מפריד פרק */
+.divider{flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px}
+.dvh{margin:0;font-size:92px;font-weight:900;letter-spacing:-.02em;line-height:1}
+.dvsub{font-size:28px;color:#404040}
+.dvrow{display:flex;gap:52px;margin-top:36px}
+.dvi{display:flex;align-items:center;gap:14px;font-size:26px;font-weight:700}
+.note2{font-size:19px;line-height:1.55;color:#333;margin-bottom:18px}
 .thesis{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;gap:20px;padding:10px 0}
 .tclaim{margin:6px 0 0;font-size:86px;font-weight:900;letter-spacing:-.02em;line-height:1}
 .tsub{font-size:24px;color:%(m)s}
@@ -1154,17 +1068,22 @@ def render():
     d = json.load(open(DATA, encoding='utf-8'))
     # הסדר הוא הסיפור: מי אנחנו, מה המספרים, מה הניע אותם, ואז לעומק
     # בכל רשת. כל מה שנוגע לרשת אחת יושב בשקף שלה ולא חוזר במקום אחר.
+    # סיכום הישגים, לא ניתוח: קודם כמה השגנו, אחר כך כמה גדלנו, ואז לעומק.
+    # הרשתות לפי גודל — מובילים בגדולה ולא בוותיקה.
     slides = [
         s_cover(d),
-        s_thesis(d),          # הטענה — מה שקרה בשנתיים
-        s_assets(d),          # מבט כללי — מה מצבנו
-        s_growth(d),          # המספרים והעלייה בכל שנה
-        s_events(d),          # מה הניע אותם
+        s_contents(d),
+        s_achievements(d),
+        s_assets(d),
+        s_growth(d),
+        s_events(d),
+        s_divider(d),
         s_platform(d, 'facebook'),
+        s_platform(d, 'tiktok'),
         s_platform(d, 'instagram'),
         s_platform(d, 'youtube'),
-        s_platform(d, 'tiktok'),
-        s_method(d),
+        s_thin(d),
+        s_appendix(d),
     ]
     slides = [s for s in slides if s]
     css = CSS % {'f': FONTS, 'a': ACCENT, 'ink': INK, 'm': MUTED, 'g': GRID}
