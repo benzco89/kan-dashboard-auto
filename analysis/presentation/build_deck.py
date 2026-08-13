@@ -325,6 +325,24 @@ def build():
     deck['views_by_year_ytd'] = dict(sorted(totals.items()))
     deck['views_ytd_platforms'] = sorted(have)
 
+    # סכומים לתקופה כולה, לשקף ההישגים. **רק 2024–2026**: ל-yearly של יוטיוב
+    # יש גם 2022–2023, וסכימה נאיבית הייתה מייחסת למחלקה 8,709 סרטונים
+    # שקדמו לתקופה. טיקטוק חלקי (מפברואר 2025), כלומר הספירה שמרנית.
+    span = {'posts': 0, 'likes': 0, 'comments': 0, 'shares': 0, 'watch_hours': 0}
+    for blk in deck['platforms'].values():
+        for y, v in (blk.get('yearly') or {}).items():
+            if y in ('2024', '2025', '2026'):
+                for k in span:
+                    span[k] += v.get(k, 0) or 0
+    span['watch_hours'] += deck['platforms']['youtube'].get('watch_hours', 0)
+    span['engagement'] = span['likes'] + span['comments'] + span['shares']
+    # ממוצע יומי: מה שהופך «4.8 מיליארד» למשהו שאפשר לתפוס
+    import datetime as _dt
+    for yr in list(deck['views_by_year_ytd']):
+        n = (_dt.date(int(yr), 7, 31) - _dt.date(int(yr), 1, 1)).days + 1
+        span.setdefault('daily', {})[yr] = round(deck['views_by_year_ytd'][yr] / n)
+    deck['period_totals'] = span
+
     # תיאור לכל קפיצה שמסומנת על העקומות — מאותה רשת, ולא כטענת סיבתיות
     for block, plat in ((deck['youtube_subscribers'], 'youtube'),
                         (deck['facebook_follows'], 'facebook')):

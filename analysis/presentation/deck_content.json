@@ -1465,6 +1465,18 @@
     "tiktok",
     "youtube"
   ],
+  "period_totals": {
+    "posts": 40154,
+    "likes": 112276681,
+    "comments": 7371778,
+    "shares": 4365190,
+    "watch_hours": 34920792,
+    "engagement": 124013649,
+    "daily": {
+      "2025": 5436758,
+      "2026": 8949574
+    }
+  },
   "editorial": {
     "cover_title": "הסושיאל של כאן חדשות",
     "cover_subtitle": "ינואר 2024 – יולי 2026",
