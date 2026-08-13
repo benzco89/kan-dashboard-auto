@@ -364,9 +364,12 @@ def s_platform(d, p):
         pct = (ytd[yrs[-1]] / ytd[yrs[-2]] - 1) * 100
         fair = ('<div class="fair %s">%s<span>ינואר–יולי, %s מול %s</span></div>'
                 % ('up' if pct >= 0 else 'down', num('%+.0f%%' % pct), yrs[-1], yrs[-2]))
-    body = [head(HEB[p], 'עוקבים: %s' % fmt(d['followers'].get(p, 0)),
-                 ('%s<div class="rnum">%s</div><div class="rlab">סך הצפיות</div>'
-                  % (fair, heb(b.get('views_total') or sum(x['views'] for x in pts))))
+    span_txt = ('%s – %s' % (pts[0]['month'], pts[-1]['month'])) if pts else ''
+    body = [head(HEB[p], 'עוקבים היום: %s' % fmt(d['followers'].get(p, 0)),
+                 ('%s<div class="rnum">%s</div>'
+                  '<div class="rlab">סך הצפיות<br><span class="tiny">%s</span></div>'
+                  % (fair, heb(b.get('views_total') or sum(x['views'] for x in pts)),
+                     esc(span_txt)))
                  if pts else ''),
             '<div class="yrow" style="grid-template-columns:repeat(%d,1fr)">%s</div>'
             % (len(cells), ''.join(cells)),
@@ -538,7 +541,7 @@ def s_events(d):
             '<div class="evr">%s – %s <span>%d ימים</span></div></div>'
             '<div class="evb"><div class="evfill" style="width:%.1f%%"></div>'
             '<div class="evtxt">%s</div></div>'
-            '<div class="evv">%s<span>%s</span></div>'
+            '<div class="evv">%s<span>צפיות · %s</span></div>'
             '<div class="evg">%s</div></div>'
             % (esc(w.get('name') or meta.get('name', '')),
                _he_date(w['from']), _he_date(w['to']), w['days'],
@@ -608,12 +611,12 @@ def s_achievements(d):
     sub = [
         (heb((pt.get('daily') or {}).get('2026', 0)), 'צפיות ביום בממוצע · 2026'),
         (heb(pt.get('engagement', 0)), 'לייקים, תגובות ושיתופים'),
-        (heb(pt.get('watch_hours', 0)), 'שעות צפייה'),
+        (heb(pt.get('watch_hours', 0)), 'שעות צפייה ביוטיוב ובפייסבוק'),
         (heb(big_day.get('views', 0)),
          'ביום השיא · %s%s' % (_he_date(big_day.get('date', '')),
                                ' · %s' % big_day['event'] if big_day.get('event') else '')),
         (signed(ys['end'] - ys['start']), 'מנויי יוטיוב · גידול של 30%'),
-        (num('+%s' % fmt(fb_gross)), 'הצטרפויות לפייסבוק'),
+        (num('+%s' % fmt(fb_gross)), 'הצטרפויות לפייסבוק · ברוטו'),
     ]
     cards = ''.join(
         '<div class="ach"><div class="achv">%s</div>'
@@ -1016,7 +1019,7 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .ytbar div{height:100%%;border-radius:6px}
 .ytv{font-size:22px;font-weight:700;text-align:left}
 .evlist{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;padding:6px 0}
-.ev{display:grid;grid-template-columns:250px 1fr 190px 330px;gap:22px;align-items:center}
+.ev{display:grid;grid-template-columns:250px 1fr 250px 330px;gap:22px;align-items:center}
 .evd{text-align:right}
 .evn{font-size:22px;font-weight:700;line-height:1.15}
 .evr{font-size:14px;color:%(m)s;margin-top:3px;direction:ltr;text-align:right}
@@ -1034,8 +1037,8 @@ h2{margin:2px 0 0;font-size:56px;font-weight:900;letter-spacing:-.02em}
 .evfill{position:absolute;top:0;right:0;height:100%%;background:%(a)s;opacity:.16}
 .evtxt{position:relative;padding:0 18px;font-size:19px;line-height:1.3;
   max-height:56px;overflow:hidden}
-.evv{text-align:left}
-.evv .mono{font-size:34px;font-weight:700;line-height:1}
+.evv{text-align:left;white-space:nowrap}
+.evv .mono{font-size:34px;font-weight:700;line-height:1;white-space:nowrap}
 .evv span{display:block;font-size:15px;color:%(m)s;margin-top:3px;white-space:nowrap}
 .evg{display:flex;gap:10px;justify-content:flex-start}
 .gpill{background:#f0f4ff;border:1px solid #dbe4ff;border-radius:10px;padding:8px 14px;
