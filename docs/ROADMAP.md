@@ -7,7 +7,7 @@ ships gets moved to *Closed* with the answer, not deleted.
 Every claim here is evidence-backed: a file:line, a commit, or a probe run.
 If an item has no evidence, it is a guess and belongs in a conversation, not here.
 
-Last reviewed: **2026-07-29**
+Last reviewed: **2026-08-14**
 
 ---
 
@@ -65,6 +65,28 @@ or not at all.
 ### 6. The local `.env` FACEBOOK_TOKEN expired
 Died 2026-07-26 08:00 PDT. The GitHub secret is fine (this morning's runs
 worked), so only local probing is affected. See the meta-token renewal notes.
+
+---
+
+## Open — daily report
+
+### 17. The new daily baseline needs three mornings before it says anything
+`telegram_reporter.py:77` now builds the comparison from a basis the report
+records itself, into a new `בסיס יומי` sheet — one row per day, written after
+the baseline for that day is read, so a day can never enter its own average.
+Nothing could be back-filled: `views_delta` is one column overwritten every run
+and is 0 on a post's first capture, so no per-day history existed to recover.
+
+Until three rows accumulate (first write: the run of 2026-08-15, carrying
+2026-08-14) the prompt carries an explicit refusal — *"אל תקבע אם היום חזק או
+חלש"* — instead of a number. **Check the report on 2026-08-17**: the comparison
+block should name the days it averaged, and the strong/weak verdicts should
+start splitting both ways rather than landing on "חלש" most mornings.
+
+Two things to watch once it is warm: the 30% floor for calling a day
+strong/weak (`telegram_reporter.py:444`) is a first guess, not a measured
+threshold — re-tune it against the recorded spread once ~3 weeks exist; and the
+sheet grows one row a day forever, which is fine but nothing prunes it.
 
 ---
 
@@ -186,7 +208,10 @@ then the Facebook deep-dive slide rests on 2024 plus eight months of sheet.
 ## Closed — do not re-open
 
 | Question | Answer | When |
+| Is `worksheet.update('A1', [[...]])` still valid? | **No — gspread 6 reversed it to `update(values, range_name)`,** and we pin `gspread==6.2.1`. The old call hands a range string to `values`. It never failed because it only runs when a sheet is created from nothing, which happens once in a sheet's life: `save_daily_insights_to_sheets` had been carrying the broken form since "תובנות יומיות" was created under gspread 5. Found while adding the same create-if-missing path for `בסיס יומי`. Both now go through `telegram_reporter.write_rows`, with `test_daily_baseline.py` asserting the argument order against a fake worksheet. | 2026-08-14 |
+| Why did the daily report keep calling every day "חלש ביחס לממוצע השבועי"? | **Because the comparison was rigged, not because the days were weak.** The old baseline (`telegram_reporter.py:77-83`) summed the *cumulative* views of everything published in the last 7 days, divided by 7, and held yesterday's ~20-hour-old posts against it — and it anchored the window on `today` while every summary used `yesterday`, so the judged day sat inside its own average. Measured on the morning of 2026-08-14, yesterday came out at **0.60× YouTube, 0.81× Facebook, 0.77× Instagram, 0.27× TikTok**. Two independent probes proved it was maturity and not content: re-running the same computation on older anchor dates, where every post in the window has matured, scattered the ratio around 1 (medians 0.89–0.99, plenty above 1); and replaying `.verify/instagram.json.gz` (26/07) against the same posts today showed a post holds **74.5%** of its 7-day value after one day, 91.5% after two — YouTube **35.8%** after one. TikTok is worst because its tail is longest, which is exactly what the reports themselves kept saying ("הזנב הארוך מציל את היום", 05/08, 11/08, 12/08). Ground truth in `תובנות יומיות`: 31/07, 02/08, 05/08, 07/08, 09/08, 12/08, 13/08 all opened on a weak-day verdict; only 06/08 ever said the opposite. Fixed by recording the basis daily — see open item 17. `test_daily_baseline.py` holds the rules. | 2026-08-14 |
 |---|---|---|
+| Which networks can carry a two-year **follower** curve? | **Two: YouTube and Facebook.** YouTube is measured daily from 2024-01-01 (`youtube_studio/subscribers_daily.csv`, 613,238 → 797,657). Facebook has no historical audience size at all — Meta's exports give daily **follows** and never a stock — so its curve is derived backwards from a measured anchor by a net/gross ratio. That ratio is **not** an assumption: eight months carry both figures independently (`pulled/sheet_followers.csv` measured 1,081,105 → 1,183,166 = +102,061, against 136,017 follows in the export) and it lands on **0.750 exactly**. Instagram's same test gives a different ratio, 0.515, and its follows only begin 2025-08-06. The rest have nothing worth plotting: TikTok is measured from 2026-07-21 (three weeks), X from 2026-06-28, and the WhatsApp channel has no API. So a six-network follower trend cannot be drawn honestly — 52% of the audience is all that has history. `build_deck.py:_followers_series`. | 2026-08-13 |
 | How far back can Twitter/X history be pulled for a multi-year deck? | **13 days.** Not the assumed ~3,200-tweet ceiling — nowhere near it. `deck_history_probe.py twitter` (run `31500547213`) paged to exhaustion and returned 710 tweets, 2026-07-29 → 2026-08-11. So X can never carry a 2024-2026 comparison; in any long-range view it starts at 2026-06-21 where our own sheet starts, and that is a provider limit, not a collection gap. Two traps found on the way, both now guarded: GetXAPI wants `userName` (`username` → 400), and it keeps issuing a `next_cursor` after it has stopped returning anything new — pages 41–241 all ended on the same 710 tweets. | 2026-08-11 |
 | Should the hot sniffer's thresholds be raised — it fires ~26 times a week? | **No. Raised them on 2026-07-29 and reverted the same day; do not re-open on a noise argument.** Rate is not the criterion, precision is, and precision was already total: all 63 alerts from the first 17 days were cross-referenced to the sheets and scored on where each post finished *at maturity* — median 97th percentile of its platform, 44 of 59 at p95+, all at p90+, **zero below p90**. No early spike ever decayed to ordinary, which is exactly what a too-low bar would have produced. The raise (2.0×p90, floors 1000/2000/800) silenced 47 of 63 at a median of p97: the missing 4-year-old found alive, Yair Golan's declaration, the attacked reservist, the baby saved in emergency surgery. Caveat stated honestly: alerting on a number and then measuring that number is partly circular — the non-circular finding is the zero. | 2026-07-29 |
 | Facebook `views_30s` / `completion_rate` are 0 in every row — recoverable? | No. Removed in Graph v25. The reel retention curve replaces them. | 2026-07-26 |
