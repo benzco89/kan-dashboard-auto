@@ -119,6 +119,30 @@ p99 on views but its own week held bigger posts, and the rule is relative.
 Both late-crossers were marginal, so there is no evidence yet that it is worth
 the added noise. Needs a measurement, not an opinion.
 
+**Checked 2026-08-14 — the bar is mis-scaled in principle and it does not
+matter in practice.** `get_baselines` (`hot_sniffer.py:123`) builds p90 from the
+*cumulative* values of the last 7 days of posts and applies it to a post younger
+than 24h, which is the same age mismatch that broke the daily report's baseline.
+It predicts alerts should pile up at the old edge of the window, where a post has
+finally accumulated enough to clear a bar built from matured content. They do
+not: across all 125 recorded alerts, matched to their publish time, the age at
+alert runs **min 1.1h, median 11.5h, max 23.7h**, with 43% firing in the first
+eight hours and 49% in the back half — a flat spread, not a pile-up (Facebook
+median 7.6h, TikTok 12.7h, Instagram 14.7h). A genuinely exploding post clears
+1.5×p90 within hours, because p90 of a distribution full of ordinary posts is
+not a high bar for one that is going viral. Consistent with the audit above,
+which found only two marginal late-crossers in 561 posts. **Do not re-tune the
+multiplier on this mechanism argument alone.**
+
+The real blocker for the open question is that nothing records the near-misses:
+`hot_alerts` stores only what fired (`post_id, platform, alerted_at, triggers,
+permalink`), so the precision cost of *any* candidate rule — a stretched window,
+an age-adjusted bar — cannot be computed after the fact. Logging every young
+post the sniffer evaluates, with its age, values and ratio, would make both
+recall and precision measurable offline in two or three weeks without changing
+what alerts. Same lesson as the daily baseline: the basis has to be recorded,
+it cannot be reconstructed.
+
 ---
 
 ## Open — weekly deck
