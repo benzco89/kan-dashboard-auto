@@ -547,7 +547,7 @@ def s_platform(d, p):
                   % (fair, heb(b.get('views_total') or sum(x['views'] for x in pts)),
                      esc(span_txt)))
                  if pts else ''),
-            '<div class="yrow" style="grid-template-columns:repeat(%d,1fr)">%s</div>'
+            '<div class="ytr" style="grid-template-columns:repeat(%d,1fr)">%s</div>'
             % (len(cells), ''.join(cells)),
             ('<div class="panel chartpanel">%s</div>'
              % sparkline(pts, BRAND[p], h=210, marks=marks, legend=False)) if pts else '',
@@ -975,6 +975,65 @@ def s_network(d, p):
                  'את הצמיחה. האירועים מסומנים בחודש השיא שלהם — הסבר לקפיצה, '
                  'לא טענה שהם לבדם יצרו אותה.')]
     return slide(HEB[p], 'עומק לרשת %s.' % HEB[p], ''.join(body), section=HEB[p])
+
+
+def s_youtube(d):
+    """יוטיוב: קו המנויים, ומה שבאמת ייחודי לו — צפיות מול זמן.
+
+    השקף הזה החזיק קודם שני גרפים ששניהם לא אמרו כלום. המנויים החדשים לחודש
+    נעים בין ~5,000 ל-11,000 ומציירים קו מתפתל בלי צורה, **וסימוני האירועים
+    עליו ישבו על חודשים שאינם שיאים** — שחרור החטופים סומן על 6,622, פחות
+    מחודשים רגילים רבים. גרף שמכריז על קפיצה שלא קרתה גרוע מאין גרף.
+
+    מה שכן ייחודי ליוטיוב הוא הפער בין צפייה לזמן: שורטס מביאים שליש
+    מהצפיות ו-4% מהזמן, ושידור חי אחוז אחד מהצפיות ו-7% מהזמן. זו הבחירה
+    בין חשיפה לזמן, והיא לא קיימת בשום רשת אחרת בדק.
+    """
+    b = d['platforms']['youtube']
+    bt = b.get('by_type') or {}
+    if not bt:
+        return ''
+    lvl = ((d.get('followers_series') or {}).get('youtube') or {})
+    chart = ''
+    if lvl.get('series'):
+        sr = lvl['series']
+        pct = (sr[-1]['value'] / sr[0]['value'] - 1) * 100
+        chart = ('<div class="nbt">מנויים · %s ← %s <em>· %s · נמדד יומית</em></div>%s'
+                 % (num(fmt(sr[0]['value'])), num(fmt(sr[-1]['value'])),
+                    num('%+.1f%%' % pct),
+                    event_chart(sr, None, BRAND['youtube'], key='value', h=92,
+                                zero_base=False, axis=True)))
+
+    tv = sum(v['views'] for v in bt.values()) or 1
+    th = sum(v['watch_hours'] for v in bt.values()) or 1
+    order = sorted(bt.items(), key=lambda kv: -kv[1]['views'])
+    rows = ''
+    for name, v in order:
+        sv, sh = v['views'] / tv * 100, v['watch_hours'] / th * 100
+        # הצבע מסמן את הפער: אדום היכן שהנתח בצפיות ובזמן מתפצל
+        hi = 'class="hi"' if abs(sv - sh) > 20 else ''
+        rows += ('<div class="ytrow"><div class="pn">%s</div>'
+                 '<div>%s</div><div %s>%s</div>'
+                 '<div>%s</div><div %s>%s</div></div>'
+                 % (esc(name), heb(v['views']), hi, num('%.0f%%' % sv),
+                    heb(v['watch_hours']), hi, num('%.0f%%' % sh)))
+    head_row = ('<div class="ytrow ytheadr"><div></div><div>צפיות</div>'
+                '<div>נתח מהצפיות</div><div>שעות צפייה</div>'
+                '<div>נתח מהזמן</div></div>')
+
+    sh_v = bt.get('שורטס', {}).get('views', 0) / tv * 100
+    sh_h = bt.get('שורטס', {}).get('watch_hours', 0) / th * 100
+    body = [head('המנויים, והפער בין צפייה לזמן', 'יוטיוב', plat='youtube'),
+            '<div class="nbchart">%s</div>' % chart,
+            '<div class="ytype">%s%s</div>' % (head_row, rows),
+            '<div class="ppline">שורטס מביאים <b>%s</b> מהצפיות ו-<b>%s</b> '
+            'מהזמן — צפייה ממוצעת של %s לעומת %s בסרטון ו-%s בשידור חי. '
+            'הבחירה ביניהם היא בחירה בין חשיפה לזמן.'
+            % (num('%.0f%%' % sh_v), num('%.0f%%' % sh_h),
+               num('0:28'), num('3:50'), num('22:54')),
+            foot('הנתונים מייצוא YouTube Studio לכל התקופה. «אורך צפייה» הוא '
+                 'הממוצע בפועל, ולא אורך הפריט.')]
+    return slide('יוטיוב', 'עומק לרשת יוטיוב.', ''.join(body), section='יוטיוב')
 
 
 def s_audience(d):
@@ -1534,6 +1593,17 @@ h2{margin:8px 0 0;font-size:64px;font-weight:900;line-height:1.05;letter-spacing
 .nbt2{font-size:22px;font-weight:900;margin-top:2px}
 .nbt2 em{font-style:normal;font-weight:400;font-size:20px;color:%(m)s}
 .nbgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:16px}
+.ytype{flex:1;margin-top:22px;font-size:28px}
+.ytrow{display:grid;grid-template-columns:1.15fr 1fr .8fr 1fr .8fr;
+  align-items:baseline;padding:13px 0;border-bottom:1px solid %(g)s}
+.ytrow>div:not(.pn){text-align:left;font-weight:900}
+.ytheadr{padding:0 0 12px;border-bottom:2px solid %(ink)s;font-size:24px;
+  font-weight:700;color:%(m)s}
+.ytheadr>div{text-align:left;font-weight:700}
+.ytrow .hi{color:%(a)s}
+.ytrow .pn{font-size:34px;font-weight:900}
+.ppline{font-size:30px;line-height:1.4;color:#262626;margin-top:18px}
+.ppline b{font-weight:900}
 .thgrid{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:40px;
   align-content:center;margin-top:20px}
 .tbox.thin{padding:40px 44px}
@@ -1602,7 +1672,7 @@ h2{margin:8px 0 0;font-size:64px;font-weight:900;line-height:1.05;letter-spacing
 .ythead{display:grid;grid-template-columns:230px 1fr 110px 1fr 110px;gap:16px;
   font-size:15px;color:%(m)s;font-weight:700;margin-bottom:10px}
 .ythead div:nth-child(2),.ythead div:nth-child(4){text-align:center}
-.ytr{display:grid;grid-template-columns:230px 1fr 110px 1fr 110px;gap:16px;
+.yrow{display:grid;grid-template-columns:230px 1fr 110px 1fr 110px;gap:16px;
   align-items:center;margin-bottom:12px}
 .ytn{font-size:22px;font-weight:700}
 .ytn span{display:block;font-size:14px;color:%(m)s;font-weight:400;margin-top:2px}
@@ -1696,7 +1766,8 @@ def render():
     ]
     for p, kick in ORDER:
         slides.append(divider(p, kick, divider_stats(d, p)))
-        slides.append(s_network(d, p) or s_platform(d, p))
+        slides.append(s_youtube(d) if p == 'youtube'
+                      else (s_network(d, p) or s_platform(d, p)))
         if p == 'facebook':
             slides.append(s_audience(d))
     slides += [s_thin(d), s_summary(d), s_appendix(d)]
