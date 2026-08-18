@@ -138,6 +138,22 @@ def fmt(n):
     return format(int(n), ',')
 
 
+def heb_plain(n):
+    """כמו `heb()` אבל **טקסט בלבד** — לתוויות שיושבות בתוך SVG.
+
+    `heb()` עוטף את המספר ב-`num()`, כלומר ב-`<span>`. בתוך `<text>` של SVG
+    התגית נדפסת כתו-אחר-תו על השקף. זה קרה בגרפי אינסטגרם וטיקטוק.
+    """
+    n = float(n or 0)
+    if n >= 1e9:
+        v, w = '%.1f' % (n / 1e9), ' מיליארד'
+    elif n >= 1e6:
+        v, w = '%.1f' % (n / 1e6), ' מיליון'
+    else:
+        return format(int(n), ',')
+    return (v.rstrip('0').rstrip('.') if '.' in v else v) + w
+
+
 def short(n):
     n = float(n or 0)
     if n >= 1e9:
@@ -895,12 +911,18 @@ def s_network(d, p):
         ttl = 'צפיות לחודש'
     if not ser:
         return ''
-    chart = event_chart(ser, marks, BRAND[p], key=key, h=150, axis=False,
-                        fmt_val=(lambda v: heb(v)) if key == 'views'
+    # הציר יושב מתחת לגרף **התחתון** שקיים בפועל. כשאין גרף מלאי, הוא יושב
+    # מתחת לגרף העליון — ולא מצויר כ"גרף בגובה 1 פיקסל" רק כדי לקבל ציר,
+    # מה שהשאיר שרידי קו מרחפים והשמיט את תוויות השנים לגמרי.
+    lvl = ((d.get('followers_series') or {}).get(p) or {})
+    has_level = bool(lvl.get('series'))
+    chart = event_chart(ser, marks, BRAND[p], key=key,
+                        h=150 if has_level else 268, axis=not has_level,
+                        fmt_val=(lambda v: heb_plain(v)) if key == 'views'
                         else (lambda v: format(int(v), ',')))
 
-    lvl = ((d.get('followers_series') or {}).get(p) or {})
-    if lvl.get('series'):
+    level = ''
+    if has_level:
         sr = lvl['series']
         note = ('נמדד יומית' if lvl.get('measured')
                 else 'נגזר מההצטרפויות ביחס 0.750')
@@ -909,8 +931,6 @@ def s_network(d, p):
                     num(fmt(sr[0]['value'])), num(fmt(sr[-1]['value'])), note,
                     event_chart(sr, None, INK, key='value', h=100,
                                 zero_base=False, axis=True)))
-    else:
-        level = event_chart(ser, None, BRAND[p], key=key, h=1, axis=True)
 
     my = b.get('metrics_ytd') or {}
     ye = b.get('yearly') or {}
@@ -1136,7 +1156,7 @@ def s_appendix(d):
             cells += '<td><span class="pill %s">%s</span></td>' % (kind, esc(text))
         rows += '<tr><th>%s</th>%s<td class="src">%s</td></tr>' % (esc(name), cells, esc(src))
     body = [head('נספח', 'מאיפה המספרים, ומה הגבולות שלהם', ''),
-            '<div class="grid2 deep">'
+            '<div class="grid2 deep apx">'
             '<div class="panel"><div class="ptitle">מה מכוסה, ומאיפה</div>'
             '<table class="cov"><tr><th></th><th>2024</th><th>2025</th><th>2026</th>'
             '<th>מקור</th></tr>%s</table></div>' % rows,
@@ -1379,6 +1399,10 @@ h2{margin:8px 0 0;font-size:64px;font-weight:900;line-height:1.05;letter-spacing
 .panel.chartpanel{flex:1;display:flex;flex-direction:column;justify-content:center;
   margin-top:16px;margin-bottom:16px}
 .grid2.deep{flex:none;gap:22px}
+/* הנספח נמתח על גובה השקף; שני פאנלים שצפים בחצי העליון נראים כמו טיוטה */
+.grid2.apx{flex:1;gap:34px;align-content:stretch}
+.grid2.apx .panel{margin-top:26px;display:flex;flex-direction:column}
+.grid2.apx .cov{margin-top:6px}
 .grid1.deep{display:grid;grid-template-columns:1fr}
 .grid1.deep .panel{margin-top:0}
 .grid2.deep .panel{margin-top:0;display:flex;flex-direction:column}
