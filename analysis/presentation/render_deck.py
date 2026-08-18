@@ -1056,6 +1056,40 @@ def s_youtube(d):
     return slide('יוטיוב', 'עומק לרשת יוטיוב.', ''.join(body), section='יוטיוב')
 
 
+def s_top(d, p):
+    """התוכן שעבד הכי טוב ברשת — חמישה פריטים, לפי צפיות.
+
+    רק פריטים שיש להם טקסט. לפייסבוק 2025 אין טקסט פוסטים בכלל, ולכן שניים
+    מחמשת הגדולים ברשת מדולגים; מספרם נאמר בהערה ולא מוצג כשורה ריקה.
+    """
+    blk = ((d.get('top_by_platform') or {}).get(p) or {})
+    items = blk.get('items') or []
+    if not items:
+        return ''
+    hi = items[0]['views'] or 1
+    rows = ''
+    for i, it in enumerate(items, 1):
+        rows += ('<div class="tcrow"><div class="tcn">%02d</div>'
+                 '<div class="tct">%s<div class="tcd">%s</div></div>'
+                 '<div class="tcv">%s<i>צפיות</i></div>'
+                 '<div class="tcb"><i style="width:%.1f%%;background:%s"></i></div>'
+                 '</div>'
+                 % (i, esc(it['title']), esc(_he_date(it['date'])),
+                    heb(it['views']), it['views'] / hi * 100, BRAND[p]))
+    skipped = blk.get('skipped_untitled', 0)
+    note = ('התוכן מדורג לפי צפיות מצטברות עד היום, ולכן פריט ותיק צבר יותר '
+            'זמן מפריט חדש.')
+    if skipped:
+        note += (' <b>%s מחמשת הגדולים בפייסבוק אינם ברשימה</b> — הנתון שלהם '
+                 'הגיע מה-Graph API, שאינו שומר את טקסט הפוסט, ופריט בלי '
+                 'כותרת אינו שורה בשקף.' % num(fmt(skipped)))
+    body = [head('התוכן שעבד', HEB[p], plat=p),
+            '<div class="tclist">%s</div>' % rows,
+            foot(note)]
+    return slide('%s — תוכן' % HEB[p], 'הפריטים הגדולים ברשת %s.' % HEB[p],
+                 ''.join(body), section=HEB[p])
+
+
 def s_audience(d):
     """מי עוקב אחרי עמוד הפייסבוק. **תצלום נוכחי בלבד.**
 
@@ -1628,6 +1662,19 @@ h2{margin:8px 0 0;font-size:64px;font-weight:900;line-height:1.05;letter-spacing
 .ytrow .pn{font-size:34px;font-weight:900}
 .ppline{font-size:30px;line-height:1.4;color:#262626;margin-top:18px}
 .ppline b{font-weight:900}
+/* התוכן שעבד — שמות ייחודיים, אין להם מקבילה בקובץ */
+.tclist{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.tcrow{display:grid;grid-template-columns:64px 1fr 190px;gap:22px;
+  align-items:center;padding:13px 0;border-bottom:1px solid %(g)s;position:relative}
+.tcn{font-size:30px;font-weight:900;color:%(a)s}
+.tct{font-size:27px;font-weight:700;line-height:1.28}
+.tcd{font-size:21px;color:%(m)s;font-weight:400;margin-top:5px}
+.tcv{font-size:34px;font-weight:900;text-align:left;line-height:1;white-space:nowrap}
+.tcv i{display:block;font-style:normal;font-size:19px;font-weight:400;
+  color:%(m)s;margin-top:5px}
+.tcb{grid-column:1/-1;height:5px;background:#ececec;border-radius:3px;
+  overflow:hidden;margin-top:8px}
+.tcb i{display:block;height:100%%;border-radius:3px}
 .thgrid{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:40px;
   align-content:center;margin-top:20px}
 .tbox.thin{padding:40px 44px}
@@ -1792,6 +1839,7 @@ def render():
         slides.append(divider(p, kick, divider_stats(d, p)))
         slides.append(s_youtube(d) if p == 'youtube'
                       else (s_network(d, p) or s_platform(d, p)))
+        slides.append(s_top(d, p))
         if p == 'facebook':
             slides.append(s_audience(d))
     slides += [s_thin(d), s_summary(d), s_appendix(d)]

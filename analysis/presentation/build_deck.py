@@ -325,6 +325,7 @@ def build():
 
     # --- התוכן הגדול של כל שנה ---
     deck['top_content'] = top_content(yt, tt)
+    deck['top_by_platform'] = top_by_platform(yt, tt)
     deck['cross_platform'] = cross_platform(deck['top_content'])
 
     # --- הימים הגדולים, ומה הם עשו לקהל ---
@@ -851,6 +852,30 @@ def big_days(yt, tt, subs, fb_follows, n=6):
             'fb_follows': int(fb_gain.get(day, 0) or 0),
         })
     return {'typical_day': int(typical), 'days': out}
+
+
+def top_by_platform(yt, tt, n=5):
+    """הפריטים הגדולים של כל רשת בתקופה.
+
+    **רק פריטים שיש להם טקסט.** לפייסבוק 2025 אין טקסט פוסטים כלל — הנתון
+    ההוא נמשך מה-Graph API וה-backfill לא שמר אותו — ושניים מהפוסטים
+    הגדולים ביותר ברשת הם משם. פוסט בלי כותרת הוא שורה ריקה בשקף, ולכן הם
+    מדולגים ומספרם נאמר בהערה, במקום להציג «(הטקסט לא נשמר)» כשורה.
+    """
+    a = all_items(yt, tt)
+    a = a[a['views'].notna() & (a['views'] > 0)]
+    out = {}
+    for plat, g in a.groupby('platform'):
+        named = g[g['title'].astype(str).str.len() > 12]
+        top = named.nlargest(n, 'views')
+        skipped = int((g.nlargest(n, 'views')['title'].astype(str).str.len()
+                       <= 12).sum())
+        out[plat] = {
+            'items': [{'date': str(r['dt'].date()), 'views': int(r['views']),
+                       'title': str(r['title'])} for _, r in top.iterrows()],
+            'skipped_untitled': skipped,
+        }
+    return out
 
 
 def top_content(yt, tt):
