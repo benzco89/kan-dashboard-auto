@@ -36,6 +36,11 @@ OUTDIR = "twitter_search"
 # כלומר אף פעם לא מדפדפים עמוק (ושם החיפוש של X נוטה להיקטע), וכל יום מקבל
 # stop reason משלו - כך שיום קטוע נראה כיום קטוע ולא נבלע בסך-הכל.
 MAX_PAGES_PER_DAY = int(os.environ.get("MAX_PAGES_PER_DAY", "12"))
+# כמה פעמים מותר לשאול שוב על תחתית אותו יום אחרי קטיעה. ב-13.7 הספיקה אחת.
+MAX_SLICES_PER_DAY = int(os.environ.get("MAX_SLICES_PER_DAY", "8"))
+# עד כמה קרוב לתחילת החלון צריך להגיע כדי לקרוא ליום שלם. @kann_news מצייץ
+# מסביב לשעון, אז פער אמיתי של יותר משעה בתחתית היום הוא קטיעה, לא שקט.
+BOUNDARY_TOLERANCE_SEC = int(os.environ.get("BOUNDARY_TOLERANCE_SEC", "3600"))
 RETRIES = 3
 RETRY_SLEEP = 10
 
@@ -91,20 +96,18 @@ def tweet_id_of(tweet):
     return m.group(1) if m else ""
 
 
-def fetch_day(day):
+def _fetch_slice(since_ts, until_ts, seen):
     """
-    כל הציוצים של @USERNAME ביום אחד. מחזיר (tweets, stop_reason).
+    חלון זמן אחד, בשניות יוניקס. מחזיר (tweets_חדשים, stop_reason).
 
-    שתי מלכודות של GetXAPI ששתיהן כבר עלו כאן בעבר ולכן נשמרות מפורשות:
-    הוא ממשיך להנפיק next_cursor גם אחרי שהפסיק להחזיר משהו חדש (בפרוב
-    ההיסטוריה עמודים 41-241 החזירו את אותם 710), והוא עונה 200 על עמוד ריק.
-    לכן העצירה היא על "העמוד לא הוסיף אף ציוץ חדש", לא על has_more לבדו.
+    שתי מלכודות של GetXAPI, שתיהן כבר עלו כאן: הוא ממשיך להנפיק next_cursor
+    אחרי שהפסיק להחזיר משהו חדש (בפרוב ההיסטוריה עמודים 41-241 החזירו את
+    אותם 710), והוא עונה 200 על עמוד ריק. לכן עוצרים על "העמוד לא הוסיף
+    ציוץ חדש", לא על has_more לבדו.
     """
-    nxt = (datetime.strptime(day, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-    q = "from:%s since:%s until:%s" % (USERNAME, day, nxt)
-
-    seen, out, cursor, stop = set(), [], None, "max_pages"
-    for page in range(MAX_PAGES_PER_DAY):
+    q = "from:%s since_time:%d until_time:%d" % (USERNAME, since_ts, until_ts)
+    out, cursor, stop = [], None, "max_pages"
+    for _ in range(MAX_PAGES_PER_DAY):
         params = {"q": q, "product": "Latest"}
         if cursor:
             params["cursor"] = cursor
@@ -133,6 +136,39 @@ def fetch_day(day):
         cursor = data["next_cursor"]
 
     return out, stop
+
+
+def fetch_day(day):
+    """
+    כל הציוצים של @USERNAME ביום אחד, עם ריפוי-עצמי לקטיעות.
+
+    למה זה לא סתם שאילתה אחת: ב-13.7 החיפוש החזיר את כל הציוצים עד 15:00
+    שעון ישראל ואז הפסיק - עם has_more=false, כלומר בדיוק כמו יום שנגמר
+    כמו שצריך. 36 מתוך 59 הציוצים של אותו יום נעלמו ככה בשקט, ורק השוואה
+    מול הגיליון חשפה את זה. has_more=false הוא לא הוכחה לשלמות.
+
+    התוצאות חוזרות מהחדש לישן, ולכן קטיעה תמיד מותירה חור בתחתית החלון:
+    אם הציוץ הישן ביותר שחזר רחוק מתחילת החלון, פשוט שואלים שוב על מה
+    שנשאר מתחתיו. זה מרפא כל קטיעה בלי להניח דבר על הסיבה לה.
+    """
+    d0 = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=timezone.utc) - IL_OFFSET
+    start, end = int(d0.timestamp()), int((d0 + timedelta(days=1)).timestamp())
+
+    seen, out, stops, lo = set(), [], [], end
+    for depth in range(MAX_SLICES_PER_DAY):
+        got, stop = _fetch_slice(start, lo, seen)
+        out.extend(got)
+        stops.append(stop)
+        if not got:
+            break
+        oldest = min(int(parse_time(t).timestamp()) for t in got if parse_time(t))
+        if oldest <= start + BOUNDARY_TOLERANCE_SEC:
+            break                            # הגענו לתחתית החלון - היום שלם
+        lo = oldest                          # נקטע: לשאול שוב על מה שמתחתיו
+    else:
+        stops.append("slice_ceiling")
+
+    return out, "+".join(stops[:1]) + ("" if len(stops) == 1 else " ×%d" % len(stops))
 
 
 def to_row(t):
@@ -184,7 +220,7 @@ def main(start, end):
         got = [r for r in (to_row(t) for t in tweets) if r]
         rows.extend(got)
         by_day[ds] = (len(got), stop)
-        if stop == "max_pages":
+        if "slice_ceiling" in stop or "max_pages" in stop:
             truncated.append(ds)
         print("   %s  %3d ציוצים  stop=%s" % (ds, len(got), stop), flush=True)
         day += timedelta(days=1)
