@@ -18,6 +18,8 @@
 
 import argparse
 import csv
+import html
+import re
 import glob
 import os
 import sys
@@ -73,6 +75,15 @@ KEEP = {
     "2079634966976036938": "שני מיליון ספרדים בשדרות מדריד",
     "2082033997559824843": "זידאן מונה למאמן נבחרת צרפת - המשך ישיר לטורניר",
 }
+
+# ה-API מחזיר ישויות HTML בתוך הטקסט (&gt; &amp;), ושרשור t.co בסוף כל ציוץ.
+# הישויות מוצגות כמו שהן בכל צרכן שלא מפרש HTML, והקישור כבר קיים כעמודה.
+_TCO = re.compile(r"\s*https?://t\.co/\w+")
+
+
+def clean(text):
+    return _TCO.sub("", html.unescape(text or "")).strip()
+
 
 COLUMNS = ["תאריך", "שעה", "וידאו", "סוג מדיה", "טקסט הציוץ", "קישור",
            "צפיות", "לייקים", "ריטוויטים", "תגובות", "שיעור מעורבות %", "מקור", "tweet_id"]
@@ -151,7 +162,7 @@ def main():
         w.writerow(COLUMNS)
         for r in picked:
             w.writerow([r["date"], r["time"], "כן" if r["type"] == "Video" else "לא",
-                        r["type"], r["text"], r["permalink"], _int(r["views"]),
+                        r["type"], clean(r["text"]), r["permalink"], _int(r["views"]),
                         _int(r["likes"]), _int(r["retweets"]), _int(r["replies"]),
                         r.get("engagement_rate", ""), r.get("_src", ""),
                         r.get("tweet_id", "")])
