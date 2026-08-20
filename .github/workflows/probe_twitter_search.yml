@@ -1,0 +1,45 @@
+name: Probe Twitter search (read-only)
+
+# שליפת היסטוריית ציוצים דרך GetXAPI advanced_search, לא דרך הטיימליין.
+# הטיימליין מגיע 13 יום אחורה בלבד (ריצה 31500547213) ולכן לא יכול להביא את
+# תחילת המונדיאל, שנפתח ב-11.6 בעוד הגיליון מתחיל ב-21.6.
+# קריאה בלבד: לא נוגע בגוגל שיטס, הפלט הוא CSV ב-artifact. ידני בלבד.
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: 'מתאריך (YYYY-MM-DD)'
+        required: true
+        default: '2026-06-08'
+      end:
+        description: 'עד תאריך (YYYY-MM-DD, כולל)'
+        required: true
+        default: '2026-06-22'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run the Twitter search probe
+        env:
+          GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}
+        run: python twitter_search_probe.py "${{ inputs.start }}" "${{ inputs.end }}"
+
+      - name: Upload the pulled tweets
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: twitter-search-${{ inputs.start }}-${{ inputs.end }}
+          path: twitter_search/
+          if-no-files-found: warn
