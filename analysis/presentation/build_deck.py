@@ -41,7 +41,7 @@ SRC = os.path.join(HERE, '..', 'yearly_content')
 PULLED = os.path.join(HERE, 'pulled')
 OUT = os.path.join(HERE, 'deck_content.json')
 
-TODAY = '2026-08-11'
+TODAY = '2026-08-11'       # יום משיכת הקבצים. **אינו** התאריך שהמספרים מדברים בו
 # הכל נחתך בסוף יולי 2026. אוגוסט הוא חודש חלקי, ובכל גרף חודשי הוא מצייר
 # צניחה שהיא רק «החודש עוד לא נגמר» — הקורא רואה נפילה שלא קרתה.
 CUTOFF = '2026-07-31'
@@ -51,10 +51,19 @@ VIEWS_FROM = '2024-09'     # מטא הגדירה מחדש צפיות/חשיפה 
 
 PLATFORMS = ['facebook', 'youtube', 'tiktok', 'instagram', 'twitter', 'whatsapp']
 
-# עוקבים נכון ל-2026-08-11 (`מעקב עוקבים`); וואטסאפ נמסר ידנית — אין לו API
+# עוקבים **נכון ל-CUTOFF**, כלומר 31.7.2026 — לא ליום המשיכה.
+#
+# קודם הם היו מ-11.8, בזמן שכל שאר הדק נחתך ב-31.7. אחד עשר יום זה לא הרבה,
+# אבל זה מספיק כדי ששקף יאמר «עד יולי 2026» ויציג מספר מאוגוסט, וכדי שסך
+# העוקבים בשער לא יתאים לסכום הכרטיסים בשקף הנכסים. תאריך אחד לכל המסמך.
+#
+# חמש מהשש נקראות משורת 2026-07-31 ב-`pulled/sheet_followers.csv`; יוטיוב
+# מייצוא Studio, שנותן את המספר המדויק במקום 797,000 שה-API מעגל לשלוש
+# ספרות. לוואטסאפ אין API ואין סדרה — המספר נמסר ידנית ואין לו תאריך, וזו
+# הסיבה שהוא היחיד כאן שאי אפשר ליישר.
 FOLLOWERS = {
-    'facebook': 1183166, 'tiktok': 828200, 'youtube': 798000,
-    'twitter': 373889, 'whatsapp': 310905, 'instagram': 283818,
+    'facebook': 1180119, 'tiktok': 824000, 'youtube': 797657,
+    'twitter': 372932, 'whatsapp': 310905, 'instagram': 283236,
 }
 
 
@@ -166,13 +175,36 @@ def build():
         ytd = sub[sub['month'].str[5:7] <= '07']
         block['posts_ytd'] = {y: int(g['posts'].sum())
                               for y, g in ytd.groupby('year')}
-        mix = {}
-        for fmt in ('רילס', 'תמונה', 'קרוסלה', 'וידאו', 'סטטוס', 'לינק'):
-            if fmt in ytd.columns:
-                per_year = ytd.groupby('year')[fmt].sum()
-                if per_year.sum():
-                    mix[fmt] = {y: int(v) for y, v in per_year.items()}
-        block['format_mix'] = mix
+        # מדדים על **חלון מקביל** — ינואר–יולי בכל שנה. בלי זה כל השוואה של
+        # 2026 לשנה קודמת משווה שבעה חודשים לשנים־עשר וקוראת לזה שינוי.
+        block['metrics_ytd'] = {}
+        for y, g in ytd.groupby('year'):
+            ok = g[g['views_valid']] if 'views_valid' in g else g
+            block['metrics_ytd'][y] = {
+                'posts': int(g['posts'].sum()),
+                'engagement': int(g[['likes', 'comments', 'shares']]
+                                  .sum(skipna=True).sum() or 0),
+                'watch_hours': int(g['watch_hours'].sum(skipna=True) or 0)
+                if 'watch_hours' in g else 0,
+                'views': int(ok['views'].sum(skipna=True) or 0),
+                'posts_in_views_window': int(ok['posts'].sum()),
+            }
+            for c in ('likes', 'comments', 'shares', 'saves'):
+                if c in g:
+                    block['metrics_ytd'][y][c] = int(g[c].sum(skipna=True) or 0)
+        # **שתי גרסאות, ובכוונה.** `_ytd` היא הבסיס היחיד שמותר להשוות עליו
+        # אחוזים — 2026 נגמרת ביולי. אבל טבלה שמציגה רק אותה מקטינה את הפלט
+        # של 2024 ושל 2025 בכ-43%, ומספרת להנהלה שפרסמנו פחות ממה שפרסמנו.
+        # לכן הטבלאות מציגות **שנים מלאות** עם 2026 מסומנת כחלקית, והאחוזים
+        # מחושבים בנפרד על `_ytd` ונאמרים במפורש.
+        for key, frame in (('format_mix', ytd), ('format_mix_full', sub)):
+            mix = {}
+            for fmt in ('רילס', 'תמונה', 'קרוסלה', 'וידאו', 'סטטוס', 'לינק'):
+                if fmt in frame.columns:
+                    per_year = frame.groupby('year')[fmt].sum()
+                    if per_year.sum():
+                        mix[fmt] = {y: int(v) for y, v in per_year.items()}
+            block[key] = mix
         deck['platforms'][plat] = block
 
     # --- יוטיוב וטיקטוק ---
@@ -284,11 +316,16 @@ def build():
                  '102,061 גידול בפועל — אחד מכל ארבעה עוזב'),
     }
 
+    deck['followers_series'] = _followers_series(m_subs, cum, run)
+    deck['assets'] = _assets_overview(deck, run)
+    deck['facebook_audience'] = _facebook_audience()
+
     # --- מה שאינסטגרם מלמד על גיוס עוקבים לפי פורמט ---
     deck['instagram_follows_by_format'] = ig_follows_by_format()
 
     # --- התוכן הגדול של כל שנה ---
     deck['top_content'] = top_content(yt, tt)
+    deck['top_by_platform'] = top_by_platform(yt, tt)
     deck['cross_platform'] = cross_platform(deck['top_content'])
 
     # --- הימים הגדולים, ומה הם עשו לקהל ---
@@ -400,7 +437,24 @@ def _youtube_studio():
     for y, g in d.groupby(d['Date'].dt.year):
         yearly[str(y)] = {'views': int(g['Views'].sum()), 'days': len(g)}
 
+    # ינואר–יולי בכל שנה, מ-Studio. **זה המדד הלא-מוטה של יוטיוב:** צפיות
+    # שהתרחשו בפועל, ולא "מה שתוכן מאותה שנה צבר עד היום" — לתוכן של 2024
+    # היו שנתיים נוספות לצבור, ולערוץ יוטיוב יש זנב ארוך באמת. על מדד הפריט
+    # 2026 יוצאת ‎-10%; על המדד הזה, ‎+3.5%. ההפרש הוא הטיית ההתבגרות.
+    period_ytd = {}
+    for y, g in _ytd(d, 'Date').groupby(d['Date'].dt.year):
+        period_ytd[str(y)] = {'views': int(g['Views'].sum()), 'days': len(g)}
+    pt = pd.read_csv(os.path.join(ys, 'period_totals.csv'))
+    pt['Date'] = pd.to_datetime(pt['Date'], errors='coerce')   # שורת «Total»
+    pt = pt.dropna(subset=['Date'])
+    pt = pt[pt['Date'] <= CUTOFF]
+    for y, g in _ytd(pt, 'Date').groupby(pt['Date'].dt.year):
+        if str(y) in period_ytd:
+            period_ytd[str(y)]['watch_hours'] = int(
+                pd.to_numeric(g['Watch time (hours)'], errors='coerce').sum())
+
     return {
+        'period_ytd': period_ytd,
         'yearly_period': yearly,
         'views_total': int(d['Views'].sum()),
         'watch_hours': total_watch,
@@ -414,6 +468,183 @@ def _youtube_studio():
         'source_note': ('צפיות בתקופה מייצוא YouTube Studio — לא "מה שתוכן '
                         'השנה צבר עד היום"'),
     }
+
+
+FB_ANCHOR = ('2026-07-31', 1180119)   # ערך מדוד מגיליון «מעקב עוקבים»
+
+# מאיזה תאריך יש בכלל מדידת עוקבים לכל רשת. זה לא פירוט טכני: זה מה שקובע
+# על אילו רשתות מותר לכתוב «גדלה ב-X%» ועל אילו אסור.
+SINCE = {
+    'facebook':  ('2024-01', None),
+    'youtube':   ('2024-01', None),
+    'instagram': ('2025-08', 'נמדד מאוגוסט 2025'),
+    'tiktok':    (None, 'נמדד מיולי 2026'),
+    'twitter':   (None, 'נמדד מיוני 2026'),
+    'whatsapp':  (None, 'לערוץ אין API'),
+}
+
+
+HE_PLACE = {
+    'Israel': 'ישראל', 'Palestine': 'פלסטין', 'United States': 'ארה"ב',
+    'Nigeria': 'ניגריה', 'Philippines': 'הפיליפינים', 'France': 'צרפת',
+    'India': 'הודו', 'Brazil': 'ברזיל', 'Germany': 'גרמניה',
+    'United Kingdom': 'בריטניה', 'Jerusalem': 'ירושלים',
+    'Tel Aviv': 'תל אביב', 'Petah Tikva': 'פתח תקווה', 'Ramat Gan': 'רמת גן',
+    'Beersheba': 'באר שבע', 'Haifa': 'חיפה', 'Holon': 'חולון',
+    'Rishon Le Zion': 'ראשון לציון', 'Ashdod': 'אשדוד', 'Netanya': 'נתניה',
+}
+
+
+def _facebook_audience():
+    """דמוגרפיה של עמוד הפייסבוק, מ-`meta_insights/Audience.csv`.
+
+    **תצלום נוכחי ולא היסטורי.** מטא אינה חושפת דמוגרפיה לאחור בשום ממשק,
+    ולכן אי אפשר לומר «הקהל השתנה» — רק «כך הוא נראה היום». הבלוקים נקראים
+    מהקובץ ולא מוקלדים: מספר שמוקלד ביד אינו יודע להתעדכן ואינו יודע להיבדק.
+    """
+    path = os.path.join(SRC, 'meta_insights', 'Audience.csv')
+    if not os.path.exists(path):
+        return None
+    rows = list(csv.reader(open(path, encoding='utf-16')))
+    at = {}
+    for i, r in enumerate(rows):
+        if len(r) == 1 and r[0].strip() in ('Age & gender', 'Top cities',
+                                            'Top countries'):
+            at[r[0].strip()] = i
+
+    def _pairs(i):
+        names, vals = rows[i + 1], rows[i + 2]
+        out = []
+        for n, v in zip(names, vals):
+            try:
+                out.append((HE_PLACE.get(n.split(',')[0].strip(), n), float(v)))
+            except ValueError:
+                pass
+        return out
+
+    out = {}
+    if 'Age & gender' in at:
+        ages, men, women = [], 0.0, 0.0
+        for r in rows[at['Age & gender'] + 2:]:
+            if len(r) != 3 or not r[0] or '-' not in r[0] and '+' not in r[0]:
+                break
+            m, w = float(r[1]), float(r[2])
+            ages.append({'band': r[0], 'men': m, 'women': w})
+            men, women = men + m, women + w
+        out['age'] = ages
+        out['men'] = round(men, 1)
+        out['women'] = round(women, 1)
+        # הגוש הגדול: גברים 25–44, כלומר שתי הרצועות ביחד
+        core = sum(a['men'] for a in ages if a['band'] in ('25-34', '35-44'))
+        out['core'] = {'label': 'גברים 25–44', 'pct': round(core, 1)}
+    if 'Top cities' in at:
+        out['cities'] = _pairs(at['Top cities'])
+    if 'Top countries' in at:
+        out['countries'] = _pairs(at['Top countries'])
+    return out or None
+
+
+def _assets_overview(deck, fb_gross):
+    """כל שישה הנכסים בשקף אחד: כמה עוקבים היום, וכמה נוספו מאז 2024.
+
+    המספר העדכני נלקח מ-`FOLLOWERS` לכל השש — אותו מקור שמופיע בשער
+    ובכותרות שקפי הרשתות, כדי ששני מספרים לאותו נכס לא ייפרדו בין שקפים.
+
+    הצמיחה היא הסיפור החלקי: היא נגזרת מאותה נקודת פתיחה בינואר 2024
+    שקיימת רק ליוטיוב (מדוד) ולפייסבוק (נגזר ביחס 0.750 המאומת). אינסטגרם
+    מקבל חלון קצר ומסומן, ולטיקטוק, ל-X ולוואטסאפ אין מה לכתוב — ולכן
+    נכתבת שם הסיבה ולא מקף. שלוש רשתות בלי צמיחה זה מה שיש; להמציא להן
+    נקודת פתיחה כדי שהשקף ייראה מלא זה בדיוק מה שאסור.
+    """
+    ratio = 0.75
+    now = dict(FOLLOWERS)
+
+    def _gross(fn):
+        """סך התוספות היומיות בייצוא, **חתוך ב-CUTOFF כמו כל השאר.**
+
+        החיתוך אינו קישוט. הצמיחה מחושבת כאן אחורה מנקודת הסוף: אם המלאי
+        הוא מ-31.7 והתוספות נספרות עד 10.8, עשרת הימים העודפים נגרעים
+        מנקודת הפתיחה ומנפחים את הצמיחה בלי שאיש יראה.
+        """
+        tot = 0
+        for r in csv.reader(open(os.path.join(SRC, 'meta_insights', fn),
+                                 encoding='utf-16')):
+            if len(r) == 2 and r[0][:4].isdigit() and 'T' in r[0] and r[0][:10] <= CUTOFF:
+                try:
+                    tot += float(r[1])
+                except ValueError:
+                    pass
+        return tot
+
+    starts = {
+        'facebook': int(round(now['facebook'] - ratio * _gross('Follows.csv'))),
+        'youtube': 613238,
+    }
+    ig = _gross('Audience_instagram.csv')
+    starts['instagram'] = int(round(now['instagram'] - 0.515 * ig))
+
+    out = []
+    for p, n in sorted(now.items(), key=lambda kv: -kv[1]):
+        since, note = SINCE[p]
+        row = {'platform': p, 'followers': n, 'note': note,
+               'derived': p in ('facebook', 'instagram')}
+        if since and p in starts:
+            row.update(start=starts[p], since=since,
+                       gain=n - starts[p], pct=(n / starts[p] - 1) * 100)
+        out.append(row)
+    full = [r for r in out if r.get('since') == '2024-01']
+    return {
+        'rows': out,
+        'total': sum(now.values()),
+        'full_gain': sum(r['gain'] for r in full),
+        'full_pct': (sum(r['followers'] for r in full)
+                     / sum(r['start'] for r in full) - 1) * 100,
+        'full_names': [r['platform'] for r in full],
+    }
+
+
+def _followers_series(m_subs, fb_cum, fb_total_gross):
+    """עקומת עוקבים חודשית — רק לשתי הרשתות שיש להן היסטוריה מלאה.
+
+    יוטיוב נמדד ישירות, יום-יום, מ-1.1.2024.
+
+    פייסבוק הוא מקרה אחר: מטא נותנת **הצטרפויות** ואף פעם לא מלאי, ולכן
+    העקומה נגזרת אחורה מנקודת עוגן מדודה לפי יחס נטו/ברוטו של 0.750. היחס
+    אינו הנחה — יש שמונה חודשים שבהם גם ההצטרפויות (הייצוא) וגם המלאי
+    (הגיליון) קיימים, ושם הוא יצא 0.750 בדיוק: 136,017 הצטרפויות מול
+    102,061 גידול בפועל. לכן העקומה מסומנת «נגזר» ולא מוצגת כמדידה.
+
+    שאר הרשתות אינן כאן, וזה לא השמטה: לטיקטוק יש שלושה שבועות מדודים
+    (מ-21.7.2026), ל-X שישה שבועות, ולערוץ הוואטסאפ אין API. אין דרך
+    להראות להן מגמה דו-שנתית בלי להמציא אותה.
+    """
+    ratio = 0.75
+    anchor_month, anchor = FB_ANCHOR[0][:7], FB_ANCHOR[1]
+    cum = {c['month']: c['total'] for c in fb_cum}
+    gross_to_anchor = cum.get(anchor_month, fb_total_gross)
+
+    fb = [{'month': m, 'value': int(round(anchor - ratio * (gross_to_anchor - t)))}
+          for m, t in sorted(cum.items()) if m <= anchor_month]
+    yt = [{'month': str(m), 'value': int(v)} for m, v in m_subs.items()]
+
+    out = {}
+    for key, series, measured in (('youtube', yt, True), ('facebook', fb, False)):
+        first, last = series[0]['value'], series[-1]['value']
+        out[key] = {
+            'series': series, 'start': first, 'end': last,
+            'gain': last - first, 'pct': (last / first - 1) * 100,
+            'measured': measured,
+        }
+    out['youtube']['start'] = 613238        # 1.1.2024, לפני הנקודה הראשונה
+    out['facebook']['start'] = int(round(anchor - ratio * gross_to_anchor))
+    for key in ('youtube', 'facebook'):
+        b = out[key]
+        b['gain'] = b['end'] - b['start']
+        b['pct'] = (b['end'] / b['start'] - 1) * 100
+    out['_note'] = ('פייסבוק נגזר מהצטרפויות לפי יחס נטו/ברוטו 0.750, '
+                    'שאומת מול שמונה חודשי חפיפה מדודים')
+    out['_missing'] = ['tiktok', 'twitter', 'whatsapp', 'instagram']
+    return out
 
 
 def ig_follows_by_format():
@@ -621,6 +852,30 @@ def big_days(yt, tt, subs, fb_follows, n=6):
             'fb_follows': int(fb_gain.get(day, 0) or 0),
         })
     return {'typical_day': int(typical), 'days': out}
+
+
+def top_by_platform(yt, tt, n=5):
+    """הפריטים הגדולים של כל רשת בתקופה.
+
+    **רק פריטים שיש להם טקסט.** לפייסבוק 2025 אין טקסט פוסטים כלל — הנתון
+    ההוא נמשך מה-Graph API וה-backfill לא שמר אותו — ושניים מהפוסטים
+    הגדולים ביותר ברשת הם משם. פוסט בלי כותרת הוא שורה ריקה בשקף, ולכן הם
+    מדולגים ומספרם נאמר בהערה, במקום להציג «(הטקסט לא נשמר)» כשורה.
+    """
+    a = all_items(yt, tt)
+    a = a[a['views'].notna() & (a['views'] > 0)]
+    out = {}
+    for plat, g in a.groupby('platform'):
+        named = g[g['title'].astype(str).str.len() > 12]
+        top = named.nlargest(n, 'views')
+        skipped = int((g.nlargest(n, 'views')['title'].astype(str).str.len()
+                       <= 12).sum())
+        out[plat] = {
+            'items': [{'date': str(r['dt'].date()), 'views': int(r['views']),
+                       'title': str(r['title'])} for _, r in top.iterrows()],
+            'skipped_untitled': skipped,
+        }
+    return out
 
 
 def top_content(yt, tt):
