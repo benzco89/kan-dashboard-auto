@@ -80,9 +80,33 @@ KEEP = {
 # הישויות מוצגות כמו שהן בכל צרכן שלא מפרש HTML, והקישור כבר קיים כעמודה.
 _TCO = re.compile(r"\s*https?://t\.co/\w+")
 
+# U+FFFD - בייטים שנשברו איפשהו בדרך. שלוש שורות בטבלה נושאות אותם, וכל
+# אחד מהם בלע אות עברית אחת. הם גם פוסלים את הטקסט אצל צרכנים שדורשים
+# UTF-8 תקין, ולכן מוסרים אותם - אחרי שמנסים למצוא עותק שלם במקור השני.
+REPLACEMENT = "�"
+
 
 def clean(text):
-    return _TCO.sub("", html.unescape(text or "")).strip()
+    t = _TCO.sub("", html.unescape(text or "")).strip()
+    return t.replace(REPLACEMENT, "")
+
+
+def repair_text(rows):
+    """אותו ציוץ מגיע משני מקורות; אם אחד מהם שבור, לוקחים את השלם."""
+    best = {}
+    for r in rows:
+        tid = str(r.get("tweet_id", ""))
+        cur = best.get(tid)
+        if cur is None or (REPLACEMENT in (cur.get("text") or "")
+                           and REPLACEMENT not in (r.get("text") or "")):
+            best[tid] = r
+    fixed = 0
+    for r in rows:
+        tid = str(r.get("tweet_id", ""))
+        if REPLACEMENT in (r.get("text") or "") and REPLACEMENT not in (best[tid].get("text") or ""):
+            r["text"] = best[tid]["text"]
+            fixed += 1
+    return fixed
 
 
 COLUMNS = ["תאריך", "שעה", "וידאו", "סוג מדיה", "טקסט הציוץ", "קישור",
@@ -146,6 +170,9 @@ def main():
         have = {str(r["tweet_id"]) for r in rows}
         new = [r for r in extra if str(r["tweet_id"]) not in have]
         print("🔎 advanced_search: %d ציוצים, מתוכם %d חדשים" % (len(extra), len(new)))
+        fixed = repair_text(rows + extra)
+        if fixed:
+            print("🩹 %d ציוצים קיבלו טקסט שלם מהמקור השני" % fixed)
         rows = rows + new
 
     picked, review = select(rows)
