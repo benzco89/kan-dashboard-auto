@@ -96,7 +96,7 @@ def tweet_id_of(tweet):
     return m.group(1) if m else ""
 
 
-def _fetch_slice(since_ts, until_ts, seen):
+def _fetch_slice(since_ts, until_ts, seen, q_extra=""):
     """
     חלון זמן אחד, בשניות יוניקס. מחזיר (tweets_חדשים, stop_reason).
 
@@ -106,6 +106,8 @@ def _fetch_slice(since_ts, until_ts, seen):
     ציוץ חדש", לא על has_more לבדו.
     """
     q = "from:%s since_time:%d until_time:%d" % (USERNAME, since_ts, until_ts)
+    if q_extra:
+        q += " " + q_extra
     out, cursor, stop = [], None, "max_pages"
     for _ in range(MAX_PAGES_PER_DAY):
         params = {"q": q, "product": "Latest"}
@@ -138,7 +140,7 @@ def _fetch_slice(since_ts, until_ts, seen):
     return out, stop
 
 
-def fetch_day(day):
+def fetch_day(day, q_extra=""):
     """
     כל הציוצים של @USERNAME ביום אחד, עם ריפוי-עצמי לקטיעות.
 
@@ -156,7 +158,7 @@ def fetch_day(day):
 
     seen, out, stops, lo = set(), [], [], end
     for depth in range(MAX_SLICES_PER_DAY):
-        got, stop = _fetch_slice(start, lo, seen)
+        got, stop = _fetch_slice(start, lo, seen, q_extra)
         out.extend(got)
         stops.append(stop)
         if not got:
@@ -202,20 +204,21 @@ def to_row(t):
     }
 
 
-def main(start, end):
+def main(start, end, q_extra=""):
     os.makedirs(OUTDIR, exist_ok=True)
     d0 = datetime.strptime(start, "%Y-%m-%d")
     d1 = datetime.strptime(end, "%Y-%m-%d")
     if d1 < d0:
         raise SystemExit("❌ תאריך הסיום מוקדם מתאריך ההתחלה")
 
-    print("🔎 advanced_search @%s  %s → %s" % (USERNAME, start, end), flush=True)
+    print("🔎 advanced_search @%s  %s → %s%s" % (
+        USERNAME, start, end, ("  [%s]" % q_extra) if q_extra else ""), flush=True)
 
     rows, by_day, truncated, calls = [], {}, [], 0
     day = d0
     while day <= d1:
         ds = day.strftime("%Y-%m-%d")
-        tweets, stop = fetch_day(ds)
+        tweets, stop = fetch_day(ds, q_extra)
         calls += 1
         got = [r for r in (to_row(t) for t in tweets) if r]
         rows.extend(got)
@@ -235,7 +238,8 @@ def main(start, end):
         seen.add(r["tweet_id"])
         uniq.append(r)
 
-    path = os.path.join(OUTDIR, "tweets_%s_%s.csv" % (start, end))
+    tag = "_" + re.sub(r"[^a-z0-9]+", "-", q_extra.lower()).strip("-") if q_extra else ""
+    path = os.path.join(OUTDIR, "tweets_%s_%s%s.csv" % (start, end, tag))
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=list(uniq[0].keys()) if uniq else ["tweet_id"])
         w.writeheader()
@@ -253,6 +257,6 @@ def main(start, end):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        raise SystemExit("usage: python twitter_search_probe.py <YYYY-MM-DD start> <YYYY-MM-DD end>")
-    main(sys.argv[1], sys.argv[2])
+    if len(sys.argv) not in (3, 4):
+        raise SystemExit("usage: python twitter_search_probe.py <start> <end> [extra query terms]")
+    main(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else "")

@@ -15,6 +15,10 @@ on:
         description: 'עד תאריך (YYYY-MM-DD, כולל)'
         required: true
         default: '2026-06-22'
+      q_extra:
+        description: 'אופרטורים נוספים לשאילתה, למשל filter:native_video (ריק = הכל)'
+        required: false
+        default: ''
 
 jobs:
   probe:
@@ -34,12 +38,12 @@ jobs:
       - name: Run the Twitter search probe
         env:
           GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}
-        run: python twitter_search_probe.py "${{ inputs.start }}" "${{ inputs.end }}"
+        run: python twitter_search_probe.py "${{ inputs.start }}" "${{ inputs.end }}" "${{ inputs.q_extra }}"
 
       - name: Upload the pulled tweets
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: twitter-search-${{ inputs.start }}-${{ inputs.end }}
+          name: twitter-search-${{ inputs.start }}-${{ inputs.end }}-${{ github.run_id }}
           path: twitter_search/
           if-no-files-found: warn
