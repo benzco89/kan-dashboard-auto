@@ -83,5 +83,44 @@ check("ואת שני צירי הסיווג",
           ("person", "program", "program_source", "category", "tags", "summary")),
       True)
 
+print("\nטריות ה-URL\n")
+
+resolved = []
+_real_resolve = ma.resolve_media_url
+
+
+def spy_resolve(item):
+    url = f"https://cdn.example/{item['id']}?sig=EXPIRES_SOON"
+    resolved.append(url)
+    return url
+
+
+ma.resolve_media_url = spy_resolve
+ma.http_download = lambda url, dest, **kw: (open(dest, "wb").write(b"v" * 99), 99)[1]
+
+import tempfile  # noqa: E402
+
+tmpdir = tempfile.mkdtemp()
+dest = os.path.join(tmpdir, "x.mp4")
+n = ma.download_media({"id": "17912", "platform": "instagram"}, dest)
+check("ההורדה מחזירה מספר בייטים", n, 99)
+check("ה-URL נפתר בתוך ההורדה ולא לפניה", len(resolved), 1)
+
+row = ma.build_row(
+    item={"id": "17912", "platform": "instagram",
+          "posted": ma.datetime.now(ma.IL_TZ), "permalink": "https://ig/p/1",
+          "caption": "טקסט (דב גיל-הר)", "duration_sec": 42},
+    upload={"id": "drivefile1", "bytes": 99},
+    drive_path="2026/09/02",
+    topic={"category": "חדשות שולחן", "tags": ["בחירות 2026"],
+           "summary": "שורה"})
+check("שום תא בשורה אינו מכיל את ה-URL שנפתר",
+      any(resolved[0] in str(c) for c in row), False)
+check("השורה באורך הכותרת", len(row), len(ma.INDEX_HEADER))
+check("הסיווג הדטרמיניסטי נכנס לשורה",
+      row[ma.INDEX_HEADER.index("person")], "דב גיל-הר")
+
+ma.resolve_media_url = _real_resolve
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)

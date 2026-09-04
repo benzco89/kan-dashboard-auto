@@ -173,3 +173,80 @@ def discover_tiktok(hours=ARCHIVE_LOOKBACK_HOURS):
             "_tiktok_urls": urls,
         })
     return out
+
+
+# דפדפן-ish; ה-CDN של טיקטוק מחזיר 403 ל-User-Agent של requests
+BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+
+CREDIT_RE = re.compile(r"📸|סעיף 27א|צילום:|קרדיט|Reuters|AP |AFP|Getty")
+
+
+def resolve_media_url(item):
+    """URL טרי, ברגע ההורדה. **לעולם לא נשמר** - הוא חתום לזמן קצר ומת אחריו.
+
+    זו הסיבה שגישת "להוסיף עמודת media_url לקולקטורים" נדחתה: היא הייתה
+    מוסיפה סיכון סכמה בייצור (verify_collector.py קיים כי עמודה שנדחפת באמצע
+    מזיזה כל ערך אחריה) כדי לשמור ערך שפג.
+    """
+    if item["platform"] == "tiktok":
+        urls = item.get("_tiktok_urls") or []
+        if not urls:
+            raise RuntimeError("אין play_addr באובייקט ה-aweme")
+        return urls[0]
+    res = http_get_json(f"{BASE}/{item['id']}", params={
+        "access_token": ACCESS_TOKEN, "fields": "media_url"})
+    url = res.get("media_url")
+    if not url:
+        raise RuntimeError(f"Graph לא החזיר media_url ל-{item['id']}")
+    return url
+
+
+def http_download(url, dest, headers=None, timeout=120):
+    """זרימה לקובץ. מוחזר מספר הבייטים שנכתבו."""
+    import requests
+    with requests.get(url, headers=headers, timeout=timeout, stream=True) as r:
+        r.raise_for_status()
+        n = 0
+        with open(dest, "wb") as fh:
+            for chunk in r.iter_content(chunk_size=1 << 20):
+                if chunk:
+                    fh.write(chunk)
+                    n += len(chunk)
+    return n
+
+
+def download_media(item, dest):
+    """הנתיב היחיד שמותר לו לפתור URL. 403 מנוסה שוב עם כותרות דפדפן."""
+    url = resolve_media_url(item)
+    try:
+        return http_download(url, dest)
+    except Exception as first:
+        print(f"   ↻ הורדה ראשונה נכשלה ({str(first)[:80]}) - מנסה עם UA דפדפן")
+        return http_download(url, dest, headers={
+            "User-Agent": BROWSER_UA, "Referer": "https://www.tiktok.com/"})
+
+
+def drive_filename(item):
+    """תאריך, שעה, פלטפורמה ומזהה - כדי שקובץ יהיה מזוהה גם מחוץ לתיקייה שלו."""
+    return (f"{item['posted'].strftime('%Y-%m-%d_%H%M')}_"
+            f"{item['platform']}_{item['id']}.mp4")
+
+
+def build_row(item, upload, drive_path, topic):
+    """שורת אינדקס אחת. הסיווג הדטרמיניסטי ומה ש-Gemini החזיר, בשורה אחת."""
+    tags = tag_item(item.get("caption"), item["platform"])
+    topic = topic or {}
+    return [
+        str(item["id"]), item["platform"],
+        item["posted"].strftime("%Y-%m-%d %H:%M"),
+        item.get("permalink", ""),
+        # באורך מלא - הקולקטורים קוטעים ב-500 ואיתם נעלמים קרדיטי סוף-כיתוב
+        strip_bidi(item.get("caption") or ""),
+        upload["id"], drive_path, upload["bytes"], item.get("duration_sec", ""),
+        tags["person"], tags["program"], tags["program_source"],
+        topic.get("category", ""), ", ".join(topic.get("tags") or []),
+        topic.get("summary", ""),
+        "כן" if CREDIT_RE.search(str(item.get("caption") or "")) else "",
+        "", datetime.now(IL_TZ).strftime("%Y-%m-%d %H:%M"), ARCHIVER_VERSION,
+    ]
