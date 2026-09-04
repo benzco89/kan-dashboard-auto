@@ -335,10 +335,87 @@ so `str(e)` after a failed download published the signed, short-lived
 the value the resolve-inside-download design exists to avoid persisting.
 `media_archiver._safe_exc_str` now strips URLs from exception text, and
 `test_media_archiver.py` drives a real `HTTPError` through the logging path
-and asserts the URL never reaches stdout. Three `str(e)` sites remain
-unscrubbed and are lower risk: a Gemini endpoint, a Drive endpoint, and the
-TikHub discovery URL in `run_archive`. The last is the same failure `main`
-already scrubs, and is worth making consistent.
+and asserts the URL never reaches stdout. Two `str(e)` sites are deliberately
+left unscrubbed — a Gemini endpoint and a Drive endpoint, both of which carry
+their credentials in headers, so the worst that appears is a `googleapis.com`
+host. The leak has a second mouth one layer down: `utils/api_helpers.py`'s
+`retry_with_backoff` prints the raw exception on every intermediate attempt,
+and `discover_instagram` passes `access_token` in `params`, so a connection
+failure renders the token into the message. Actions masks registered secrets,
+which covers CI but not the local `--since-days 2` run step 2 above asks for;
+`main()` is wrapped so nothing reaches a console unscrubbed. Do not "simplify"
+`_safe_exc_str` away.
+
+**`${{ }}` inside a workflow's `run:` is a shell injection.** The first version
+of `media_archiver.yml` built its argument list with
+`if [ -n "${{ inputs.since_days }}" ]; then ARGS="$ARGS --since-days ${{ inputs.since_days }}"; fi`.
+GitHub substitutes those expressions into the script **as text, before the
+shell parses it**, so a dispatch value of `1; rm -rf /` runs as a second
+command with the job's secrets in the environment. Escaping the quotes does
+not fix it — the substitution precedes parsing, so a value containing a quote
+still escapes. The fix is to bind inputs to the step's `env:` and read them as
+ordinary quoted shell variables, building the command as a bash array so a
+value containing a space survives as one argument. `hot_sniffer.yml` does not
+have this bug only because it passes its inputs straight through `env:`; any
+new workflow that interpolates into `run:` has it.
+
+**A test you cannot make fail is not a test — and this repo has now shipped
+two.** The whole-branch review found that `test_media_archiver.py`'s
+retry-path scrubbing checks were green and vacuous: an earlier block replaced
+`ma.download_media` with a stub and never restored it, so the retry helper was
+never invoked (0 calls under `settrace`), one check asserted 99 against a stub
+returning 99, and the "signed URL absent from the log" check passed against an
+*empty* captured buffer. Restoring the stub exposed a second layer: the log
+line truncates at `[:80]`, which cut the URL's tail in both the broken and the
+fixed case, so the literal `SECRET_URL in buf` assertion could never fail
+either way. Both were only found by deliberately breaking the code and
+checking the test went red. **In append-only test files, a monkeypatch that is
+not restored silently disarms every later block that touches the same name**;
+the file now restores `download_media` explicitly before the retry block.
+
+**`--since-days` has a ceiling of about four days, and it warns rather than
+lying.** Discovery is unpaginated — `limit: 50` on Graph, `count: 30` on
+TikHub — which at the measured rates above covers roughly six days of
+Instagram and four and a half of TikTok. `--since-days 7` would have returned
+a truncated window and reported it as complete, which is precisely the failure
+this file's collector-verification rule exists to catch. Both discovery
+functions now detect a full page whose oldest item is still newer than the
+cutoff and print a partial-coverage warning. Going genuinely further back
+needs pagination, not a bigger number.
+
+**The Hebrew names in `HANDLE_TO_PERSON` are an attribution, not a
+measurement.** The handle-to-handle pairings were derived from the caption
+CSVs — normalising `[._]` and trailing digits paired 28 people across the two
+platforms automatically, and the rows marked `# ידני` are the ones that
+needed a human because the word order is reversed (`davidovitchsharon` /
+`sharondavidovitch`), the handle is a nickname (`itsik_z` / `itsikzuarets`),
+or a second surname appears (`_dorit_mizrahi` / `doritassarafmizra`). But
+which *person* a handle belongs to was never cross-checked against a Kan staff
+list. Worth one editorial pass before the index feeds anything reader-facing.
+
+Known and deliberately not fixed:
+
+- **`weekly_deck/generate_deck.py` carries its own `strip_bidi`, and the two
+  have already drifted** — the deck's set has `U+061C`, `content_tags`' has
+  `U+FEFF`. The deck file also still writes its bidi marks as literal
+  invisible codepoints, the hazard `f424dc7` removed from the shared module.
+  Consolidating means choosing which set is right, which changes deck output,
+  so it is an editorial decision with its own verification rather than a
+  tail-end fix.
+- **`run_reconcile` writes one cell at a time** — up to ~76 `update_cell`
+  calls against a 60-writes-per-minute quota, with no error handling, making
+  it the one path that can fail a *run* rather than an item. Bounded today
+  (`days` is hardcoded to 7 and true pairs are rare), but a `batch_update`
+  removes the last run-level failure mode.
+- `tag_item` takes a `platform` it does not use; `discover_instagram` requests
+  `media_product_type` and never reads it — the field that would separate a
+  Reel from an ordinary feed video, which the archive currently takes both of.
+
+The work is on branch `video-archive`, 16 commits from `0a007f8`, three suites
+green (`test_content_tags.py` 28, `test_drive_store.py` 12,
+`test_media_archiver.py` 47). Note that commit `e3f0dfd` also carries an
+unrelated, pre-existing working-tree edit to item 14 of this file that
+`git add docs/ROADMAP.md` swept in.
 
 ---
 
