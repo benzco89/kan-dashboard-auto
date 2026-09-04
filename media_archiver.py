@@ -400,3 +400,121 @@ def run_archive(sh, drive, client, hours=ARCHIVE_LOOKBACK_HOURS):
             failed += 1
     print(f"\n✅ {archived} נשמרו ({total_bytes / 1e6:,.0f}MB), {failed} דולגו")
     return archived, failed
+
+
+# מילות עצירה - זהות לאלה של עמוד הוויראליות (aggregate.py:1001)
+_STOP = set("""של את על עם לא זה זו זאת הוא היא הם הן אני אתם אנחנו יש אין
+גם רק כל כי מה מי איך למה בין אחרי לפני נגד מול אבל או עוד כבר היום אמש מחר
+כאן חדשות בעקבות במהלך בזמן כדי לפי אצל בגלל האם כמה שני שתי כמו יותר פחות
+אשר כאשר היה היו תהיה הזה הזאת האלה עצמו שלו שלה שלהם ידי לאחר עקב""".split())
+
+RECONCILE_CONTAINMENT = 0.5   # ראו הערת find_pairs
+RECONCILE_WINDOW_DAYS = 2
+RECONCILE_MIN_TOKENS = 4
+
+
+def caption_tokens(text, limit=40):
+    text = re.sub(r"[^0-9א-תa-zA-Z\s]", " ", strip_bidi(text))
+    out = []
+    for w in text.split():
+        if len(w) >= 3 and w not in _STOP and not w.isdigit():
+            out.append(w)
+            if len(out) >= limit:
+                break
+    return frozenset(out)
+
+
+def containment(a, b):
+    """חפיפה ביחס לקצר מבין השניים."""
+    if not a or not b:
+        return 0.0
+    return len(a & b) / min(len(a), len(b))
+
+
+def find_pairs(rows):
+    """זוגות אינסטגרם-טיקטוק שהם אותו פריט. אף פעם לא מוחק, רק מקשר.
+
+    הסף כאן 0.5 ולא 0.6 של עמוד הוויראליות, ומותר לו: שם רץ union-find על כל
+    הפוסטים בשבוע, וסף נמוך יצר אשכול-ענק של 54 פוסטים בשרשור טרנזיטיבי; כאן
+    זה זיווג 1:1 בין שתי פלטפורמות בלבד, בלי מעבר בין זוגות, אז אין מה לשרשר.
+
+    **כשל ידוע, וזה הכיוון הבטוח:** כיתובי טיקטוק הם טיזרים וכיתובי אינסטגרם
+    הם ידיעה מלאה, אז פריטים זהים באמת אינם מזווגים - "תיעוד קשה מהשומרון"
+    עם זנב הקריאה-לפעולה שלו קיבל 0.33 מול פוסט האינסטגרם של עצמו (נמדד).
+    שימו לב שהמנגנון תלוי באורך הטיזר ולא ברור מאליו: טיזר של שלוש מילים
+    בלבד מגיע דווקא ל-1.00, כי כל הטוקנים שלו מוכלים בידיעה המלאה, ומה שמונע
+    ממנו לזווג הוא RECONCILE_MIN_TOKENS. שני המסלולים נבדקים בנפרד.
+
+    הכיוון הזה של הטעות הוא הבטוח: זוג שלא זווג משאיר שני קבצים בארכיון,
+    בעוד זיווג שגוי היה מסתיר תוכן אמיתי מאחורי סימון כפילות.
+    """
+    prepped = []
+    for i, r in enumerate(rows):
+        toks = caption_tokens(r.get("caption", ""))
+        if len(toks) < RECONCILE_MIN_TOKENS:
+            continue
+        try:
+            d = datetime.strptime(str(r.get("posted_at", ""))[:10], "%Y-%m-%d")
+        except ValueError:
+            continue
+        prepped.append((i, r.get("platform", ""), d, toks))
+
+    used, pairs = set(), []
+    for ia, pa, da, ta in prepped:
+        if ia in used:
+            continue
+        best, best_score = None, 0.0
+        for ib, pb, db, tb in prepped:
+            if ib in used or ib == ia or pb == pa:
+                continue
+            if abs((da - db).days) > RECONCILE_WINDOW_DAYS:
+                continue
+            s = containment(ta, tb)
+            if s >= RECONCILE_CONTAINMENT and s > best_score:
+                best, best_score = ib, s
+        if best is not None:
+            used.update({ia, best})
+            pairs.append((ia, best))
+    return pairs
+
+
+def run_reconcile(sh, days=7):
+    """מקשר עותקים ומדפיס את דוח הפערים - מה קיים בפלטפורמה אחת ולא בשנייה."""
+    ws, _ = get_index(sh)
+    values = ws.get_all_values()
+    if len(values) < 2:
+        print("ℹ️ האינדקס ריק.")
+        return 0
+    header, body = values[0], values[1:]
+    cutoff = (datetime.now(IL_TZ) - timedelta(days=days)).strftime("%Y-%m-%d")
+    rows, row_numbers = [], []
+    for n, raw in enumerate(body, start=2):
+        r = dict(zip(header, list(raw) + [""] * (len(header) - len(raw))))
+        if str(r.get("posted_at", ""))[:10] >= cutoff:
+            rows.append(r)
+            row_numbers.append(n)
+
+    same_col = header.index("same_as") + 1
+    pairs = find_pairs(rows)
+    updates = 0
+    for i, j in pairs:
+        for src, dst in ((i, j), (j, i)):
+            if not rows[src].get("same_as"):
+                ws.update_cell(row_numbers[src], same_col,
+                               rows[dst].get("drive_file_id", ""))
+                updates += 1
+
+    linked = {i for p in pairs for i in p}
+    only = {"instagram": [], "tiktok": []}
+    for idx, r in enumerate(rows):
+        if idx not in linked and r.get("platform") in only:
+            only[r["platform"]].append(r)
+    print(f"🔗 {len(pairs)} זוגות קושרו ({updates} תאים עודכנו)")
+    print(f"📊 דוח פערים ל-{days} הימים האחרונים: "
+          f"{len(only['tiktok'])} רק בטיקטוק, "
+          f"{len(only['instagram'])} רק באינסטגרם")
+    for plat, gap_items in only.items():
+        for r in gap_items[:15]:
+            print(f"   [{plat}] {r.get('posted_at', '')} "
+                  f"{r.get('caption', '')[:70]}")
+    return len(pairs)

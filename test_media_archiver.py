@@ -258,5 +258,57 @@ check("פריט שההורדה שלו נכשלת מדולג", result5, None)
 check("וה-URL החתום לא מודפס בשורת הדילוג של הפריט",
       SECRET_URL in buf2.getvalue(), False)
 
+print("\nמעבר ההצלבה\n")
+
+# הזוג האמיתי מ-27.8: אותה ידיעה בשתי הפלטפורמות, שאינה מזווגת
+ig_cap = ("תיעוד קשה מהשומרון: מתנחלים תקפו פעילי שמאל ליד הכפר בורין, "
+          "שלושה נפצעו ופונו לבית החולים. המשטרה פתחה בחקירה (דב גיל-הר)")
+tt_cap = "תיעוד קשה מהשומרון. עקבו אחרינו לעוד תכנים כאלה בטיקטוק"
+
+check("הכלה של הזוג שידוע שאינו מזווג - 0.33, מתחת לסף",
+      round(ma.containment(ma.caption_tokens(tt_cap),
+                           ma.caption_tokens(ig_cap)), 2), 0.33)
+
+# טיזר של שתיים-שלוש מילים דווקא **כן** מגיע ל-1.00 בהכלה, כי כל הטוקנים
+# שלו מוכלים בידיעה המלאה. מה שמונע ממנו לזווג הוא RECONCILE_MIN_TOKENS,
+# והמנגנון השני הזה נבדק בנפרד - אחרת נועלים ביטחון שאינו קיים.
+check("טיזר קצר מגיע ל-1.00 בהכלה",
+      ma.containment(ma.caption_tokens("תיעוד קשה מהשומרון"),
+                     ma.caption_tokens(ig_cap)), 1.0)
+check("ובכל זאת אינו מזווג - רצפת הטוקנים חוסמת אותו",
+      ma.find_pairs([
+          {"platform": "instagram", "posted_at": "2026-08-27 10:00",
+           "caption": ig_cap, "drive_file_id": "a", "same_as": ""},
+          {"platform": "tiktok", "posted_at": "2026-08-27 12:00",
+           "caption": "תיעוד קשה מהשומרון", "drive_file_id": "b",
+           "same_as": ""}]),
+      [])
+
+same_ig = "שר הביטחון הגיע לגבול הצפון והזהיר את חיזבאללה מפני הסלמה"
+same_tt = "שר הביטחון הגיע לגבול הצפון והזהיר את חיזבאללה"
+check("כיתובים כמעט זהים כן מזווגים",
+      ma.containment(ma.caption_tokens(same_tt),
+                     ma.caption_tokens(same_ig)) >= 0.5,
+      True)
+
+rrows = [
+    {"post_id": "1", "platform": "instagram", "posted_at": "2026-09-02 14:00",
+     "caption": same_ig, "drive_file_id": "figA", "same_as": ""},
+    {"post_id": "2", "platform": "tiktok", "posted_at": "2026-09-02 16:00",
+     "caption": same_tt, "drive_file_id": "ftkB", "same_as": ""},
+    {"post_id": "3", "platform": "tiktok", "posted_at": "2026-09-02 18:00",
+     "caption": "משהו אחר לגמרי על כלכלה וריבית בנק ישראל",
+     "drive_file_id": "fC", "same_as": ""},
+]
+pairs = ma.find_pairs(rrows)
+check("זוג אחד בדיוק", len(pairs), 1)
+check("והוא חוצה פלטפורמות", sorted(pairs[0]), [0, 1])
+
+check("אותה פלטפורמה לא מזווגת לעצמה",
+      ma.find_pairs([rrows[1], dict(rrows[1], post_id="9")]), [])
+
+far = [dict(rrows[0]), dict(rrows[1], posted_at="2026-09-06 16:00")]
+check("הפרש של יותר מיומיים לא מזווג", ma.find_pairs(far), [])
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)
