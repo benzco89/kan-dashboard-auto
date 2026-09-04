@@ -76,5 +76,57 @@ check("האשטאג עם קו תחתון",
 check("strip_bidi מנקה בלי לגעת בטקסט",
       ct.strip_bidi("\u202aשלום\u202c\u2069"), "שלום")
 
+print("\nציר 1 - אדם ותוכנית\n")
+
+check("האשטאג תוכנית קובע תוכנית",
+      ct.tag_item("קטע מהאולפן #גליקותמר", "instagram")["program"], "גליקותמר")
+check("שני האיותים של בשכונה שלנו הם תוכנית אחת",
+      [ct.tag_item(f"טקסט #{h}", "tiktok")["program"]
+       for h in ("בשכונה_שלנו", "בשכונהשלנו")],
+      ["בשכונה שלנו", "בשכונה שלנו"])
+check("האשטאג נושאי אינו תוכנית, אבל הבייליין כן",
+      ct.tag_item("מתכון #בשר (יפעת גליק)", "instagram")["program"], "גליקותמר")
+check("האשטאג נושאי לבדו משאיר תוכנית ריקה",
+      ct.tag_item("מתכון #בשר", "instagram")["program"], "")
+
+check("ידית אינסטגרם מזוהה לאדם",
+      ct.tag_item("\u202a@itayblumental\u202c", "instagram")["person"],
+      "איתי בלומנטל")
+check("הידית המקבילה בטיקטוק - אותו אדם",
+      ct.tag_item("@itayblumental1", "tiktok")["person"], "איתי בלומנטל")
+check("כינוי באינסטגרם מול שם מלא בטיקטוק",
+      [ct.tag_item("@itsik_z", "instagram")["person"],
+       ct.tag_item("@itsikzuarets", "tiktok")["person"]],
+      ["איציק צוארץ", "איציק צוארץ"])
+check("סדר שמות הפוך בין הפלטפורמות",
+      [ct.tag_item("@davidovitchsharon", "instagram")["person"],
+       ct.tag_item("@sharondavidovitch", "tiktok")["person"]],
+      ["שרון דוידוביץ", "שרון דוידוביץ"])
+
+check("הידית המושחתת לא מגיעה לטבלה מלכתחילה",
+      ct.tag_item("\u202a@ifatglick\u202a@almogtamar\u202car\u2069",
+                  "instagram")["people"],
+      ["יפעת גליק", "תמר אלמוג"])
+check("צמד המגישות גוזר את התוכנית",
+      ct.tag_item("\u202a@ifatglick\u202a@almogtamar\u202car\u2069",
+                  "instagram")["program"], "גליקותמר")
+check("מקור התוכנית מדווח",
+      ct.tag_item("@ifatglick", "instagram")["program_source"], "mention")
+
+check("בייליין עם שני איותים של אותו שם",
+      [ct.tag_item("טקסט (אילה חסון)", "tiktok")["person"],
+       ct.tag_item("טקסט (איילה חסון)", "tiktok")["person"]],
+      ["איילה חסון", "איילה חסון"])
+check("כתב שאינו בטבלת התוכניות מקבל שם וריק בתוכנית",
+      ct.tag_item("טקסט (ישראל רוזנר)", "tiktok"),
+      {"person": "ישראל רוזנר", "people": ["ישראל רוזנר"],
+       "program": "", "program_source": ""})
+check("כיתוב בלי אף סמן",
+      ct.tag_item("שר הביטחון הגיע לגבול הצפון", "instagram"),
+      {"person": "", "people": [], "program": "", "program_source": ""})
+check("סדר הקדימות: האשטאג גובר על בייליין",
+      ct.tag_item("קטע #כאןבשש (ישראל רוזנר)", "tiktok")["program_source"],
+      "hashtag")
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)
