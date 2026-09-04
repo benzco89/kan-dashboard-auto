@@ -43,20 +43,20 @@ print("\nציר 1 - חילוץ סמנים\n")
 
 # שורות אמיתיות מ-analysis/presentation/pulled/sheet_instagram.csv
 check("שתי ידיות צמודות שמופרדות בסימן bidi",
-      ct.extract_handles("וד בצבע  ‪@ifatglick‪@almogtamar‬ar⁩"),
+      ct.extract_handles("וד בצבע  \u202a@ifatglick\u202a@almogtamar\u202car\u2069"),
       ["ifatglick", "almogtamar"])
 check("זנב חוזר אחרי U+202C לא נבלע לתוך הידית",
-      ct.extract_handles("ירות\"  ‪‪‪@gilicohen10‪@roikais"
-                         "‬is‬is‬is 📸: AP"),
+      ct.extract_handles("ירות\"  \u202a\u202a\u202a@gilicohen10\u202a@roikais"
+                         "\u202cis\u202cis\u202cis 📸: AP"),
       ["gilicohen10", "roikais"])
 check("ידית בודדת עטופה",
-      ct.extract_handles(" שלושה.  ‪@nathanguttman‬  📸: AP⁩"),
+      ct.extract_handles(" שלושה.  \u202a@nathanguttman\u202c  📸: AP\u2069"),
       ["nathanguttman"])
 check("אין ידיות",
       ct.extract_handles("כותרת בלי אף אזכור"), [])
 
 check("בייליין עם סימן bidi אחרי הסוגר",
-      ct.extract_byline("⁦טקסט הידיעה (דב גיל-הר)⁩"), ["דב גיל-הר"])
+      ct.extract_byline("\u2066טקסט הידיעה (דב גיל-הר)\u2069"), ["דב גיל-הר"])
 check("בייליין עם שני שמות",
       ct.extract_byline("טקסט (אורלי אלקלעי, הדס גרינברג)"),
       ["אורלי אלקלעי", "הדס גרינברג"])
@@ -74,7 +74,7 @@ check("האשטאג עם קו תחתון",
       ct.extract_hashtags("#בשכונה_שלנו ועוד"), ["בשכונה_שלנו"])
 
 check("strip_bidi מנקה בלי לגעת בטקסט",
-      ct.strip_bidi("‪שלום‬⁩"), "שלום")
+      ct.strip_bidi("\u202aשלום\u202c\u2069"), "שלום")
 
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)
