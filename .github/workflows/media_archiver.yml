@@ -20,6 +20,9 @@ on:
 jobs:
   archive:
     runs-on: ubuntu-latest
+    # ללא תקרה, הריצה חשופה לתקוע על סטרימינג עשרות מגהבייט לפריט (בניגוד
+    # לרחרחן, שאין לו הורדות מדיה בכלל) - תקוע כאן משמע ריצה שאף פעם לא מסיימת.
+    timeout-minutes: 45
     steps:
       - name: Checkout code
         uses: actions/checkout@v3

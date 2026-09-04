@@ -106,6 +106,23 @@ def get_index(sh):
     return ws, known
 
 
+def peek_index(sh):
+    """כמו get_index, אבל לעולם לא יוצר גיליון - למצב יבש שמבטיח לא לגעת בכלום.
+
+    get_index רגיל היה נכון גם כאן, אבל --dry-run מתועד כ"בלי הורדה, העלאה
+    או כתיבה", וזה מפר את ההבטחה: הריצה הראשונה בחיי הגיליון הייתה כותבת
+    שורת כותרת אמיתית דרך add_worksheet + append_row.
+    """
+    try:
+        ws = sh.worksheet(INDEX_SHEET)
+    except gspread.WorksheetNotFound:
+        print(f"ℹ️ גיליון {INDEX_SHEET} עוד לא קיים - במצב יבש לא נוצר.")
+        return set()
+    rows = ws.get_all_values()
+    return {(str(r[1]).strip(), str(r[0]).strip())
+            for r in rows[1:] if len(r) > 1 and str(r[0]).strip()}
+
+
 def filter_new(items, known):
     """מה שעוד לא בארכיון. זו התכונה שכל הקצב נשען עליה."""
     return [i for i in items if (i["platform"], str(i["id"])) not in known]
@@ -129,9 +146,10 @@ def discover_instagram(hours=ARCHIVE_LOOKBACK_HOURS):
         "fields": "id,caption,timestamp,permalink,media_type,media_product_type",
         "limit": 50,
     })
+    data = res.get("data", [])
     cutoff = datetime.now(IL_TZ) - timedelta(hours=hours)
     out = []
-    for m in res.get("data", []):
+    for m in data:
         if m.get("media_type") != "VIDEO":
             continue
         try:
@@ -145,6 +163,17 @@ def discover_instagram(hours=ARCHIVE_LOOKBACK_HOURS):
             "posted": posted, "permalink": m.get("permalink", ""),
             "caption": m.get("caption") or "", "duration_sec": "",
         })
+    # אין pagination כאן (limit=50 בלבד). אם הדף התמלא וגם הפריט האחרון בו
+    # (הישן ביותר שהוחזר) עדיין חדש יותר מה-cutoff, החלון המבוקש לא כוסה
+    # במלואו - יש עוד היסטוריה מעבר לדף הזה שלא נסרקה.
+    if len(data) >= 50 and data:
+        try:
+            oldest_in_page = _parse_ts(data[-1].get("timestamp"))
+        except (ValueError, TypeError):
+            oldest_in_page = None
+        if oldest_in_page is not None and oldest_in_page > cutoff:
+            print(f"⚠️ אינסטגרם: הדף הכיל {len(data)} פריטים וכולם חדשים "
+                  f"מהחיתוך - החלון של {hours} שעות לא כוסה במלואו (תוצאה חלקית)")
     return out
 
 
@@ -159,9 +188,10 @@ def discover_tiktok(hours=ARCHIVE_LOOKBACK_HOURS):
         params={"sec_user_id": TIKTOK_SEC_UID, "max_cursor": 0,
                 "count": 30, "sort_type": 0},
     )
+    aweme_list = (res.get("data") or {}).get("aweme_list") or []
     cutoff = datetime.now(IL_TZ) - timedelta(hours=hours)
     out = []
-    for v in ((res.get("data") or {}).get("aweme_list") or []):
+    for v in aweme_list:
         ts = v.get("create_time")
         if not ts:
             continue
@@ -178,6 +208,15 @@ def discover_tiktok(hours=ARCHIVE_LOOKBACK_HOURS):
             "duration_sec": round((video.get("duration") or 0) / 1000) or "",
             "_tiktok_urls": urls,
         })
+    # כמו באינסטגרם: אין pagination (count=30 בלבד). דף מלא שכולו עדיין
+    # חדש מה-cutoff אומר שיש עוד היסטוריה מעבר אליו שלא נסרקה.
+    if len(aweme_list) >= 30 and aweme_list:
+        last_ts = aweme_list[-1].get("create_time")
+        oldest_in_page = (datetime.fromtimestamp(int(last_ts), tz=pytz.utc)
+                          .astimezone(IL_TZ)) if last_ts else None
+        if oldest_in_page is not None and oldest_in_page > cutoff:
+            print(f"⚠️ טיקטוק: הדף הכיל {len(aweme_list)} פריטים וכולם חדשים "
+                  f"מהחיתוך - החלון של {hours} שעות לא כוסה במלואו (תוצאה חלקית)")
     return out
 
 
@@ -194,6 +233,12 @@ def resolve_media_url(item):
     זו הסיבה שגישת "להוסיף עמודת media_url לקולקטורים" נדחתה: היא הייתה
     מוסיפה סיכון סכמה בייצור (verify_collector.py קיים כי עמודה שנדחפת באמצע
     מזיזה כל ערך אחריה) כדי לשמור ערך שפג.
+
+    **הסתייגות לגבי טיקטוק:** "ברגע ההורדה" נכון לאינסטגרם בלבד. אצל טיקטוק
+    ה-URL כבר נלכד ב-discover_tiktok (`_tiktok_urls`) ומוחזר כאן מהזיכרון -
+    הוא עבר דרך הסינון, המיון וההעלאה לפני שהגיע לפה. האילוץ הגלובלי
+    ("media URL לעולם לא נשמר") עדיין מתקיים כי שום דבר לא כותב אותו לדיסק
+    או לגיליון, אבל זה לא אותו "טרי ברגע ההורדה" שמתואר למעלה.
     """
     if item["platform"] == "tiktok":
         urls = item.get("_tiktok_urls") or []
@@ -263,7 +308,11 @@ def build_row(item, upload, drive_path, topic):
         str(item["id"]), item["platform"],
         item["posted"].strftime("%Y-%m-%d %H:%M"),
         item.get("permalink", ""),
-        # באורך מלא - הקולקטורים קוטעים ב-500 ואיתם נעלמים קרדיטי סוף-כיתוב
+        # באורך מלא - הקולקטורים קוטעים ב-500 ואיתם נעלמים קרדיטי סוף-כיתוב.
+        # זהו strip_bidi(caption) - הכיתוב הגולמי לא נשמר בשום מקום אחר.
+        # person/program כבר חושבו למעלה משורה זו: אסור להזין את הכיתוב
+        # השמור כאן בחזרה ל-extract_handles כדי "לתייג מחדש" - ניקוי ה-bidi
+        # שכבר בוצע פה בדיוק ישחזר את השחתת הידיות ש-A1 קיים כדי למנוע.
         strip_bidi(item.get("caption") or ""),
         upload["id"], drive_path, upload["bytes"], item.get("duration_sec", ""),
         tags["person"], tags["program"], tags["program_source"],
@@ -382,7 +431,7 @@ def run_archive(sh, drive, client, hours=ARCHIVE_LOOKBACK_HOURS):
     try:
         found += discover_tiktok(hours)
     except Exception as e:   # ספק לא-רשמי, best-effort - לא מפיל את אינסטגרם
-        print(f"⚠️ משיכת טיקטוק נכשלה (מדלג): {str(e)[:120]}")
+        print(f"⚠️ משיכת טיקטוק נכשלה (מדלג): {_safe_exc_str(e)[:120]}")
     print(f"🔎 {len(found)} סרטונים בחלון של {hours} שעות")
 
     fresh = filter_new(found, known)
@@ -562,40 +611,47 @@ def storage_report(rows):
 
 
 def main():
-    args = parse_args()
-    now = datetime.now(IL_TZ)
-    print(f"\n🎬 ארכיון וידאו - {now.strftime('%Y-%m-%d %H:%M')}\n")
+    # שומר יחיד: גם דליפת ה-URL החתום דרך traceback גולמי וגם ריצה מקומית
+    # שקורסת בלי exit code הם אותה בעיה - discover_instagram (בניגוד ל-
+    # discover_tiktok) לא עטופה ב-run_archive, אז כשל שלה מגיע לכאן חשוף.
+    try:
+        args = parse_args()
+        now = datetime.now(IL_TZ)
+        print(f"\n🎬 ארכיון וידאו - {now.strftime('%Y-%m-%d %H:%M')}\n")
 
-    if not ACCESS_TOKEN:
-        print("❌ חסר FACEBOOK_TOKEN")
-        sys.exit(1)
+        sh = open_spreadsheet()
 
-    sh = open_spreadsheet()
+        if args.reconcile:
+            run_reconcile(sh)
+            return
 
-    if args.reconcile:
-        run_reconcile(sh)
-        return
+        if not ACCESS_TOKEN:
+            print("❌ חסר FACEBOOK_TOKEN")
+            sys.exit(1)
 
-    if args.dry_run:
-        _, known = get_index(sh)
-        found = discover_instagram(args.hours)
-        try:
-            found += discover_tiktok(args.hours)
-        except Exception as e:
-            print(f"⚠️ משיכת טיקטוק נכשלה: {_safe_exc_str(e)[:120]}")
-        fresh = filter_new(found, known)
-        print(f"\n🧪 מצב יבש: {len(found)} בחלון, {len(fresh)} חדשים")
-        for i in fresh:
-            print(f"   {i['platform']:10s} {i['id']:20s} "
-                  f"{i['posted'].strftime('%d/%m %H:%M')}  "
-                  f"{strip_bidi(i.get('caption', ''))[:60]}")
-        return
+        if args.dry_run:
+            known = peek_index(sh)
+            found = discover_instagram(args.hours)
+            try:
+                found += discover_tiktok(args.hours)
+            except Exception as e:
+                print(f"⚠️ משיכת טיקטוק נכשלה: {_safe_exc_str(e)[:120]}")
+            fresh = filter_new(found, known)
+            print(f"\n🧪 מצב יבש: {len(found)} בחלון, {len(fresh)} חדשים")
+            for i in fresh:
+                print(f"   {i['platform']:10s} {i['id']:20s} "
+                      f"{i['posted'].strftime('%d/%m %H:%M')}  "
+                      f"{strip_bidi(i.get('caption', ''))[:60]}")
+            return
 
-    # דרייב שלא נגיש מפיל את הריצה בכוונה - הוורקפלואו צריך להאדים
-    drive = drive_store.DriveStore.from_env()
-    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-    archived, failed = run_archive(sh, drive, client, args.hours)
-    if archived == 0 and failed > 0:
+        # דרייב שלא נגיש מפיל את הריצה בכוונה - הוורקפלואו צריך להאדים
+        drive = drive_store.DriveStore.from_env()
+        client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+        archived, failed = run_archive(sh, drive, client, args.hours)
+        if archived == 0 and failed > 0:
+            sys.exit(1)
+    except Exception as e:
+        print(f"❌ {_safe_exc_str(e)}")
         sys.exit(1)
 
 

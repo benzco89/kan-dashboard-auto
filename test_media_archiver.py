@@ -51,11 +51,19 @@ class FakeWorksheet:
 
 
 class FakeSpreadsheet:
-    def __init__(self, ws):
+    def __init__(self, ws, missing=False):
         self.ws = ws
+        self.missing = missing
+        self.added = None
 
     def worksheet(self, title):
+        if self.missing:
+            raise ma.gspread.WorksheetNotFound(title)
         return self.ws
+
+    def add_worksheet(self, title, rows, cols):
+        self.added = FakeWorksheet([])
+        return self.added
 
 
 print("\nאינדקס וסינון\n")
@@ -83,10 +91,22 @@ check("ואת שני צירי הסיווג",
           ("person", "program", "program_source", "category", "tags", "summary")),
       True)
 
+print("\nאינדקס - יצירה כשהגיליון חסר\n")
+
+# מסלול שרץ פעם אחת בחיי הגיליון - בדיוק המסלול ש-save_daily_insights_to_sheets
+# נשא בו קריאת gspread שבורה בלי שאף בדיקה תפסה, לפי docs/ROADMAP.md.
+sh_missing = FakeSpreadsheet(None, missing=True)
+ws_new, known_new = ma.get_index(sh_missing)
+check("גיליון חדש נוצר כשהוא חסר", ws_new is sh_missing.added, True)
+check("השורה הראשונה שנכתבת בו היא כותרת האינדקס",
+      sh_missing.added.appended, [ma.INDEX_HEADER])
+check("וסט המפתחות מתחיל ריק", known_new, set())
+
 print("\nטריות ה-URL\n")
 
 resolved = []
 _real_resolve = ma.resolve_media_url
+_real_download_media = ma.download_media
 
 
 def spy_resolve(item):
@@ -232,6 +252,10 @@ def _first_call_raises_then_ok(url, dest, headers=None, timeout=120):
 
 ma.http_download = _first_call_raises_then_ok
 ma.resolve_media_url = lambda item: SECRET_URL
+# download_media עצמו נשאר הפסיק מ"סדר הכתיבה" למעלה - בלי לשחזר אותו כאן
+# הקריאה הבאה הייתה קוראת לפסיק ההוא (שתמיד מחזיר 99) ומדלגת על הלוגיקה
+# האמיתית של ניסיון-חוזר לגמרי, בלי שהבדיקה תיכשל.
+ma.download_media = _real_download_media
 
 tmpdir5 = tempfile.mkdtemp()
 buf = io.StringIO()
@@ -239,8 +263,12 @@ with contextlib.redirect_stdout(buf):
     n5 = ma.download_media({"id": "9", "platform": "tiktok"},
                             os.path.join(tmpdir5, "y.mp4"))
 check("ההורדה מתאוששת אחרי ניסיון ראשון שנכשל", n5, 99)
+# בדיקה על תת-מחרוזת מוקדמת ולא על SECRET_URL השלם: השורה הזו נחתכת ב-[:80]
+# ב-media_archiver.py, אז חלק מהזנב של URL ארוך נחתך גם כשהוא לא מנוקה בכלל -
+# "cdn.example" תמיד באזור הבטוח מהחיתוך, לכן היעדרותו מוכיח בפועל שהוחלף
+# ב-<url> ולא שרק נחתך במקרה.
 check("אבל ה-URL החתום לא מודפס בלוג הניסיון החוזר",
-      SECRET_URL in buf.getvalue(), False)
+      "cdn.example" in buf.getvalue(), False)
 
 
 def _download_raises(item, dest):

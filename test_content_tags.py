@@ -127,6 +127,9 @@ check("כיתוב בלי אף סמן",
 check("סדר הקדימות: האשטאג גובר על בייליין",
       ct.tag_item("קטע #כאןבשש (ישראל רוזנר)", "tiktok")["program_source"],
       "hashtag")
+check("מקור התוכנית מדווח כבייליין כשזה המקור שקבע",
+      ct.tag_item("טקסט (יפעת גליק)", "instagram")["program_source"],
+      "byline")
 
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)

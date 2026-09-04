@@ -311,7 +311,11 @@ Two of the design's own numbers were wrong and are corrected in the plan's
   handles out of 212; reading raw gives 165 and none, over the same 1,982
   tokens). The byline regex must **tolerate** bidi after the closing bracket
   (without it, 19 bylines are found on Instagram instead of 34 — 44% lost).
-  Hashtags are indifferent. `test_content_tags.py` locks all three.
+  Hashtags are indifferent. `test_content_tags.py` locks all three. `person`
+  and `program` are written per row precisely so this extraction never needs
+  to run again on stored data: `build_row` stores `strip_bidi(caption)`, and
+  feeding that stored caption back through `extract_handles` to "re-tag" a
+  row would reproduce the exact 52-handle corruption above.
 
 A third finding from the design work still stands on its own: **a hashtag means
 "programme segment" at ~99% precision but names the programme only 84% of the
