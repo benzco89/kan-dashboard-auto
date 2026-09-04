@@ -27,6 +27,7 @@ from datetime import datetime, timedelta
 
 import gspread
 import pytz
+from google.genai import types
 from google.oauth2.service_account import Credentials
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -250,3 +251,63 @@ def build_row(item, upload, drive_path, topic):
         "כן" if CREDIT_RE.search(str(item.get("caption") or "")) else "",
         "", datetime.now(IL_TZ).strftime("%Y-%m-%d %H:%M"), ARCHIVER_VERSION,
     ]
+
+
+# רשימת פתיחה, לכוונון אחרי שיהיה פלט אמיתי.
+TOPIC_CATEGORIES = [
+    "חדשות שולחן", "חוץ", "צבא וביטחון", "משפט ופלילים", "כלכלה",
+    "טכנולוגיה", "בריאות", "אוכל וצרכנות", "תרבות ובידור", "מגזין אנושי",
+    "סאטירה",
+]
+
+TOPIC_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "category": {"type": "string", "enum": TOPIC_CATEGORIES},
+        "tags": {"type": "array", "items": {"type": "string"},
+                 "description": "אירוע או סיפור ספציפי, למשל \"בחירות 2026\""},
+        "summary": {"type": "string", "description": "שורה אחת לאינדקס"},
+    },
+    "required": ["category", "tags", "summary"],
+}
+
+GEMINI_MODELS = ["gemini-3.5-flash", "gemini-2.5-pro"]
+
+
+def classify_topic(client, item, program):
+    """קטגוריה אחת + תגיות חופשיות + סיכום. None בכשל - פריט אחד, לא הריצה.
+
+    התגיות החופשיות הן מה שהופך את "כל מה שעלה היום על הבחירות" לשאלה שאפשר
+    לענות עליה בלי שאיש חזה את הנושא מראש. הן נשמרות כפי שנכתבו - נרמול שלהן
+    לאוצר מילים מבוקר הוא בכוונה מחוץ לתחום: זה נראה מסודר ומשמיד בשקט את
+    הסיגנל שבגללו הן שוות משהו.
+    """
+    caption = strip_bidi(item.get("caption") or "")[:1500]
+    program_line = ("התוכנית שזוהתה: " + program) if program else "לא זוהתה תוכנית."
+    prompt = f"""אתה עורך ארכיון של חדר חדשות (כאן חדשות). לפניך כיתוב של סרטון
+שפורסם ב{item['platform']}.
+
+{program_line}
+
+הכיתוב:
+{caption}
+
+החזר קטגוריה אחת מתוך: {" · ".join(TOPIC_CATEGORIES)}
+ותגיות חופשיות שמזהות את **האירוע או הסיפור הספציפי** (למשל "בחירות 2026",
+"חטיפת יהלי") - לא מילות מפתח כלליות. אם הכיתוב לא מספיק כדי לזהות סיפור,
+החזר תגיות ריקות ואל תמציא.
+summary: שורה אחת בעברית שמתארת מה רואים בסרטון."""
+
+    for model_name in GEMINI_MODELS:
+        try:
+            res = client.models.generate_content(
+                model=model_name, contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=TOPIC_SCHEMA,
+                ),
+            )
+            return json.loads(res.text)
+        except Exception as e:
+            print(f"   ⚠️ {model_name} נכשל: {str(e)[:120]}")
+    return None

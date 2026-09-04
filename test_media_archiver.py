@@ -122,5 +122,45 @@ check("הסיווג הדטרמיניסטי נכנס לשורה",
 
 ma.resolve_media_url = _real_resolve
 
+print("\nציר 2 - נושא\n")
+
+
+class FakeGeminiOK:
+    seen = ""
+
+    class models:
+        @staticmethod
+        def generate_content(model=None, contents=None, config=None):
+            class R:
+                text = ('{"category": "משפט ופלילים", '
+                        '"tags": ["חטיפת יהלי"], "summary": "שורה אחת"}')
+            FakeGeminiOK.seen = contents
+            return R()
+
+
+class FakeGeminiDown:
+    class models:
+        @staticmethod
+        def generate_content(**kw):
+            raise RuntimeError("503 model overloaded")
+
+
+topic_item = {"id": "1", "platform": "instagram", "caption": "כיתוב הידיעה"}
+got = ma.classify_topic(FakeGeminiOK, topic_item, "גליקותמר")
+check("קטגוריה, תגיות וסיכום חוזרים",
+      (got["category"], got["tags"], got["summary"]),
+      ("משפט ופלילים", ["חטיפת יהלי"], "שורה אחת"))
+check("התוכנית נכנסת לפרומפט", "גליקותמר" in FakeGeminiOK.seen, True)
+check("הקטגוריות מוצעות בפרומפט", "תרבות ובידור" in FakeGeminiOK.seen, True)
+check("כשל של Gemini מחזיר None ולא מתפוצץ",
+      ma.classify_topic(FakeGeminiDown, topic_item, ""), None)
+check("שורה עם topic=None עדיין נבנית מלאה",
+      len(ma.build_row(
+          item={"id": "1", "platform": "instagram",
+                "posted": ma.datetime.now(ma.IL_TZ), "permalink": "",
+                "caption": "כיתוב", "duration_sec": 10},
+          upload={"id": "f", "bytes": 1}, drive_path="p", topic=None)),
+      len(ma.INDEX_HEADER))
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)
