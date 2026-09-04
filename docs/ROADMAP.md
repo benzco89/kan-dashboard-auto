@@ -207,6 +207,37 @@ pointed at the historical rows is the open question.
 
 ## Open — מצגת 2024→היום
 
+### 15. The deck's claim, and what was deliberately left out (2026-08-23)
+Two Fable reviews (story/design, numbers/claims) ran against the rendered deck,
+were applied, and a second Fable pass verified the fixes — 10/10, no
+regressions. What that round settled, so it is not re-argued:
+
+- **The deck argues one thing:** *the growth came from reach, not volume.*
+  Jan–Jul 2026 vs 2025, four measured networks: **+6% items, +53% views, +44%
+  views per item.** It is the title of slide 2 and of the summary. Per-item is
+  measured against **2025 in every network** — Jan–Jul 2024 has no valid
+  Facebook views at all (0 of 3,077 posts) and one Instagram month (345 of
+  2,229), so a 2024 base silently compared Sep–Dec 2024 to Jan–Jul 2026 under
+  a footnote promising an equal window.
+- **YouTube is the honest exception, on the Studio basis.** Views ‑14.9% on
+  ‑14.7% items → per item ‑0.3%, i.e. flat. The item-cumulative measure says
+  ‑10.7% and is biased against new content; do not use it for YouTube.
+- **Declined, by Ben:** no benchmark-vs-competitors slide (the daily
+  competitor data is Instagram-only and followers-only — no views), and no
+  "what we need from you" ask slide.
+- **Deferred, not rejected:** merging the four top-5 slides into one
+  cross-platform "peak moments" slide, dropping the four chapter separators
+  (20% of the deck, and they still repeat slide 3's numbers), and an Instagram
+  audience slide to match Facebook's.
+- **Manual and open:** three entries in `analysis/presentation/
+  deck_overrides.json` under `_todo` — two Facebook posts in the top five whose
+  text the backfill never kept (permalinks are there), and one headline the
+  caption itself cut mid-sentence. Nothing there is ever guessed.
+- **Known 1% seam:** per-type watch hours have no dated source, so slide 13's
+  hours column runs to 10.8 while every other figure cuts at 31.7. The
+  deck-level total *is* cut (34.6M, not 34.9M) because `period_totals.csv`
+  covers the ten overrun days even though it cannot build the whole period.
+
 ### 13. The metric history is a wasting asset — export yearly
 Meta's Business Suite export keeps per-post insights only ~23 months, measured
 2026-08-11 on the exports themselves: IG `Views` is empty before Jul-2024 and
@@ -220,12 +251,90 @@ start Jan-2024. And whatever is not exported now is gone in two years — a
 yearly Business Suite export belongs in the routine. Details and the plan:
 `analysis/presentation/PLAN.md`, base built by `build_history.py`.
 
-### 14. Facebook 2025–2026 has counts but no metrics
-The Graph probe counted FB posts for 2025–2026, but per-post reach/engagement
-for those years exists nowhere: the sheets only start 12/2025 and the rich
-Business Suite export was only ever taken for 2024. Closing it is a manual
-export (Insights → Content), the same one already done for Instagram. Until
-then the Facebook deep-dive slide rests on 2024 plus eight months of sheet.
+### 14. Facebook 2025 has views and engagement, but no reach and no post text
+**Narrowed 2026-08-23** — the original wording ("counts but no metrics") is out
+of date. The Graph backfill closed most of it: `analysis/presentation/pulled/
+fb_2025_metrics.csv` holds all **4,799** posts of 2025 with views, reactions,
+comments, shares, watch minutes and permalink — one zero-view row in the whole
+file, and its 840,552,763 views are exactly what the deck reports for FB 2025.
+Verified against the export on 2026 post ids: median ratio 1.00 on views.
+
+What is still missing for 2025, and only that:
+
+- **Reach.** The API's per-post reach decays with post age (median 12,542
+  against 111,098 views — ratio 0.11, where 2026 runs 0.75), so it is
+  deliberately dropped in `_fb_backfill`. Only a manual Business Suite export
+  (Insights → Content) can recover it.
+- **Post text.** The backfill did not keep it, so two of Facebook's five
+  biggest posts of the period have no headline. They are listed with their
+  permalinks in `analysis/presentation/deck_overrides.json` under `_todo`;
+  a human opens the link and writes the line. Nothing is ever guessed there.
+
+The appendix coverage table says `בלי חשיפה` for FB 2025 rather than `מלא`,
+which is what it actually is.
+
+---
+
+## Open — video archive
+
+### 18. The archive is built; the first live run has not been made (2026-09-04)
+`media_archiver.py`, `drive_store.py`, `social_dashboard/content_tags.py`
+(axis 1) and `.github/workflows/media_archiver.yml`, implementing
+`docs/superpowers/specs/2026-09-02-video-archive-design.md` through the plan at
+`docs/superpowers/plans/2026-09-04-video-archive.md`.
+
+Before it can be trusted, three things must happen and none of them is code:
+
+1. **`gdrive_consent.py` must be run once**, by the account that owns the
+   archive folder, and its three values stored as GitHub secrets. Until then
+   every run fails at `DriveStore.from_env()`.
+2. **`python media_archiver.py --since-days 2` once**, then open the Drive
+   folder: confirm the files play, are not watermarked, and that their count
+   matches the index. The no-watermark claim rests on `play_addr` rather than
+   `download_addr` and has never been checked against our own account.
+3. **A systemd timer on the VPS** firing `workflow_dispatch` every two hours,
+   alongside `kan-hot-sniffer.timer`, plus a daily one with `reconcile=1`.
+
+Two of the design's own numbers were wrong and are corrected in the plan's
+"Amendments" section:
+
+- **Storage is ~12GB/month, not ~1GB.** 4.6 IG reels/day and 6.7 TikTok
+  videos/day, and TikTok's duration is median 84s but **mean 192s, p90 502s,
+  max 1,989s** — a long tail of whole programme segments. ~147GB/year at
+  ~2 Mbps. A paid Google One tier was chosen over a length cap, because the
+  long items are exactly the programme segments the story rails are for.
+  `storage_report()` prints the measured figure on every reconcile run, so the
+  estimate is replaced by a fact after two weeks.
+- **The Instagram handle corruption needs no "doubled-tail trim" — it needs
+  the right extraction order,** and the order differs per marker. Handles must
+  be read from the **raw** caption (stripping bidi first invents 52 corrupt
+  handles out of 212; reading raw gives 165 and none, over the same 1,982
+  tokens). The byline regex must **tolerate** bidi after the closing bracket
+  (without it, 19 bylines are found on Instagram instead of 34 — 44% lost).
+  Hashtags are indifferent. `test_content_tags.py` locks all three.
+
+A third finding from the design work still stands on its own: **a hashtag means
+"programme segment" at ~99% precision but names the programme only 84% of the
+time, and reaches just 9% of items.** Counting programme output by hashtag
+undercounts ~3× — גליקותמר 3.4/week by tag against 5.7 by byline. Measured
+again over the caption files on disk, the marker that actually carries the
+coverage is the **@mention** (81% of full IG captions, 45% of TikTok) with the
+trailing byline behind it (5% IG, 41% TikTok); together with hashtags they
+cover 86% of Instagram and 84% of TikTok. This is why axis 1 writes `person`
+as its own column and derives `program` from it: `PROGRAM_BY_PERSON` is
+deliberately partial, and a reporter missing from it still gets a name.
+
+**Signed URLs in the download path do not belong in a log.**
+The `requests` library embeds the failing URL inside its `HTTPError` message,
+so `str(e)` after a failed download published the signed, short-lived
+`media_url`/`play_addr` straight into the public GitHub Actions log — exactly
+the value the resolve-inside-download design exists to avoid persisting.
+`media_archiver._safe_exc_str` now strips URLs from exception text, and
+`test_media_archiver.py` drives a real `HTTPError` through the logging path
+and asserts the URL never reaches stdout. Three `str(e)` sites remain
+unscrubbed and are lower risk: a Gemini endpoint, a Drive endpoint, and the
+TikHub discovery URL in `run_archive`. The last is the same failure `main`
+already scrubs, and is worth making consistent.
 
 ---
 

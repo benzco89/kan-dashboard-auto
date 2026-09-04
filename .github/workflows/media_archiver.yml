@@ -1,0 +1,50 @@
+name: Media Archiver
+
+on:
+  workflow_dispatch:      # הטריגר: טיימר על ה-VPS (kan-media-archiver.timer), כמו
+                          # הרחרחן. בכוונה בלי schedule: - ה-cron של GitHub מפגר בשעות.
+    inputs:
+      since_days:
+        description: 'לחזור כמה ימים אחורה במקום 48 שעות'
+        required: false
+        default: ''
+      reconcile:
+        description: 'מעבר ההצלבה במקום ארכוב (כל ערך = דלוק)'
+        required: false
+        default: ''
+      dry_run:
+        description: 'גילוי וסינון בלבד, בלי הורדה או כתיבה (כל ערך = דלוק)'
+        required: false
+        default: ''
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Media Archiver
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+          GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.since_days }}" ]; then ARGS="$ARGS --since-days ${{ inputs.since_days }}"; fi
+          if [ -n "${{ inputs.reconcile }}" ]; then ARGS="$ARGS --reconcile"; fi
+          if [ -n "${{ inputs.dry_run }}" ]; then ARGS="$ARGS --dry-run"; fi
+          python media_archiver.py $ARGS
