@@ -520,6 +520,10 @@ def run_reconcile(sh, days=7):
         for r in gap_items[:15]:
             print(f"   [{plat}] {r.get('posted_at', '')} "
                   f"{r.get('caption', '')[:70]}")
+    rep = storage_report(rows)
+    print(f"💾 {rep['total_bytes'] / 1e9:.2f}GB על פני {rep['days']} ימים = "
+          f"{rep['per_day_mb']:,.0f}MB ליום → "
+          f"{rep['projected_gb_month']:.1f}GB לחודש")
     return len(pairs)
 
 
@@ -535,6 +539,26 @@ def parse_args(argv=None):
     args.hours = (args.since_days * 24 if args.since_days
                   else ARCHIVE_LOOKBACK_HOURS)
     return args
+
+
+def storage_report(rows):
+    """כמה הארכיון באמת שוקל. ההערכה במפרט הייתה 1GB לחודש והמדידה מהכיתובים
+    שעל הדיסק אמרה ~12 - אז הריצה מודדת במקום להעריך, ואחרי שבועיים יש עובדה
+    בלוג במקום שתי הערכות."""
+    total = 0
+    days = set()
+    for r in rows:
+        try:
+            total += int(str(r.get("bytes") or 0).strip() or 0)
+        except ValueError:
+            pass
+        d = str(r.get("posted_at", ""))[:10]
+        if d:
+            days.add(d)
+    n = len(days)
+    per_day = (total / n / 1e6) if n else 0
+    return {"total_bytes": total, "days": n, "per_day_mb": per_day,
+            "projected_gb_month": per_day * 30 / 1000}
 
 
 def main():

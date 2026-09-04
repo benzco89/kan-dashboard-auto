@@ -319,5 +319,17 @@ check("ברירת המחדל היא חלון הארכיון",
 check("--reconcile מזוהה", ma.parse_args(["--reconcile"]).reconcile, True)
 check("--dry-run מזוהה", ma.parse_args(["--dry-run"]).dry_run, True)
 
+print("\nדוח אחסון\n")
+
+srows = [{"posted_at": "2026-09-01 10:00", "bytes": "50000000"},
+         {"posted_at": "2026-09-01 12:00", "bytes": "30000000"},
+         {"posted_at": "2026-09-03 12:00", "bytes": "20000000"}]
+rep = ma.storage_report(srows)
+check("סך הבייטים", rep["total_bytes"], 100000000)
+check("שני ימים קלנדריים שונים", rep["days"], 2)
+check("ממוצע יומי במגה", round(rep["per_day_mb"]), 50)
+check("תחזית חודשית בג'יגה", round(rep["projected_gb_month"], 1), 1.5)
+check("אינדקס ריק לא מחלק באפס", ma.storage_report([])["per_day_mb"], 0)
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)
