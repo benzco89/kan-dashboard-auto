@@ -23,6 +23,8 @@ import os
 import re
 import sys
 import json
+import shutil
+import tempfile
 from datetime import datetime, timedelta
 
 import gspread
@@ -311,3 +313,74 @@ summary: שורה אחת בעברית שמתארת מה רואים בסרטון.
         except Exception as e:
             print(f"   ⚠️ {model_name} נכשל: {str(e)[:120]}")
     return None
+
+
+def archive_item(item, drive, ws, client):
+    """פריט אחד, מקצה לקצה. מחזיר את השורה שנכתבה, או None אם דולג.
+
+    **שורת האינדקס נכתבת אחרונה**, אחרי שהקובץ בדרייב. קריסה בין השתיים עולה
+    בקובץ כפול בריצה הבאה, וזה מתאושש. ההפך - אינדקס שרשום וקובץ שאינו - הופך
+    את הארכיון לשקרן, ואת זה אי אפשר לתקן בלי ביקורת ידנית.
+    """
+    tmpdir = tempfile.mkdtemp(prefix="kanarch_")
+    try:
+        name = drive_filename(item)
+        local = os.path.join(tmpdir, name)
+        download_media(item, local)
+
+        date_path = item["posted"].strftime("%Y/%m/%d")
+        upload = drive.upload(local, name, drive.ensure_folder(date_path))
+
+        tags = tag_item(item.get("caption"), item["platform"])
+        topic = classify_topic(client, item, tags["program"])
+
+        folders = []
+        if tags["program"]:
+            folders.append(f"לפי תוכנית/{tags['program']}")
+        if topic and topic.get("category"):
+            folders.append(f"לפי קטגוריה/{topic['category']}")
+        for folder in folders:
+            try:
+                drive.shortcut(upload["id"], name, drive.ensure_folder(folder))
+            except Exception as e:   # קיצור שנכשל לא שווה איבוד הפריט
+                print(f"   ⚠️ קיצור ל-{folder} נכשל: {str(e)[:100]}")
+
+        row = build_row(item, upload, date_path, topic)
+        ws.append_row(row, value_input_option="RAW")
+        return row
+    except Exception as e:
+        print(f"   ❌ {item['platform']}/{item['id']} דולג: {str(e)[:160]}")
+        return None
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def run_archive(sh, drive, client, hours=ARCHIVE_LOOKBACK_HOURS):
+    ws, known = get_index(sh)
+    print(f"📋 {len(known)} פריטים כבר בארכיון")
+
+    found = discover_instagram(hours)
+    try:
+        found += discover_tiktok(hours)
+    except Exception as e:   # ספק לא-רשמי, best-effort - לא מפיל את אינסטגרם
+        print(f"⚠️ משיכת טיקטוק נכשלה (מדלג): {str(e)[:120]}")
+    print(f"🔎 {len(found)} סרטונים בחלון של {hours} שעות")
+
+    fresh = filter_new(found, known)
+    if not fresh:
+        print("ℹ️ אין חדש - הכל כבר בארכיון.")
+        return 0, 0
+
+    archived = failed = 0
+    total_bytes = 0
+    for item in sorted(fresh, key=lambda i: i["posted"]):
+        print(f"\n--- {item['platform']} · {item['id']} · "
+              f"{item['posted'].strftime('%d/%m %H:%M')} ---")
+        row = archive_item(item, drive, ws, client)
+        if row:
+            archived += 1
+            total_bytes += int(row[INDEX_HEADER.index("bytes")] or 0)
+        else:
+            failed += 1
+    print(f"\n✅ {archived} נשמרו ({total_bytes / 1e6:,.0f}MB), {failed} דולגו")
+    return archived, failed

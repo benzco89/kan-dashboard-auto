@@ -162,5 +162,54 @@ check("שורה עם topic=None עדיין נבנית מלאה",
           upload={"id": "f", "bytes": 1}, drive_path="p", topic=None)),
       len(ma.INDEX_HEADER))
 
+print("\nסדר הכתיבה\n")
+
+
+class FakeDrive:
+    def __init__(self, fail_upload=False):
+        self.fail_upload = fail_upload
+        self.uploaded = []
+        self.shortcuts = []
+
+    def ensure_folder(self, path):
+        return f"folder:{path}"
+
+    def upload(self, local_path, name, parent_id):
+        if self.fail_upload:
+            raise RuntimeError("drive is down")
+        self.uploaded.append(name)
+        return {"id": f"drive:{name}", "bytes": 99}
+
+    def shortcut(self, target_id, name, parent_id):
+        self.shortcuts.append((target_id, parent_id))
+        return "sc1"
+
+
+ma.download_media = lambda item, dest: (open(dest, "wb").write(b"v" * 99), 99)[1]
+
+base_item = {"id": "555", "platform": "instagram",
+             "posted": ma.datetime.now(ma.IL_TZ), "permalink": "https://ig/p/5",
+             "caption": "כיתוב #גליקותמר", "duration_sec": 30}
+
+ws2 = FakeWorksheet([ma.INDEX_HEADER])
+drive_ok = FakeDrive()
+row2 = ma.archive_item(dict(base_item), drive_ok, ws2, FakeGeminiOK)
+check("מסלול תקין: קובץ הועלה", len(drive_ok.uploaded), 1)
+check("ושורה אחת נוספה", len(ws2.appended), 1)
+check("וקיצור דרך נוצר לתיקיית התוכנית", len(drive_ok.shortcuts) >= 1, True)
+
+ws3 = FakeWorksheet([ma.INDEX_HEADER])
+drive_bad = FakeDrive(fail_upload=True)
+check("דרייב שנופל: הפריט מדולג",
+      ma.archive_item(dict(base_item), drive_bad, ws3, FakeGeminiOK), None)
+check("ולא נשארת שורת אינדקס - הארכיון לא משקר", ws3.appended, [])
+
+ws4 = FakeWorksheet([ma.INDEX_HEADER])
+ws4.raise_on_append = True
+drive_ok2 = FakeDrive()
+check("גיליון שנופל: הפריט מדולג",
+      ma.archive_item(dict(base_item), drive_ok2, ws4, FakeGeminiOK), None)
+check("אבל הקובץ כבר בדרייב - הצד שמתאושש", len(drive_ok2.uploaded), 1)
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)
