@@ -25,10 +25,12 @@ import sys
 import json
 import shutil
 import tempfile
+import argparse
 from datetime import datetime, timedelta
 
 import gspread
 import pytz
+from google import genai
 from google.genai import types
 from google.oauth2.service_account import Credentials
 
@@ -36,6 +38,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "social_dashboard"))
 from content_tags import tag_item, strip_bidi  # noqa: E402
 from utils import http_get_json  # noqa: E402
+import drive_store  # noqa: E402
 
 try:
     from dotenv import load_dotenv
@@ -518,3 +521,59 @@ def run_reconcile(sh, days=7):
             print(f"   [{plat}] {r.get('posted_at', '')} "
                   f"{r.get('caption', '')[:70]}")
     return len(pairs)
+
+
+def parse_args(argv=None):
+    p = argparse.ArgumentParser(description="ארכיון וידאו - אינסטגרם וטיקטוק")
+    p.add_argument("--since-days", type=int, default=None,
+                   help="לחזור כמה ימים אחורה במקום 48 שעות")
+    p.add_argument("--reconcile", action="store_true",
+                   help="מעבר ההצלבה הלילי במקום ארכוב")
+    p.add_argument("--dry-run", action="store_true",
+                   help="לגלות ולסנן בלבד - בלי הורדה, העלאה או כתיבה")
+    args = p.parse_args(argv)
+    args.hours = (args.since_days * 24 if args.since_days
+                  else ARCHIVE_LOOKBACK_HOURS)
+    return args
+
+
+def main():
+    args = parse_args()
+    now = datetime.now(IL_TZ)
+    print(f"\n🎬 ארכיון וידאו - {now.strftime('%Y-%m-%d %H:%M')}\n")
+
+    if not ACCESS_TOKEN:
+        print("❌ חסר FACEBOOK_TOKEN")
+        sys.exit(1)
+
+    sh = open_spreadsheet()
+
+    if args.reconcile:
+        run_reconcile(sh)
+        return
+
+    if args.dry_run:
+        _, known = get_index(sh)
+        found = discover_instagram(args.hours)
+        try:
+            found += discover_tiktok(args.hours)
+        except Exception as e:
+            print(f"⚠️ משיכת טיקטוק נכשלה: {_safe_exc_str(e)[:120]}")
+        fresh = filter_new(found, known)
+        print(f"\n🧪 מצב יבש: {len(found)} בחלון, {len(fresh)} חדשים")
+        for i in fresh:
+            print(f"   {i['platform']:10s} {i['id']:20s} "
+                  f"{i['posted'].strftime('%d/%m %H:%M')}  "
+                  f"{strip_bidi(i.get('caption', ''))[:60]}")
+        return
+
+    # דרייב שלא נגיש מפיל את הריצה בכוונה - הוורקפלואו צריך להאדים
+    drive = drive_store.DriveStore.from_env()
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+    archived, failed = run_archive(sh, drive, client, args.hours)
+    if archived == 0 and failed > 0:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -310,5 +310,14 @@ check("אותה פלטפורמה לא מזווגת לעצמה",
 far = [dict(rrows[0]), dict(rrows[1], posted_at="2026-09-06 16:00")]
 check("הפרש של יותר מיומיים לא מזווג", ma.find_pairs(far), [])
 
+print("\nממשק שורת הפקודה\n")
+
+check("--since-days מתורגם לשעות",
+      ma.parse_args(["--since-days", "3"]).hours, 72)
+check("ברירת המחדל היא חלון הארכיון",
+      ma.parse_args([]).hours, ma.ARCHIVE_LOOKBACK_HOURS)
+check("--reconcile מזוהה", ma.parse_args(["--reconcile"]).reconcile, True)
+check("--dry-run מזוהה", ma.parse_args(["--dry-run"]).dry_run, True)
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)
