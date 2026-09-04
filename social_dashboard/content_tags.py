@@ -36,3 +36,66 @@ RESHET_BET_NAME = "רשת ב׳"
 def is_reshet_bet(text):
     """True when a caption carries the Reshet Bet signature."""
     return bool(RESHET_BET_RE.search(str(text or "")))
+
+
+# ---------------------------------------------------------------------------
+# ארכיון הווידאו, ציר 1: מי עומד מאחורי הפריט.
+#
+# הכיתוב שמטא מחזירה נכתב בעורך RTL ונושא סימני bidi בתוך הטקסט. **הסדר שבו
+# מנקים אותם הוא באג**, ולכל סמן כלל משלו - ראו test_content_tags.py למספרים:
+#   @handle - מחלצים מהגולמי (ניקוי מוקדם מייצר 52 ידיות מושחתות מתוך 212)
+#   בייליין - הרגקס חייב לסבול bidi אחרי הסוגר (בלעדיו 19 במקום 34)
+#   האשטאג  - אדיש
+# ---------------------------------------------------------------------------
+
+BIDI_MARKS = ("​‌‍‎‏"
+              "‪‫‬‭‮"
+              "⁦⁧⁨⁩﻿")
+_BIDI_RE = re.compile(f"[{BIDI_MARKS}]")
+
+# הידית נעצרת בסימן bidi - זה בדיוק מה שמונע את הזנב הכפול
+_HANDLE_RE = re.compile(r"@([A-Za-z0-9_.]+)")
+_HASHTAG_RE = re.compile(r"#([\w֐-׿_]+)")
+# בייליין = סוגריים בסוף הכיתוב, אחרי דילוג על bidi ורווחים
+_BYLINE_RE = re.compile(r"\(([^()]{2,60})\)[" + BIDI_MARKS + r"\s]*$")
+# מה שנראה כמו בייליין אבל אינו: קרדיטי צילום והערות הפקה
+_NOT_A_BYLINE = re.compile(r"אילוסטרציה|בתמונה|צילום|דוברות|כל התמונות|"
+                           r"צולם|ארכיון|רויטרס|AP|AFP")
+
+
+def strip_bidi(text):
+    """מסיר סימני bidi. לא להריץ לפני חילוץ ידיות - ראו הערת הבלוק."""
+    return _BIDI_RE.sub("", str(text or ""))
+
+
+def extract_handles(caption):
+    """ידיות @ מהכיתוב **הגולמי**, לפי סדר הופעה, בלי כפילויות."""
+    seen, out = set(), []
+    for h in _HANDLE_RE.findall(str(caption or "")):
+        if h.lower() not in seen:
+            seen.add(h.lower())
+            out.append(h)
+    return out
+
+
+def extract_hashtags(caption):
+    """האשטאגים לפי סדר הופעה, בלי כפילויות."""
+    seen, out = set(), []
+    for h in _HASHTAG_RE.findall(strip_bidi(caption)):
+        if h not in seen:
+            seen.add(h)
+            out.append(h)
+    return out
+
+
+def extract_byline(caption):
+    """שמות מתוך סוגריים בסוף הכיתוב. ריק כשאלה קרדיטי צילום ולא כתבים."""
+    m = _BYLINE_RE.search(str(caption or "").rstrip())
+    if not m:
+        return []
+    inner = strip_bidi(m.group(1)).strip()
+    if _NOT_A_BYLINE.search(inner):
+        return []
+    names = [n.strip() for n in re.split(r",| ו(?=[א-ת])", inner)
+             if n.strip()]
+    return [n for n in names if len(n) >= 3]
