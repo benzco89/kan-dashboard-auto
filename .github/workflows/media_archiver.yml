@@ -42,9 +42,15 @@ jobs:
           GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
           GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
           GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+          SINCE_DAYS: ${{ inputs.since_days }}
+          RECONCILE: ${{ inputs.reconcile }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          ARGS=""
-          if [ -n "${{ inputs.since_days }}" ]; then ARGS="$ARGS --since-days ${{ inputs.since_days }}"; fi
-          if [ -n "${{ inputs.reconcile }}" ]; then ARGS="$ARGS --reconcile"; fi
-          if [ -n "${{ inputs.dry_run }}" ]; then ARGS="$ARGS --dry-run"; fi
-          python media_archiver.py $ARGS
+          # ה-inputs מגיעים דרך env ולא ישירות בתוך run: כי ביטוי GitHub Actions
+          # מוחלף במחרוזת בתוך הסקריפט לפני שהשל מפרש אותו - ערך מה-dispatch
+          # יכול להפוך לפקודת של. env נקבע ע"י הראנר, לא בהחלפת מחרוזות.
+          ARGS=()
+          if [ -n "$SINCE_DAYS" ]; then ARGS+=(--since-days "$SINCE_DAYS"); fi
+          if [ -n "$RECONCILE" ]; then ARGS+=(--reconcile); fi
+          if [ -n "$DRY_RUN" ]; then ARGS+=(--dry-run); fi
+          python media_archiver.py "${ARGS[@]}"
