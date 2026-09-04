@@ -205,6 +205,22 @@ def resolve_media_url(item):
     return url
 
 
+_URL_RE = re.compile(r"https?://\S+")
+
+
+def _safe_exc_str(e):
+    """מחרוזת שגיאה בלי URL בתוכה, מוכנה להדפסה ליומן.
+
+    requests.exceptions.HTTPError (ש-raise_for_status מעלה) שם בהודעת השגיאה
+    את ה-URL המלא שביקשנו - וה-URL הזה הוא בדיוק ה-media_url/play_addr
+    שנפתר רגע קודם ושאסור שייחשף: הוא חתום לחלון זמן קצר, וכל שאר העיצוב פה
+    (media_url שלא נשמר בשום עמודה) נועד להגן עליו. היומן של הריפו הזה
+    **ציבורי** (GitHub Actions logs), אז זו לא רק תוספת סגנון - בלי הניקוי
+    כאן, כל 403 מדליף כתובת חתומה החוצה.
+    """
+    return _URL_RE.sub("<url>", str(e))
+
+
 def http_download(url, dest, headers=None, timeout=120):
     """זרימה לקובץ. מוחזר מספר הבייטים שנכתבו."""
     import requests
@@ -225,7 +241,7 @@ def download_media(item, dest):
     try:
         return http_download(url, dest)
     except Exception as first:
-        print(f"   ↻ הורדה ראשונה נכשלה ({str(first)[:80]}) - מנסה עם UA דפדפן")
+        print(f"   ↻ הורדה ראשונה נכשלה ({_safe_exc_str(first)[:80]}) - מנסה עם UA דפדפן")
         return http_download(url, dest, headers={
             "User-Agent": BROWSER_UA, "Referer": "https://www.tiktok.com/"})
 
@@ -349,7 +365,7 @@ def archive_item(item, drive, ws, client):
         ws.append_row(row, value_input_option="RAW")
         return row
     except Exception as e:
-        print(f"   ❌ {item['platform']}/{item['id']} דולג: {str(e)[:160]}")
+        print(f"   ❌ {item['platform']}/{item['id']} דולג: {_safe_exc_str(e)[:160]}")
         return None
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

@@ -211,5 +211,52 @@ check("גיליון שנופל: הפריט מדולג",
       ma.archive_item(dict(base_item), drive_ok2, ws4, FakeGeminiOK), None)
 check("אבל הקובץ כבר בדרייב - הצד שמתאושש", len(drive_ok2.uploaded), 1)
 
+print("\nניקוי URL משגיאות\n")
+
+import io  # noqa: E402
+import contextlib  # noqa: E402
+import requests  # noqa: E402
+
+# HTTPError אמיתי, בדיוק כמו זה שר-raise_for_status מרים: ה-URL החתום חי
+# בתוך הודעת השגיאה עצמה, לא בפרמטר נפרד.
+SECRET_URL = "https://cdn.example/secret-media?sig=SHOULD_NOT_LEAK12345"
+http_err = requests.exceptions.HTTPError(
+    f"403 Client Error: Forbidden for url: {SECRET_URL}")
+
+
+def _first_call_raises_then_ok(url, dest, headers=None, timeout=120):
+    if headers is None:
+        raise http_err
+    return (open(dest, "wb").write(b"v" * 99), 99)[1]
+
+
+ma.http_download = _first_call_raises_then_ok
+ma.resolve_media_url = lambda item: SECRET_URL
+
+tmpdir5 = tempfile.mkdtemp()
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    n5 = ma.download_media({"id": "9", "platform": "tiktok"},
+                            os.path.join(tmpdir5, "y.mp4"))
+check("ההורדה מתאוששת אחרי ניסיון ראשון שנכשל", n5, 99)
+check("אבל ה-URL החתום לא מודפס בלוג הניסיון החוזר",
+      SECRET_URL in buf.getvalue(), False)
+
+
+def _download_raises(item, dest):
+    raise http_err
+
+
+ma.download_media = _download_raises
+
+ws5 = FakeWorksheet([ma.INDEX_HEADER])
+drive5 = FakeDrive()
+buf2 = io.StringIO()
+with contextlib.redirect_stdout(buf2):
+    result5 = ma.archive_item(dict(base_item), drive5, ws5, FakeGeminiOK)
+check("פריט שההורדה שלו נכשלת מדולג", result5, None)
+check("וה-URL החתום לא מודפס בשורת הדילוג של הפריט",
+      SECRET_URL in buf2.getvalue(), False)
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)
