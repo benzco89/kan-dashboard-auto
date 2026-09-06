@@ -292,8 +292,14 @@ Before it can be trusted, three things must happen and none of them is code:
    folder: confirm the files play, are not watermarked, and that their count
    matches the index. The no-watermark claim rests on `play_addr` rather than
    `download_addr` and has never been checked against our own account.
-3. **A systemd timer on the VPS** firing `workflow_dispatch` every two hours,
-   alongside `kan-hot-sniffer.timer`, plus a daily one with `reconcile=1`.
+3. ~~A systemd timer on the VPS~~ — **done 2026-09-06.**
+   `kan-media-archiver.timer` (00,08,10,12,14,16,18,20,22:20 Asia/Jerusalem)
+   and `kan-media-reconcile.timer` (03:40) are installed and enabled; both were
+   fired by hand once and dispatched HTTP 204. Deploy files in
+   `social_dashboard/deploy/kan-media-*`. The mode is carried as the bare word
+   `ARCHIVE_MODE=reconcile`, **not** as JSON, because systemd's `Environment=`
+   parses quotes itself and `{"reconcile":"1"}` can arrive with its quotes
+   eaten — a 422 nobody would read.
 
 **Where it lives — decided 2026-09-06.** Same repo; **its own spreadsheet**
 (`1mktwIgMj8HOh6n066o4rc1Cat8cxVea0DHFpfVuKTaI`, "ארכיון וידאו — אינדקס",

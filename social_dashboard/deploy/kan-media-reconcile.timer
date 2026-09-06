@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly reconcile pass over the last seven days of the archive
+
+[Timer]
+# After the day's last archive run and before the 08:30 daily pipeline.
+OnCalendar=*-*-* 03:40:00 Asia/Jerusalem
+Persistent=true
+AccuracySec=10min
+
+[Install]
+WantedBy=timers.target

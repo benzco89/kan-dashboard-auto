@@ -1,0 +1,9 @@
+[Unit]
+Description=Trigger the Media Archiver GitHub workflow (pull new reels to Drive)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/kan-dispatch.env
+ExecStart=/usr/local/bin/kan-media-archiver

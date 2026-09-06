@@ -1,0 +1,15 @@
+[Unit]
+Description=Archive new Instagram/TikTok video every two hours through the publishing day
+
+[Timer]
+# systemd v252+ honours the timezone suffix; handles IDT/IST automatically.
+# Minute :20 keeps it clear of the 08:30 daily run and of kan-hot-sniffer,
+# which fires at 11,14,17,20,23:00. A run that finds nothing new costs three
+# API calls and exits, so the cadence is set by how fast the desk publishes,
+# not by what a run costs.
+OnCalendar=*-*-* 00,08,10,12,14,16,18,20,22:20:00 Asia/Jerusalem
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

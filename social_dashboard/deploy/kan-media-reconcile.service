@@ -1,0 +1,10 @@
+[Unit]
+Description=Link the two copies of the same item and report the archive's gaps
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/kan-dispatch.env
+Environment=ARCHIVE_MODE=reconcile
+ExecStart=/usr/local/bin/kan-media-archiver
