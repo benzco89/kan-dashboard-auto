@@ -27,6 +27,7 @@ Thumbs.db
 *.key
 credentials.json
 service-account.json
+client_secret*.json
 token.json
 .env
 
