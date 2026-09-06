@@ -61,7 +61,13 @@ TIKTOK_SEC_UID = os.environ.get(
     "TIKTOK_SEC_UID",
     "MS4wLjABAAAA3p5tyX2Z3cacCWU34-nHbK-dpVBO5Y6IGvTj9xufL60rC6ItchtdzkEe-0frXJZX")
 
-SPREADSHEET_ID = "1WB0cFc2RgR1Z-crjhtkSqLKp1mMdFoby8NwV7h3UN6c"
+# חוברת נפרדת משל הארכיון, ולא חוברת האנליטיקס של הדשבורד: הארכיון לא קורא
+# מאף גיליון קולקטור (המצב היחיד שלו הוא INDEX_SHEET), אז אין צימוד נתונים
+# לשמור עליו - ומי שיצטרך לקרוא את האינדקס מבחוץ לא אמור לקבל איתו את כל
+# נתוני הרשתות. הקובץ יושב בתיקיית הארכיון בדרייב ומשותף לחשבון השירות.
+SPREADSHEET_ID = os.environ.get(
+    "ARCHIVE_SPREADSHEET_ID",
+    "1mktwIgMj8HOh6n066o4rc1Cat8cxVea0DHFpfVuKTaI")
 INDEX_SHEET = "ארכיון וידאו"
 ARCHIVER_VERSION = "1.0"
 

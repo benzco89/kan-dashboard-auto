@@ -295,8 +295,12 @@ Before it can be trusted, three things must happen and none of them is code:
 3. **A systemd timer on the VPS** firing `workflow_dispatch` every two hours,
    alongside `kan-hot-sniffer.timer`, plus a daily one with `reconcile=1`.
 
-**Where it lives — decided 2026-09-06, not to be re-opened until the trigger fires.**
-Same repo, same spreadsheet. The archiver reads nothing from any collector
+**Where it lives — decided 2026-09-06.** Same repo; **its own spreadsheet**
+(`1mktwIgMj8HOh6n066o4rc1Cat8cxVea0DHFpfVuKTaI`, "ארכיון וידאו — אינדקס",
+in the Drive archive folder, shared to the service account). The sheet was
+split the same day it was first written, ahead of the trigger below, because
+it costs one constant and a copy of sixteen rows now and grows more expensive
+with every row. The repo is not split. The archiver reads nothing from any collector
 sheet — its only state is `ארכיון וידאו` — so there is no data coupling to
 protect; what it *does* share is four secrets (`FACEBOOK_TOKEN`, which dies
 every ~60 days, `TIKHUB_TOKEN`, `GCP_SERVICE_ACCOUNT`, `GEMINI_API_KEY`), the
@@ -305,9 +309,7 @@ VPS-timer→`workflow_dispatch` mechanism, and three imports (`content_tags`,
 Splitting now would mean renewing the Meta token in two places and
 transplanting sixteen commits of code that has never run once. The cost of
 splitting later is the same three imports, so nothing is being locked in.
-**Trigger to split the sheet:** the moment anyone outside needs read access to
-the index — they must not get the analytics workbook with it. **Trigger to
-split the repo:** the external system defines an interface, at which point
+**Trigger to split the repo:** the external system defines an interface, at which point
 this stops being a Kan-social job and becomes that product's supply line.
 
 Two of the design's own numbers were wrong and are corrected in the plan's
