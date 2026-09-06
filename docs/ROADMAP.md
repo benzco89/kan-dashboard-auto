@@ -362,6 +362,32 @@ the Drive root on first use and finds it by name afterwards;
 `GDRIVE_ROOT_FOLDER_ID` survives only for an id the app itself produced.
 Sharing that folder outward is the human step, not creating it.
 
+**720 is all Meta will give, and the design's "prefer the Instagram copy" is
+backwards.** Measured 2026-09-06 (`ig_quality_probe.py`, `fb_reel_shape_probe.py`).
+Every Instagram file in the archive is 716x1266 or 720x1280; TikTok's copy of
+the same story is 1080x1910. Asked field by field — a combined request fails
+whole on one unknown name, which would read as none of them existing — the IG
+media object admits `media_url`, `thumbnail_url`, `media_type`,
+`media_product_type`, `permalink`, `caption`, `timestamp`, `shortcode`,
+`is_shared_to_feed`, and **rejects every HD candidate**: `video_url`,
+`media_url_hd`, `hd_url`, `source`, `format`, `images`, `video_versions`,
+`original_media_url` all return `(#100) nonexisting field`. There is one
+rendition and it is 720.
+
+The Facebook route is closed too, and this is the part worth not re-testing:
+Meta's `format` list for those same vertical reels runs to **1084x1916**, so a
+1080 master demonstrably exists on their side — but the `source` field for
+those exact two reels (Phantom, Nepal) downloaded at **716x1266**, the same as
+Instagram's. The format list reports the upload's dimensions, not a rendition
+you can fetch. For landscape items source and largest format agree at
+1280x720; for vertical ones they do not.
+
+So the only 1080 available is **TikTok's**, and only for items published there
+— which inverts §9: the reconcile pass marks Instagram as the preferred copy
+"because TikTok re-encodes", and the measurement says otherwise in two of three
+pairs. Preference should be decided by measured resolution, not by platform.
+Still open.
+
 **The lookback window is 24 hours, and it is a safety margin rather than a
 cost.** It was 48 until 2026-09-06. The window buys nothing from the APIs — the
 call is identical (30 items on TikHub, 50 on Graph) and the window only filters
