@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly prune of files older than the retention window
+
+[Timer]
+# After the reconcile at 03:40, so a pair is linked before either half can be
+# dropped, and the gap report still counts the day the files existed.
+OnCalendar=*-*-* 04:10:00 Asia/Jerusalem
+Persistent=true
+AccuracySec=10min
+
+[Install]
+WantedBy=timers.target

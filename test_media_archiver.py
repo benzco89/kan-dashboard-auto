@@ -376,5 +376,97 @@ check("ממוצע יומי במגה", round(rep["per_day_mb"]), 50)
 check("תחזית חודשית בג'יגה", round(rep["projected_gb_month"], 1), 1.5)
 check("אינדקס ריק לא מחלק באפס", ma.storage_report([])["per_day_mb"], 0)
 
+print("\nגריעה אחרי חלון השמירה\n")
+
+
+class FakeDrive:
+    """דרייב מזויף: זוכר מה נמחק, ויכול לזרוק על מזהה מסוים."""
+
+    def __init__(self, raise_on=()):
+        self.deleted = []
+        self.raise_on = set(raise_on)
+        self.shortcuts = {}
+
+    def delete(self, file_id):
+        if file_id in self.raise_on:
+            raise RuntimeError("500 backend error")
+        self.deleted.append(file_id)
+        return True
+
+    def delete_shortcuts(self, target_id):
+        n = self.shortcuts.get(target_id, 0)
+        self.deleted.extend([f"sc:{target_id}"] * n)
+        return n
+
+
+class FakeWS:
+    """גיליון מזויף: מחזיק ערכים ורושם כל update_cell."""
+
+    def __init__(self, values):
+        self.values = values
+        self.updates = []
+
+    def get_all_values(self):
+        return self.values
+
+    def update_cell(self, row, col, value):
+        self.updates.append((row, col, value))
+        while len(self.values[row - 1]) < col:
+            self.values[row - 1].append("")
+        self.values[row - 1][col - 1] = value
+
+
+def _prune_rows(*specs):
+    hdr = list(ma.INDEX_HEADER)
+    out = [hdr]
+    for pid, day, fid, deleted in specs:
+        r = [""] * len(hdr)
+        r[hdr.index("post_id")] = pid
+        r[hdr.index("platform")] = "instagram"
+        r[hdr.index("posted_at")] = day
+        r[hdr.index("drive_file_id")] = fid
+        r[hdr.index("bytes")] = "1000"
+        r[hdr.index("deleted_at")] = deleted
+        out.append(r)
+    return out
+
+
+_old = (ma.datetime.now(ma.IL_TZ) - ma.timedelta(days=30)).strftime("%Y-%m-%d")
+_new = ma.datetime.now(ma.IL_TZ).strftime("%Y-%m-%d")
+
+check("deleted_at הוא העמודה האחרונה - הוספה באמצע מזיזה כל ערך אחריה",
+      ma.INDEX_HEADER[-1], "deleted_at")
+
+_ws = FakeWS(_prune_rows(("old", _old, "fileA", ""), ("new", _new, "fileB", "")))
+_drive = FakeDrive()
+_drive.shortcuts["fileA"] = 2
+_freed = ma.prune_old(_drive, _ws, days=7)
+check("הישן נמחק מהדרייב", "fileA" in _drive.deleted, True)
+check("החדש לא נגע", "fileB" in _drive.deleted, False)
+check("גם קיצורי הדרך שלו נמחקו",
+      sum(1 for d in _drive.deleted if d == "sc:fileA"), 2)
+check("השורה סומנה ולא נמחקה", len(_ws.values), 3)
+_col = ma.INDEX_HEADER.index("deleted_at") + 1
+check("הסימון נכתב לעמודת deleted_at",
+      [u for u in _ws.updates if u[1] == _col][0][0], 2)
+check("הנפח המשוחרר מדווח", _freed, 1000)
+
+# הכיוון הבטוח: מוחקים קודם ומסמנים אחר כך. אילו הסימון היה קודם וההסרה
+# נכשלת, השורה כבר טוענת "נמחק" ואף ריצה לא תחזור אליה - הקובץ דולף לנצח.
+_ws2 = FakeWS(_prune_rows(("old", _old, "fileC", "")))
+ma.prune_old(FakeDrive(raise_on=["fileC"]), _ws2, days=7)
+check("כשל מחיקה לא מסמן את השורה", _ws2.updates, [])
+
+_ws3 = FakeWS(_prune_rows(("old", _old, "fileD", "2026-01-01")))
+_drive3 = FakeDrive()
+ma.prune_old(_drive3, _ws3, days=7)
+check("שורה שכבר סומנה לא נמחקת שוב", _drive3.deleted, [])
+
+_ws4 = FakeWS(_prune_rows(("old", _old, "fileE", "")))
+_drive4 = FakeDrive()
+ma.prune_old(_drive4, _ws4, days=7, dry_run=True)
+check("מצב יבש לא מוחק ולא מסמן", (_drive4.deleted, _ws4.updates), ([], []))
+
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)

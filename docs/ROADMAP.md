@@ -362,6 +362,29 @@ the Drive root on first use and finds it by name afterwards;
 `GDRIVE_ROOT_FOLDER_ID` survives only for an id the app itself produced.
 Sharing that folder outward is the human step, not creating it.
 
+**The archive is a seven-day buffer, not an archive — decided 2026-09-06.**
+`prune_old` drops any file older than `RETENTION_DAYS` (7, overridable through
+`ARCHIVE_RETENTION_DAYS`) and marks its index row's new `deleted_at` column
+rather than removing the row, so the catalogue still knows what was there.
+Ben chose this knowing the cost, which is stated here so nobody rediscovers it
+the hard way: **a pruned item cannot be fetched again.** Discovery does not
+paginate (50 on Graph, 30 on TikHub — four to six days), and the media URL is
+signed and short-lived, so anything the consuming system has not pulled inside
+the window is gone for good. The space argument does not motivate it — the
+measured burn is 3.7GB/month against 4.9TB free, about a century — the Drive
+being personal does. Moving the folder to a Kan-owned account would remove the
+reason; until then this is what was asked for.
+
+**The ordering rule inverts for prune, for the same reason it exists.** Archiving
+writes the index row *last*, because a row pointing at a missing file makes the
+archive lie about itself. Pruning deletes *first* and marks after: were the mark
+written first and the delete then failed, the row would already claim "deleted"
+and no run would revisit it — the file would leak forever. In this order a
+failure leaves an unmarked row that the next run retries, and re-deleting a file
+that is already gone returns 404, which `DriveStore.delete` counts as success.
+Shortcuts are deleted with their target; otherwise the programme and category
+folders fill with dangling pointers.
+
 **Thinking tokens were most of the Gemini bill, and the fallback could not
 turn them off.** Cost was first estimated from the length of the JSON the model
 returns (~73 tokens) — which ignores thinking, billed as output. Measured

@@ -120,6 +120,33 @@ class DriveStore:
         return {"id": res["id"],
                 "bytes": int(res.get("size") or os.path.getsize(local_path))}
 
+    def delete(self, file_id):
+        """מחיקה קשה. 404 נחשב הצלחה - הקובץ כבר איננו, וזה בדיוק המצב הרצוי.
+
+        גריעה חייבת להיות אידמפוטנטית: ריצה שמתה בין המחיקה לסימון באינדקס
+        חוזרת לאותה שורה בפעם הבאה, ואסור שהניסיון השני ייכשל רק משום שהראשון
+        הצליח.
+        """
+        try:
+            self.svc.files().delete(fileId=file_id).execute()
+        except Exception as e:
+            if "404" in str(e) or "notFound" in str(e):
+                return False
+            raise
+        return True
+
+    def delete_shortcuts(self, target_id):
+        """הקיצורים שמצביעים על הקובץ. בלעדיהם נשארים מצביעים שבורים בתיקיות."""
+        q = (f"mimeType = '{SHORTCUT_MIME}' and trashed = false "
+             f"and shortcutDetails.targetId = '{target_id}'")
+        found = self.svc.files().list(
+            q=q, fields="files(id)", pageSize=50).execute().get("files", [])
+        n = 0
+        for f in found:
+            if self.delete(f["id"]):
+                n += 1
+        return n
+
     def shortcut(self, target_id, name, parent_id):
         return self.svc.files().create(
             body={"name": name, "mimeType": SHORTCUT_MIME,

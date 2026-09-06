@@ -1,0 +1,10 @@
+[Unit]
+Description=Drop archive files past the retention window (the Drive is personal)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/kan-dispatch.env
+Environment=ARCHIVE_MODE=prune
+ExecStart=/usr/local/bin/kan-media-archiver

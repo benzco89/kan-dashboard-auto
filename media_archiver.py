@@ -83,7 +83,18 @@ INDEX_HEADER = [
     "person", "program", "program_source",
     "category", "tags", "summary", "credit_flag",
     "same_as", "archived_at", "archiver_version",
+    # תמיד אחרון. השורות נכתבות לפי מיקום, אז עמודה שנוספת באמצע משנה את
+    # המשמעות של כל ערך אחריה בכל 18 השורות שכבר בגיליון - זה בדיוק התקלה
+    # ש-verify_collector.py קיים בשבילה.
+    "deleted_at",
 ]
+
+# הקובץ נגרע מהדרייב אחרי שבוע; **השורה נשארת**. הארכיון הזה הוא באפר ולא
+# ארכיון, וזו החלטה מודעת (2026-09-06): הדרייב פרטי. המחיר, כדי שלא יופתעו
+# ממנו - הגילוי אינו מדפדף (50 בגראף, 30 ב-TikHub, כלומר 4-6 ימים), וה-URL
+# של המדיה חתום ופג, אז קובץ שנגרע **אינו ניתן להשגה חוזרת**. מי שצורך את
+# הארכיון חייב למשוך בתוך החלון.
+RETENTION_DAYS = int(os.environ.get("ARCHIVE_RETENTION_DAYS", "7"))
 
 
 def open_spreadsheet():
@@ -326,6 +337,8 @@ def build_row(item, upload, drive_path, topic):
         topic.get("summary", ""),
         "כן" if CREDIT_RE.search(str(item.get("caption") or "")) else "",
         "", datetime.now(IL_TZ).strftime("%Y-%m-%d %H:%M"), ARCHIVER_VERSION,
+        "",   # deleted_at - נכתב רק ע"י prune_old
+
     ]
 
 
@@ -547,6 +560,55 @@ def find_pairs(rows):
     return pairs
 
 
+def prune_old(drive, ws, days=RETENTION_DAYS, dry_run=False):
+    """מוחק את הקבצים שעברו את חלון השמירה ומסמן את שורותיהם. מחזיר בייטים.
+
+    **סדר הפעולות הפוך לזה של הארכוב, ומאותו נימוק.** בארכוב שורת האינדקס
+    נכתבת אחרונה, כי אינדקס שמצביע על קובץ שאינו קיים משקר על עצמו. כאן
+    המחיקה קודמת לסימון: אילו הסימון היה ראשון וההסרה נכשלת, השורה כבר
+    טוענת "נמחק" ואף ריצה לא תחזור אליה - הקובץ היה דולף לתמיד. בסדר הזה
+    כשל משאיר שורה לא מסומנת, שהריצה הבאה מנסה שוב, ומחיקה חוזרת של קובץ
+    שכבר איננו מוחזרת כ-404 ונחשבת הצלחה.
+    """
+    values = ws.get_all_values()
+    if len(values) < 2:
+        return 0
+    header, body = values[0], values[1:]
+    i_posted = header.index("posted_at")
+    i_file = header.index("drive_file_id")
+    i_bytes = header.index("bytes")
+    i_del = header.index("deleted_at")
+    cutoff = (datetime.now(IL_TZ) - timedelta(days=days)).strftime("%Y-%m-%d")
+    now = datetime.now(IL_TZ).strftime("%Y-%m-%d %H:%M")
+
+    freed, removed, failed = 0, 0, 0
+    for n, raw in enumerate(body, start=2):
+        row = list(raw) + [""] * (len(header) - len(raw))
+        if row[i_del].strip() or not row[i_file].strip():
+            continue
+        if str(row[i_posted])[:10] >= cutoff:
+            continue
+        if dry_run:
+            freed += int(row[i_bytes] or 0)
+            removed += 1
+            continue
+        try:
+            drive.delete(row[i_file])
+            drive.delete_shortcuts(row[i_file])
+        except Exception as e:
+            print(f"   ⚠️ {row[i_file]}: {_safe_exc_str(e)[:80]}")
+            failed += 1
+            continue
+        ws.update_cell(n, i_del + 1, now)
+        freed += int(row[i_bytes] or 0)
+        removed += 1
+
+    label = "יימחקו" if dry_run else "נמחקו"
+    print(f"🧹 {removed} {label} (מעל {days} ימים), "
+          f"{freed / 1e6:.0f}MB, {failed} נכשלו")
+    return freed
+
+
 def run_reconcile(sh, days=7):
     """מקשר עותקים ומדפיס את דוח הפערים - מה קיים בפלטפורמה אחת ולא בשנייה."""
     ws, _ = get_index(sh)
@@ -601,6 +663,10 @@ def parse_args(argv=None):
                    help="מעבר ההצלבה הלילי במקום ארכוב")
     p.add_argument("--dry-run", action="store_true",
                    help="לגלות ולסנן בלבד - בלי הורדה, העלאה או כתיבה")
+    p.add_argument("--prune", action="store_true",
+                   help=f"למחוק קבצים בני יותר מ-{RETENTION_DAYS} ימים")
+    p.add_argument("--retention-days", type=int, default=RETENTION_DAYS,
+                   help="חלון השמירה בימים")
     args = p.parse_args(argv)
     args.hours = (args.since_days * 24 if args.since_days
                   else ARCHIVE_LOOKBACK_HOURS)
@@ -640,6 +706,12 @@ def main():
 
         if args.reconcile:
             run_reconcile(sh)
+            return
+
+        if args.prune:
+            ws, _ = get_index(sh)
+            drive = drive_store.DriveStore.from_env()
+            prune_old(drive, ws, args.retention_days, args.dry_run)
             return
 
         if not ACCESS_TOKEN:
