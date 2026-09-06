@@ -525,7 +525,13 @@ def archive_item(item, drive, ws, client):
                 print(f"   ⚠️ קיצור ל-{folder} נכשל: {str(e)[:100]}")
 
         row = build_row(item, upload, date_path, topic, probe)
-        ws.append_row(row, value_input_option="RAW")
+        # index=2: מתחת לכותרת, כך שהחדש למעלה. הכתיבה הזו **מזיזה** את כל
+        # השורות שמתחתיה, ולכן היא בטוחה רק כל עוד ריצות אינן חופפות:
+        # run_reconcile ו-prune_old קוראים את הגיליון, גוזרים מספרי שורות
+        # וכותבים לפיהם, והוספה בראש באמצע היא כתיבה לשורה הלא נכונה. מה
+        # שמחזיק את זה הוא concurrency ב-media_archiver.yml, שמסדר ריצות
+        # בתור. אל תסירו אותו בלי להחזיר את הכתיבה לסוף.
+        ws.insert_row(row, index=2, value_input_option="RAW")
         return row
     except Exception as e:
         print(f"   ❌ {item['platform']}/{item['id']} דולג: {_safe_exc_str(e)[:160]}")

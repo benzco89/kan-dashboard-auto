@@ -39,6 +39,7 @@ class FakeWorksheet:
     def __init__(self, rows):
         self.rows = [list(r) for r in rows]
         self.appended = []
+        self.inserted = []
         self.raise_on_append = False
 
     def get_all_values(self):
@@ -48,6 +49,14 @@ class FakeWorksheet:
         if self.raise_on_append:
             raise RuntimeError("sheet is down")
         self.appended.append(list(row))
+        self.rows.append(list(row))
+
+    def insert_row(self, row, index=None, value_input_option=None):
+        if self.raise_on_append:
+            raise RuntimeError("sheet is down")
+        self.inserted.append((index, list(row)))
+        self.appended.append(list(row))
+        self.rows.insert(index - 1, list(row))
 
 
 class FakeSpreadsheet:
@@ -238,6 +247,11 @@ drive_ok = FakeDrive()
 row2 = ma.archive_item(dict(base_item), drive_ok, ws2, FakeGeminiOK)
 check("מסלול תקין: קובץ הועלה", len(drive_ok.uploaded), 1)
 check("ושורה אחת נוספה", len(ws2.appended), 1)
+# החדש למעלה. index=2 ולא 1 - שורה 1 היא הכותרת, ודחיפה אליה הייתה
+# הופכת את הכותרת לשורת נתונים ואת כל הגיליון לבלתי קריא.
+check("השורה נכנסת מתחת לכותרת, לא בסוף", ws2.inserted[0][0], 2)
+check("והכותרת נשארה ראשונה", ws2.rows[0], list(ma.INDEX_HEADER))
+check("השורה החדשה היא השנייה", ws2.rows[1], ws2.appended[0])
 check("וקיצור דרך נוצר לתיקיית התוכנית", len(drive_ok.shortcuts) >= 1, True)
 
 ws3 = FakeWorksheet([ma.INDEX_HEADER])
