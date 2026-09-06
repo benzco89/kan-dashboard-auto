@@ -17,7 +17,7 @@ REPO="benzco89/kan-dashboard-auto"
 WORKFLOW="media_archiver.yml"
 case "${ARCHIVE_MODE:-archive}" in
   reconcile) INPUTS='{"reconcile":"1"}' ;;
-  prune)     INPUTS='{"prune":"1"}' ;;
+  prune)     INPUTS='{"audit":"1","prune":"1"}' ;;
   archive)   INPUTS='{}' ;;
   *) echo "unknown ARCHIVE_MODE: ${ARCHIVE_MODE}" >&2; exit 2 ;;
 esac

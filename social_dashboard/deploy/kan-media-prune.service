@@ -1,5 +1,5 @@
 [Unit]
-Description=Drop archive files past the retention window (the Drive is personal)
+Description=Audit the archive against Drive, then drop files past the retention window
 After=network-online.target
 Wants=network-online.target
 

@@ -519,6 +519,16 @@ Known and deliberately not fixed:
   Consolidating means choosing which set is right, which changes deck output,
   so it is an editorial decision with its own verification rather than a
   tail-end fix.
+- **The 0.5 pairing threshold is calibrated, and the "greedy miss" was not
+  one.** Measured 2026-09-06 over 14 days of real captions: every candidate
+  pair scores either **≥0.89 or ≤0.29** — the band the threshold sits in is
+  empty, so anything from 0.30 to 0.85 gives the same 40 pairs. Dropping to
+  0.25 would add one true pair and four false ones. And the 0.89 pair reported
+  earlier as lost to greedy assignment is a *second Instagram post about the
+  same story* competing for a TikTok item already matched at 1.00 — leaving it
+  unpaired is correct. `find_pairs` was still changed to assign strongest-first
+  with a stable tie-break, because scan-order dependence is a latent defect
+  even where it does not currently bite; both versions produce the same 40.
 - **`run_reconcile` writes one cell at a time** — up to ~76 `update_cell`
   calls against a 60-writes-per-minute quota, with no error handling, making
   it the one path that can fail a *run* rather than an item. Bounded today
@@ -530,7 +540,7 @@ Known and deliberately not fixed:
 
 The work is on branch `video-archive`, 16 commits from `0a007f8`, three suites
 green (`test_content_tags.py` 28, `test_drive_store.py` 12,
-`test_media_archiver.py` 47). Note that commit `e3f0dfd` also carries an
+`test_media_archiver.py` 88). Note that commit `e3f0dfd` also carries an
 unrelated, pre-existing working-tree edit to item 14 of this file that
 `git add docs/ROADMAP.md` swept in.
 

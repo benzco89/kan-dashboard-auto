@@ -1,5 +1,5 @@
 [Unit]
-Description=Nightly prune of files older than the retention window
+Description=Nightly integrity audit, then prune of files past the retention window
 
 [Timer]
 # After the reconcile at 03:40, so a pair is linked before either half can be
