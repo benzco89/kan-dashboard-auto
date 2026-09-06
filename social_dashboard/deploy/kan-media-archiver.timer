@@ -6,8 +6,11 @@ Description=Archive new Instagram/TikTok video every two hours through the publi
 # Minute :20 keeps it clear of the 08:30 daily run and of kan-hot-sniffer,
 # which fires at 11,14,17,20,23:00. A run that finds nothing new costs three
 # API calls and exits, so the cadence is set by how fast the desk publishes,
-# not by what a run costs.
-OnCalendar=*-*-* 00,08,10,12,14,16,18,20,22:20:00 Asia/Jerusalem
+# not by what a run costs - which is why this covers the small hours too even
+# though a month of publishing put exactly one item between 01:00 and 08:00.
+# Twelve runs a day against nine is nine agorot a month, and it removes the
+# one place where a failed run had eight hours before the next attempt.
+OnCalendar=*-*-* 00,02,04,06,08,10,12,14,16,18,20,22:20:00 Asia/Jerusalem
 Persistent=true
 AccuracySec=5min
 
