@@ -10,8 +10,14 @@ Shared Drive (דורש Workspace) או הרשאה חד-פעמית של המשת�
 ה-scope הוא drive.file בלבד - גישה אך ורק לקבצים שהאפליקציה הזו יצרה. הוא
 מספיק ליצירת תיקיות, העלאה וקיצורי דרך, ואינו יכול לגעת בשום דבר אחר בדרייב.
 
+**ולכן תיקיית השורש נוצרת כאן ולא ביד.** תיקייה שנוצרה בממשק של דרייב (או ע"י
+כל אפליקציה אחרת) בלתי נראית ל-drive.file, ומזהה שלה ב-GDRIVE_ROOT_FOLDER_ID
+היה מפיל כל העלאה ב-"File not found". בריצה הראשונה DriveStore יוצר את
+ROOT_FOLDER_NAME בשורש הדרייב של המשתמש שאישר, ומאז מוצא אותה בשם.
+
 Env: GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET, GDRIVE_REFRESH_TOKEN,
-     GDRIVE_ROOT_FOLDER_ID (אופציונלי - ברירת מחדל: שורש הדרייב).
+     GDRIVE_ROOT_FOLDER_ID (אופציונלי, ורק למזהה של תיקייה שהאפליקציה
+     הזו יצרה - ברירת המחדל, ליצור את ROOT_FOLDER_NAME בעצמנו, עדיפה).
 """
 
 import os
@@ -23,6 +29,7 @@ from googleapiclient.http import MediaFileUpload
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 
+ROOT_FOLDER_NAME = "כאן חדשות — ארכיון וידאו"
 FOLDER_MIME = "application/vnd.google-apps.folder"
 SHORTCUT_MIME = "application/vnd.google-apps.shortcut"
 
@@ -59,10 +66,17 @@ class DriveStore:
     מקומי ולא דרך הווב או ה-API, ההחלטה הזו שווה בחינה מחדש.
     """
 
-    def __init__(self, service, root_id=""):
+    def __init__(self, service, root_id="", root_name=ROOT_FOLDER_NAME):
         self.svc = service
         self.root_id = root_id
+        self.root_name = root_name
         self._folders = {}   # path -> id
+
+    def _root(self):
+        """מזהה השורש - נוצר על ידינו בפעם הראשונה (ראו הערת המודול)."""
+        if not self.root_id:
+            self.root_id = self._find_or_create_folder(self.root_name, "")
+        return self.root_id
 
     @classmethod
     def from_env(cls):
@@ -72,7 +86,7 @@ class DriveStore:
 
     def ensure_folder(self, path):
         """יוצר (או מוצא) שרשרת תיקיות. הממופה נשמר, כדי שלא נחפש בכל פריט."""
-        parent = self.root_id
+        parent = self._root()
         walked = []
         for part in [p for p in str(path).split("/") if p]:
             walked.append(part)

@@ -2207,7 +2207,7 @@ Code alone does not make this run. In order:
 
 1. Google Cloud Console → the project that already holds the Sheets service account → enable **Drive API** → Credentials → **OAuth client ID → Desktop app** → download `client_secret.json`.
 2. `pip install google-auth-oauthlib && python gdrive_consent.py client_secret.json`, consenting **as the account that owns the archive folder**. Store the three printed values as GitHub secrets.
-3. Create the root folder `כאן חדשות — ארכיון וידאו` in that Drive and put its id in `GDRIVE_ROOT_FOLDER_ID` (optional; without it everything lands at the Drive root).
+3. ~~Create the root folder by hand~~ — **do not.** `drive.file` cannot see a folder the app did not create; `DriveStore` creates `כאן חדשות — ארכיון וידאו` itself on the first run (2026-09-06). Share that folder with whoever needs to read the archive after it appears.
 4. Upgrade that account's Google One tier — see amendment A3 for the numbers.
 5. `gh workflow run media_archiver.yml -f dry_run=1` — confirm discovery finds today's items and the count looks right, before anything is written.
 6. `gh workflow run media_archiver.yml -f since_days=2` — then **open the Drive folder**: files play, no watermark, count matches the index.

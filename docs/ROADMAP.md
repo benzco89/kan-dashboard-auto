@@ -343,6 +343,17 @@ cover 86% of Instagram and 84% of TikTok. This is why axis 1 writes `person`
 as its own column and derives `program` from it: `PROGRAM_BY_PERSON` is
 deliberately partial, and a reporter missing from it still gets a name.
 
+**A root folder made by hand is invisible to the archive.** The `drive.file`
+scope sees only files *this* app created — a folder made in the Drive UI, or
+by any other app, does not exist as far as the archiver's token is concerned,
+and its id in `GDRIVE_ROOT_FOLDER_ID` would have failed every upload with
+`File not found`. Caught on 2026-09-06 before the first live run, while
+checking whether the Drive MCP connector could create the folder instead (it
+cannot, for the same reason). `DriveStore` now creates `ROOT_FOLDER_NAME` at
+the Drive root on first use and finds it by name afterwards;
+`GDRIVE_ROOT_FOLDER_ID` survives only for an id the app itself produced.
+Sharing that folder outward is the human step, not creating it.
+
 **Signed URLs in the download path do not belong in a log.**
 The `requests` library embeds the failing URL inside its `HTTPError` message,
 so `str(e)` after a failed download published the signed, short-lived

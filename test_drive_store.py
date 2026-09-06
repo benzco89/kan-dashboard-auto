@@ -98,13 +98,26 @@ FOLDER_MIME_T = drive_store.FOLDER_MIME
 svc = FakeService()
 store = drive_store.DriveStore(svc)
 a = store.ensure_folder("2026/09/02")
-check("תיקייה מקוננת נוצרת לעומק", len(svc._files.created), 3)
+# drive.file רואה רק מה שהאפליקציה יצרה: תיקיית שורש שנוצרה ביד בממשק היא
+# בלתי נראית לארכיון, ולכן הוא חייב ליצור אותה בעצמו - פעם אחת, לפני הכל.
+check("תיקיית השורש נוצרת ע\"י האפליקציה, לא מחכה למזהה",
+      svc._files.created[0]["name"], drive_store.ROOT_FOLDER_NAME)
+check("והיא בשורש הדרייב, בלי הורה", "parents" in svc._files.created[0], False)
+check("תיקיית השנה יושבת מתחת לשורש",
+      svc._files.created[1]["parents"], [store.root_id])
+check("שורש + תיקייה מקוננת לעומק", len(svc._files.created), 4)
 b = store.ensure_folder("2026/09/02")
-check("אותה תיקייה שנייה - מהמטמון, בלי יצירה", len(svc._files.created), 3)
+check("אותה תיקייה שנייה - מהמטמון, בלי יצירה", len(svc._files.created), 4)
 check("ומחזירה את אותו מזהה", a, b)
 lists_after_cache = svc._files.list_calls
 store.ensure_folder("2026/09/02")
 check("ואפילו בלי קריאת list", svc._files.list_calls, lists_after_cache)
+
+svc2 = FakeService()
+drive_store.DriveStore(svc2, root_id="given").ensure_folder("לפי קטגוריה/חוץ")
+check("מזהה שורש מפורש - לא נוצר שורש נוסף",
+      [c["name"] for c in svc2._files.created], ["לפי קטגוריה", "חוץ"])
+check("והעץ נבנה מתחתיו", svc2._files.created[0]["parents"], ["given"])
 
 import tempfile  # noqa: E402
 
