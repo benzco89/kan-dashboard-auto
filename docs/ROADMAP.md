@@ -207,6 +207,37 @@ pointed at the historical rows is the open question.
 
 ## Open — מצגת 2024→היום
 
+### 15. The deck's claim, and what was deliberately left out (2026-08-23)
+Two Fable reviews (story/design, numbers/claims) ran against the rendered deck,
+were applied, and a second Fable pass verified the fixes — 10/10, no
+regressions. What that round settled, so it is not re-argued:
+
+- **The deck argues one thing:** *the growth came from reach, not volume.*
+  Jan–Jul 2026 vs 2025, four measured networks: **+6% items, +53% views, +44%
+  views per item.** It is the title of slide 2 and of the summary. Per-item is
+  measured against **2025 in every network** — Jan–Jul 2024 has no valid
+  Facebook views at all (0 of 3,077 posts) and one Instagram month (345 of
+  2,229), so a 2024 base silently compared Sep–Dec 2024 to Jan–Jul 2026 under
+  a footnote promising an equal window.
+- **YouTube is the honest exception, on the Studio basis.** Views ‑14.9% on
+  ‑14.7% items → per item ‑0.3%, i.e. flat. The item-cumulative measure says
+  ‑10.7% and is biased against new content; do not use it for YouTube.
+- **Declined, by Ben:** no benchmark-vs-competitors slide (the daily
+  competitor data is Instagram-only and followers-only — no views), and no
+  "what we need from you" ask slide.
+- **Deferred, not rejected:** merging the four top-5 slides into one
+  cross-platform "peak moments" slide, dropping the four chapter separators
+  (20% of the deck, and they still repeat slide 3's numbers), and an Instagram
+  audience slide to match Facebook's.
+- **Manual and open:** three entries in `analysis/presentation/
+  deck_overrides.json` under `_todo` — two Facebook posts in the top five whose
+  text the backfill never kept (permalinks are there), and one headline the
+  caption itself cut mid-sentence. Nothing there is ever guessed.
+- **Known 1% seam:** per-type watch hours have no dated source, so slide 13's
+  hours column runs to 10.8 while every other figure cuts at 31.7. The
+  deck-level total *is* cut (34.6M, not 34.9M) because `period_totals.csv`
+  covers the ten overrun days even though it cannot build the whole period.
+
 ### 13. The metric history is a wasting asset — export yearly
 Meta's Business Suite export keeps per-post insights only ~23 months, measured
 2026-08-11 on the exports themselves: IG `Views` is empty before Jul-2024 and
@@ -220,12 +251,186 @@ start Jan-2024. And whatever is not exported now is gone in two years — a
 yearly Business Suite export belongs in the routine. Details and the plan:
 `analysis/presentation/PLAN.md`, base built by `build_history.py`.
 
-### 14. Facebook 2025–2026 has counts but no metrics
-The Graph probe counted FB posts for 2025–2026, but per-post reach/engagement
-for those years exists nowhere: the sheets only start 12/2025 and the rich
-Business Suite export was only ever taken for 2024. Closing it is a manual
-export (Insights → Content), the same one already done for Instagram. Until
-then the Facebook deep-dive slide rests on 2024 plus eight months of sheet.
+### 14. Facebook 2025 has views and engagement, but no reach and no post text
+**Narrowed 2026-08-23** — the original wording ("counts but no metrics") is out
+of date. The Graph backfill closed most of it: `analysis/presentation/pulled/
+fb_2025_metrics.csv` holds all **4,799** posts of 2025 with views, reactions,
+comments, shares, watch minutes and permalink — one zero-view row in the whole
+file, and its 840,552,763 views are exactly what the deck reports for FB 2025.
+Verified against the export on 2026 post ids: median ratio 1.00 on views.
+
+What is still missing for 2025, and only that:
+
+- **Reach.** The API's per-post reach decays with post age (median 12,542
+  against 111,098 views — ratio 0.11, where 2026 runs 0.75), so it is
+  deliberately dropped in `_fb_backfill`. Only a manual Business Suite export
+  (Insights → Content) can recover it.
+- **Post text.** The backfill did not keep it, so two of Facebook's five
+  biggest posts of the period have no headline. They are listed with their
+  permalinks in `analysis/presentation/deck_overrides.json` under `_todo`;
+  a human opens the link and writes the line. Nothing is ever guessed there.
+
+The appendix coverage table says `בלי חשיפה` for FB 2025 rather than `מלא`,
+which is what it actually is.
+
+---
+
+## Open — video archive
+
+### 18. The archive is built; the first live run has not been made (2026-09-04)
+`media_archiver.py`, `drive_store.py`, `social_dashboard/content_tags.py`
+(axis 1) and `.github/workflows/media_archiver.yml`, implementing
+`docs/superpowers/specs/2026-09-02-video-archive-design.md` through the plan at
+`docs/superpowers/plans/2026-09-04-video-archive.md`.
+
+Before it can be trusted, three things must happen and none of them is code:
+
+1. **`gdrive_consent.py` must be run once**, by the account that owns the
+   archive folder, and its three values stored as GitHub secrets. Until then
+   every run fails at `DriveStore.from_env()`.
+2. **`python media_archiver.py --since-days 2` once**, then open the Drive
+   folder: confirm the files play, are not watermarked, and that their count
+   matches the index. The no-watermark claim rests on `play_addr` rather than
+   `download_addr` and has never been checked against our own account.
+3. **A systemd timer on the VPS** firing `workflow_dispatch` every two hours,
+   alongside `kan-hot-sniffer.timer`, plus a daily one with `reconcile=1`.
+
+**Where it lives — decided 2026-09-06, not to be re-opened until the trigger fires.**
+Same repo, same spreadsheet. The archiver reads nothing from any collector
+sheet — its only state is `ארכיון וידאו` — so there is no data coupling to
+protect; what it *does* share is four secrets (`FACEBOOK_TOKEN`, which dies
+every ~60 days, `TIKHUB_TOKEN`, `GCP_SERVICE_ACCOUNT`, `GEMINI_API_KEY`), the
+VPS-timer→`workflow_dispatch` mechanism, and three imports (`content_tags`,
+`utils.http_get_json`, `drive_store` — the last has zero repo dependencies).
+Splitting now would mean renewing the Meta token in two places and
+transplanting sixteen commits of code that has never run once. The cost of
+splitting later is the same three imports, so nothing is being locked in.
+**Trigger to split the sheet:** the moment anyone outside needs read access to
+the index — they must not get the analytics workbook with it. **Trigger to
+split the repo:** the external system defines an interface, at which point
+this stops being a Kan-social job and becomes that product's supply line.
+
+Two of the design's own numbers were wrong and are corrected in the plan's
+"Amendments" section:
+
+- **Storage is ~12GB/month, not ~1GB.** 4.6 IG reels/day and 6.7 TikTok
+  videos/day, and TikTok's duration is median 84s but **mean 192s, p90 502s,
+  max 1,989s** — a long tail of whole programme segments. ~147GB/year at
+  ~2 Mbps. A paid Google One tier was chosen over a length cap, because the
+  long items are exactly the programme segments the story rails are for.
+  `storage_report()` prints the measured figure on every reconcile run, so the
+  estimate is replaced by a fact after two weeks.
+- **The Instagram handle corruption needs no "doubled-tail trim" — it needs
+  the right extraction order,** and the order differs per marker. Handles must
+  be read from the **raw** caption (stripping bidi first invents 52 corrupt
+  handles out of 212; reading raw gives 165 and none, over the same 1,982
+  tokens). The byline regex must **tolerate** bidi after the closing bracket
+  (without it, 19 bylines are found on Instagram instead of 34 — 44% lost).
+  Hashtags are indifferent. `test_content_tags.py` locks all three. `person`
+  and `program` are written per row precisely so this extraction never needs
+  to run again on stored data: `build_row` stores `strip_bidi(caption)`, and
+  feeding that stored caption back through `extract_handles` to "re-tag" a
+  row would reproduce the exact 52-handle corruption above.
+
+A third finding from the design work still stands on its own: **a hashtag means
+"programme segment" at ~99% precision but names the programme only 84% of the
+time, and reaches just 9% of items.** Counting programme output by hashtag
+undercounts ~3× — גליקותמר 3.4/week by tag against 5.7 by byline. Measured
+again over the caption files on disk, the marker that actually carries the
+coverage is the **@mention** (81% of full IG captions, 45% of TikTok) with the
+trailing byline behind it (5% IG, 41% TikTok); together with hashtags they
+cover 86% of Instagram and 84% of TikTok. This is why axis 1 writes `person`
+as its own column and derives `program` from it: `PROGRAM_BY_PERSON` is
+deliberately partial, and a reporter missing from it still gets a name.
+
+**Signed URLs in the download path do not belong in a log.**
+The `requests` library embeds the failing URL inside its `HTTPError` message,
+so `str(e)` after a failed download published the signed, short-lived
+`media_url`/`play_addr` straight into the public GitHub Actions log — exactly
+the value the resolve-inside-download design exists to avoid persisting.
+`media_archiver._safe_exc_str` now strips URLs from exception text, and
+`test_media_archiver.py` drives a real `HTTPError` through the logging path
+and asserts the URL never reaches stdout. Two `str(e)` sites are deliberately
+left unscrubbed — a Gemini endpoint and a Drive endpoint, both of which carry
+their credentials in headers, so the worst that appears is a `googleapis.com`
+host. The leak has a second mouth one layer down: `utils/api_helpers.py`'s
+`retry_with_backoff` prints the raw exception on every intermediate attempt,
+and `discover_instagram` passes `access_token` in `params`, so a connection
+failure renders the token into the message. Actions masks registered secrets,
+which covers CI but not the local `--since-days 2` run step 2 above asks for;
+`main()` is wrapped so nothing reaches a console unscrubbed. Do not "simplify"
+`_safe_exc_str` away.
+
+**`${{ }}` inside a workflow's `run:` is a shell injection.** The first version
+of `media_archiver.yml` built its argument list with
+`if [ -n "${{ inputs.since_days }}" ]; then ARGS="$ARGS --since-days ${{ inputs.since_days }}"; fi`.
+GitHub substitutes those expressions into the script **as text, before the
+shell parses it**, so a dispatch value of `1; rm -rf /` runs as a second
+command with the job's secrets in the environment. Escaping the quotes does
+not fix it — the substitution precedes parsing, so a value containing a quote
+still escapes. The fix is to bind inputs to the step's `env:` and read them as
+ordinary quoted shell variables, building the command as a bash array so a
+value containing a space survives as one argument. `hot_sniffer.yml` does not
+have this bug only because it passes its inputs straight through `env:`; any
+new workflow that interpolates into `run:` has it.
+
+**A test you cannot make fail is not a test — and this repo has now shipped
+two.** The whole-branch review found that `test_media_archiver.py`'s
+retry-path scrubbing checks were green and vacuous: an earlier block replaced
+`ma.download_media` with a stub and never restored it, so the retry helper was
+never invoked (0 calls under `settrace`), one check asserted 99 against a stub
+returning 99, and the "signed URL absent from the log" check passed against an
+*empty* captured buffer. Restoring the stub exposed a second layer: the log
+line truncates at `[:80]`, which cut the URL's tail in both the broken and the
+fixed case, so the literal `SECRET_URL in buf` assertion could never fail
+either way. Both were only found by deliberately breaking the code and
+checking the test went red. **In append-only test files, a monkeypatch that is
+not restored silently disarms every later block that touches the same name**;
+the file now restores `download_media` explicitly before the retry block.
+
+**`--since-days` has a ceiling of about four days, and it warns rather than
+lying.** Discovery is unpaginated — `limit: 50` on Graph, `count: 30` on
+TikHub — which at the measured rates above covers roughly six days of
+Instagram and four and a half of TikTok. `--since-days 7` would have returned
+a truncated window and reported it as complete, which is precisely the failure
+this file's collector-verification rule exists to catch. Both discovery
+functions now detect a full page whose oldest item is still newer than the
+cutoff and print a partial-coverage warning. Going genuinely further back
+needs pagination, not a bigger number.
+
+**The Hebrew names in `HANDLE_TO_PERSON` are an attribution, not a
+measurement.** The handle-to-handle pairings were derived from the caption
+CSVs — normalising `[._]` and trailing digits paired 28 people across the two
+platforms automatically, and the rows marked `# ידני` are the ones that
+needed a human because the word order is reversed (`davidovitchsharon` /
+`sharondavidovitch`), the handle is a nickname (`itsik_z` / `itsikzuarets`),
+or a second surname appears (`_dorit_mizrahi` / `doritassarafmizra`). But
+which *person* a handle belongs to was never cross-checked against a Kan staff
+list. Worth one editorial pass before the index feeds anything reader-facing.
+
+Known and deliberately not fixed:
+
+- **`weekly_deck/generate_deck.py` carries its own `strip_bidi`, and the two
+  have already drifted** — the deck's set has `U+061C`, `content_tags`' has
+  `U+FEFF`. The deck file also still writes its bidi marks as literal
+  invisible codepoints, the hazard `f424dc7` removed from the shared module.
+  Consolidating means choosing which set is right, which changes deck output,
+  so it is an editorial decision with its own verification rather than a
+  tail-end fix.
+- **`run_reconcile` writes one cell at a time** — up to ~76 `update_cell`
+  calls against a 60-writes-per-minute quota, with no error handling, making
+  it the one path that can fail a *run* rather than an item. Bounded today
+  (`days` is hardcoded to 7 and true pairs are rare), but a `batch_update`
+  removes the last run-level failure mode.
+- `tag_item` takes a `platform` it does not use; `discover_instagram` requests
+  `media_product_type` and never reads it — the field that would separate a
+  Reel from an ordinary feed video, which the archive currently takes both of.
+
+The work is on branch `video-archive`, 16 commits from `0a007f8`, three suites
+green (`test_content_tags.py` 28, `test_drive_store.py` 12,
+`test_media_archiver.py` 47). Note that commit `e3f0dfd` also carries an
+unrelated, pre-existing working-tree edit to item 14 of this file that
+`git add docs/ROADMAP.md` swept in.
 
 ---
 

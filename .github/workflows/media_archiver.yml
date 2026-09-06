@@ -1,0 +1,59 @@
+name: Media Archiver
+
+on:
+  workflow_dispatch:      # הטריגר: טיימר על ה-VPS (kan-media-archiver.timer), כמו
+                          # הרחרחן. בכוונה בלי schedule: - ה-cron של GitHub מפגר בשעות.
+    inputs:
+      since_days:
+        description: 'לחזור כמה ימים אחורה במקום 48 שעות'
+        required: false
+        default: ''
+      reconcile:
+        description: 'מעבר ההצלבה במקום ארכוב (כל ערך = דלוק)'
+        required: false
+        default: ''
+      dry_run:
+        description: 'גילוי וסינון בלבד, בלי הורדה או כתיבה (כל ערך = דלוק)'
+        required: false
+        default: ''
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    # ללא תקרה, הריצה חשופה לתקוע על סטרימינג עשרות מגהבייט לפריט (בניגוד
+    # לרחרחן, שאין לו הורדות מדיה בכלל) - תקוע כאן משמע ריצה שאף פעם לא מסיימת.
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Media Archiver
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+          GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+          SINCE_DAYS: ${{ inputs.since_days }}
+          RECONCILE: ${{ inputs.reconcile }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          # ה-inputs מגיעים דרך env ולא ישירות בתוך run: כי ביטוי GitHub Actions
+          # מוחלף במחרוזת בתוך הסקריפט לפני שהשל מפרש אותו - ערך מה-dispatch
+          # יכול להפוך לפקודת של. env נקבע ע"י הראנר, לא בהחלפת מחרוזות.
+          ARGS=()
+          if [ -n "$SINCE_DAYS" ]; then ARGS+=(--since-days "$SINCE_DAYS"); fi
+          if [ -n "$RECONCILE" ]; then ARGS+=(--reconcile); fi
+          if [ -n "$DRY_RUN" ]; then ARGS+=(--dry-run); fi
+          python media_archiver.py "${ARGS[@]}"
