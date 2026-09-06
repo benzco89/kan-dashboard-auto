@@ -629,6 +629,23 @@ def find_pairs(rows):
     return pairs
 
 
+def check_drive(drive):
+    """קריאת דרייב אמיתית אחת: פותרת את תיקיית השורש. None אם האישורים מתים.
+
+    קיים כי החלפת סוד אינה הוכחה שהוא עובד, וריצה רגילה נוגעת בדרייב רק כשיש
+    פריט חדש - כלומר יכולה לעבור בירוק בלי לאמת את הטוקן כלל. הכשל שזה נועד
+    לתפוס הוא שקט לפי טבעו: refresh token שפג מפיל את הריצה הראשונה שבה
+    במקרה יש מה לשמור, ולא לפני.
+    """
+    try:
+        root = drive._root()
+        print(f"✅ הדרייב נגיש. תיקיית השורש: {root}")
+        return root
+    except Exception as e:
+        print(f"❌ הדרייב לא נגיש: {_safe_exc_str(e)[:160]}")
+        return None
+
+
 def prune_old(drive, ws, days=RETENTION_DAYS, dry_run=False):
     """מוחק את הקבצים שעברו את חלון השמירה ומסמן את שורותיהם. מחזיר בייטים.
 
@@ -739,6 +756,8 @@ def parse_args(argv=None):
                    help="מעבר ההצלבה הלילי במקום ארכוב")
     p.add_argument("--dry-run", action="store_true",
                    help="לגלות ולסנן בלבד - בלי הורדה, העלאה או כתיבה")
+    p.add_argument("--check", action="store_true",
+                   help="קריאת דרייב אחת לאימות האישורים, ויציאה")
     p.add_argument("--prune", action="store_true",
                    help=f"למחוק קבצים בני יותר מ-{RETENTION_DAYS} ימים")
     p.add_argument("--retention-days", type=int, default=RETENTION_DAYS,
@@ -777,6 +796,10 @@ def main():
         args = parse_args()
         now = datetime.now(IL_TZ)
         print(f"\n🎬 ארכיון וידאו - {now.strftime('%Y-%m-%d %H:%M')}\n")
+
+        if args.check:
+            drive = drive_store.DriveStore.from_env()
+            sys.exit(0 if check_drive(drive) else 1)
 
         sh = open_spreadsheet()
 

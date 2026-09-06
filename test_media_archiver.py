@@ -529,5 +529,29 @@ check("שניהם לא נמדדו - אין העדפה, לא ניחוש",
 check("רק אחד נמדד - הוא המועדף", ma.pick_preferred(_none, _tt), _tt)
 
 
+
+print("\nבדיקת בריאות של אישורי הדרייב\n")
+
+
+class _RootOK:
+    def __init__(self):
+        self.calls = 0
+
+    def _root(self):
+        self.calls += 1
+        return "rootid"
+
+
+class _RootDead:
+    def _root(self):
+        raise RuntimeError("invalid_grant: Token has been expired or revoked.")
+
+
+_ok = _RootOK()
+check("בדיקה מוצלחת מחזירה את מזהה השורש", ma.check_drive(_ok), "rootid")
+check("והיא עושה קריאת דרייב אמיתית אחת", _ok.calls, 1)
+check("טוקן מת מחזיר None ולא מתפוצץ", ma.check_drive(_RootDead()), None)
+
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)

@@ -20,6 +20,10 @@ on:
         description: 'גריעת קבצים שעברו את חלון השמירה (כל ערך = דלוק)'
         required: false
         default: ''
+      check:
+        description: 'אימות אישורי הדרייב בלבד, ויציאה (כל ערך = דלוק)'
+        required: false
+        default: ''
 
 jobs:
   archive:
@@ -59,6 +63,7 @@ jobs:
           RECONCILE: ${{ inputs.reconcile }}
           DRY_RUN: ${{ inputs.dry_run }}
           PRUNE: ${{ inputs.prune }}
+          CHECK: ${{ inputs.check }}
         run: |
           # ה-inputs מגיעים דרך env ולא ישירות בתוך run: כי ביטוי GitHub Actions
           # מוחלף במחרוזת בתוך הסקריפט לפני שהשל מפרש אותו - ערך מה-dispatch
@@ -68,4 +73,5 @@ jobs:
           if [ -n "$RECONCILE" ]; then ARGS+=(--reconcile); fi
           if [ -n "$DRY_RUN" ]; then ARGS+=(--dry-run); fi
           if [ -n "$PRUNE" ]; then ARGS+=(--prune); fi
+          if [ -n "$CHECK" ]; then ARGS+=(--check); fi
           python media_archiver.py "${ARGS[@]}"
