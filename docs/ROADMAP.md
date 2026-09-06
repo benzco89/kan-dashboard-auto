@@ -362,6 +362,17 @@ the Drive root on first use and finds it by name afterwards;
 `GDRIVE_ROOT_FOLDER_ID` survives only for an id the app itself produced.
 Sharing that folder outward is the human step, not creating it.
 
+**The lookback window is 24 hours, and it is a safety margin rather than a
+cost.** It was 48 until 2026-09-06. The window buys nothing from the APIs — the
+call is identical (30 items on TikHub, 50 on Graph) and the window only filters
+what already came back — so its whole job is *how many consecutive runs may
+fail before an item is lost*. When the timer ran nine times a day with an
+eight-hour night gap, 48 hours was the honest choice; now that it fires every
+two hours **round the clock**, 24 hours is twelve attempts per item. Set it
+with `ARCHIVE_LOOKBACK_HOURS`. Do not push it past roughly four days without
+pagination — the page does not paginate, and both `discover_*` functions warn
+when a full page is still newer than the cutoff.
+
 **The archive is a seven-day buffer, not an archive — decided 2026-09-06.**
 `prune_old` drops any file older than `RETENTION_DAYS` (7, overridable through
 `ARCHIVE_RETENTION_DAYS`) and marks its index row's new `deleted_at` column

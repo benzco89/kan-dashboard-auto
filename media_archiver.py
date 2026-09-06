@@ -71,9 +71,13 @@ SPREADSHEET_ID = os.environ.get(
 INDEX_SHEET = "ארכיון וידאו"
 ARCHIVER_VERSION = "1.0"
 
-# רחב בכוונה מ-YOUNG_HOURS=24 של הרחרחן: הרחרחן שואל "האם זה מתפוצץ עכשיו",
-# שאלה עם חיי מדף קצרים; הארכיון רק צריך שריצה שהוחמצה תתאושש בבאה אחריה.
-ARCHIVE_LOOKBACK_HOURS = 48
+# 24 שעות, מול 48 עד 2026-09-06. החלון אינו עולה דבר - הקריאה זהה (30
+# פריטים בטיקטוק, 50 בגראף) והוא רק מסנן את מה שכבר חזר - אז כל תפקידו הוא
+# מרווח הביטחון: כמה ריצות רשאיות להיכשל ברצף בלי שפריט יאבד. משהתחילו
+# הריצות כל שעתיים **סביב השעון** (kan-media-archiver.timer), 24 שעות הן
+# 12 ניסיונות לכל פריט, וזה המרווח שנבחר. אין להעמיק את החלון מעבר ל-4 ימים
+# בערך בלי pagination: הדף אינו מדפדף, ו-discover_* יזעיקו על כיסוי חלקי.
+ARCHIVE_LOOKBACK_HOURS = int(os.environ.get("ARCHIVE_LOOKBACK_HOURS", "24"))
 
 IL_TZ = pytz.timezone("Asia/Jerusalem")
 
@@ -658,7 +662,7 @@ def run_reconcile(sh, days=7):
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="ארכיון וידאו - אינסטגרם וטיקטוק")
     p.add_argument("--since-days", type=int, default=None,
-                   help="לחזור כמה ימים אחורה במקום 48 שעות")
+                   help=f"לחזור כמה ימים אחורה במקום {ARCHIVE_LOOKBACK_HOURS} שעות")
     p.add_argument("--reconcile", action="store_true",
                    help="מעבר ההצלבה הלילי במקום ארכוב")
     p.add_argument("--dry-run", action="store_true",

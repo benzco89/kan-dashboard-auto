@@ -5,7 +5,7 @@ on:
                           # הרחרחן. בכוונה בלי schedule: - ה-cron של GitHub מפגר בשעות.
     inputs:
       since_days:
-        description: 'לחזור כמה ימים אחורה במקום 48 שעות'
+        description: 'לחזור כמה ימים אחורה במקום חלון ברירת המחדל (24 שעות)'
         required: false
         default: ''
       reconcile:
