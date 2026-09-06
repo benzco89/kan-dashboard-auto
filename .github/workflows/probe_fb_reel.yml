@@ -1,0 +1,35 @@
+name: Probe Facebook reel shape (read-only)
+
+# Is a Facebook reel reachable as bytes, and is it actually vertical? The page
+# publishes only /reel/ posts, 49 of them over three minutes in a fortnight,
+# and no column we store carries an aspect ratio. Read-only: does NOT write to
+# Google Sheets and does NOT upload to Drive. Manual button only.
+on:
+  workflow_dispatch:
+    inputs:
+      posts:
+        description: 'How many recent reels to sample'
+        required: false
+        default: '3'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Run reel-shape probe
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+          PROBE_POSTS: ${{ inputs.posts }}
+        run: python fb_reel_shape_probe.py
