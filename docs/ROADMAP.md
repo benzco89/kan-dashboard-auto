@@ -385,8 +385,14 @@ you can fetch. For landscape items source and largest format agree at
 So the only 1080 available is **TikTok's**, and only for items published there
 — which inverts §9: the reconcile pass marks Instagram as the preferred copy
 "because TikTok re-encodes", and the measurement says otherwise in two of three
-pairs. Preference should be decided by measured resolution, not by platform.
-Still open.
+pairs. **Fixed the same day:** `probe_media` runs ffprobe on every download
+(the workflow now installs ffmpeg — it is not on the runner image) and writes
+`width`, `height`, `kbps` to the index, filling `duration_sec` when the
+platform gave none; `pick_preferred` chooses by pixels, then bitrate, with
+**no platform anywhere in the rule** and no mark at all when neither copy was
+measured — a guess would point the consumer at the worse file. `run_reconcile`
+writes `preferred=1` on the winner. Rows archived before 2026-09-06 12:50 were
+back-measured once by hand from the Drive copies.
 
 **The lookback window is 24 hours, and it is a safety margin rather than a
 cost.** It was 48 until 2026-09-06. The window buys nothing from the APIs — the

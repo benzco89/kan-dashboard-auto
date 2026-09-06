@@ -39,6 +39,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # ffprobe is not on the runner image (probe_fb_reel.yml found out the
+      # hard way). Without it every row simply lacks width/height/kbps and
+      # reconcile marks no preferred copy - the archive itself is unaffected.
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
       - name: Run Media Archiver
         env:
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}

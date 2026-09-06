@@ -434,8 +434,6 @@ def _prune_rows(*specs):
 _old = (ma.datetime.now(ma.IL_TZ) - ma.timedelta(days=30)).strftime("%Y-%m-%d")
 _new = ma.datetime.now(ma.IL_TZ).strftime("%Y-%m-%d")
 
-check("deleted_at הוא העמודה האחרונה - הוספה באמצע מזיזה כל ערך אחריה",
-      ma.INDEX_HEADER[-1], "deleted_at")
 
 _ws = FakeWS(_prune_rows(("old", _old, "fileA", ""), ("new", _new, "fileB", "")))
 _drive = FakeDrive()
@@ -466,6 +464,69 @@ _ws4 = FakeWS(_prune_rows(("old", _old, "fileE", "")))
 _drive4 = FakeDrive()
 ma.prune_old(_drive4, _ws4, days=7, dry_run=True)
 check("מצב יבש לא מוחק ולא מסמן", (_drive4.deleted, _ws4.updates), ([], []))
+
+
+print("\nמדידה: רוחב, גובה, ביטרייט - ומי העותק המועדף\n")
+
+# הכותרת נכתבת לפי מיקום. 20 העמודות הראשונות קפואות בסדר הזה; עמודה חדשה
+# נכנסת רק אחריהן. שינוי כאן = כל ערך בגיליון החי מזיז עמודה.
+_FROZEN = [
+    "post_id", "platform", "posted_at", "permalink", "caption",
+    "drive_file_id", "drive_path", "bytes", "duration_sec",
+    "person", "program", "program_source",
+    "category", "tags", "summary", "credit_flag",
+    "same_as", "archived_at", "archiver_version", "deleted_at",
+]
+check("20 העמודות ההיסטוריות לא זזו", ma.INDEX_HEADER[:20], _FROZEN)
+check("עמודות המדידה אחריהן, בסדר הזה",
+      ma.INDEX_HEADER[20:], ["width", "height", "kbps", "preferred"])
+
+_item = {"id": "7", "platform": "tiktok", "posted": ma.datetime.now(ma.IL_TZ),
+         "permalink": "", "caption": "כיתוב", "duration_sec": ""}
+_up = {"id": "f1", "bytes": 10}
+_probe = {"width": 1080, "height": 1910, "kbps": 1057, "duration_sec": 8}
+_row = ma.build_row(_item, _up, "2026/09/06", None, probe=_probe)
+_h = ma.INDEX_HEADER
+check("השורה באורך הכותרת החדשה", len(_row), len(_h))
+check("רוחב וגובה נכנסים לשורה",
+      (_row[_h.index("width")], _row[_h.index("height")]), (1080, 1910))
+check("ביטרייט נכנס", _row[_h.index("kbps")], 1057)
+check("משך מהמדידה כשהפלטפורמה לא נתנה", _row[_h.index("duration_sec")], 8)
+check("preferred ריק בזמן הארכוב - נקבע רק בהצלבה",
+      _row[_h.index("preferred")], "")
+
+_item2 = dict(_item, duration_sec=31)
+_row2 = ma.build_row(_item2, _up, "2026/09/06", None, probe=_probe)
+check("משך מהפלטפורמה גובר על המדידה", _row2[_h.index("duration_sec")], 31)
+
+_row3 = ma.build_row(_item, _up, "2026/09/06", None, probe=None)
+check("בלי ffprobe - עמודות ריקות, שורה מלאה",
+      (len(_row3), _row3[_h.index("width")]), (len(_h), ""))
+
+_real_which = ma.shutil.which
+ma.shutil.which = lambda name: None
+check("ffprobe חסר מחזיר None ולא מפיל", ma.probe_media("/no/such.mp4"), None)
+ma.shutil.which = _real_which
+check("קובץ שאינו וידאו מחזיר None ולא מפיל",
+      ma.probe_media(__file__), None)
+
+# מי העותק המועדף: לפי מדידה, לא לפי פלטפורמה. נמדד 2026-09-06 - אינסטגרם
+# 716x1266 מול טיקטוק 1080x1910 בשניים משלושה זוגות, והפוך בשלישי.
+_ig = {"platform": "instagram", "width": "716", "height": "1266", "kbps": "958"}
+_tt = {"platform": "tiktok", "width": "1080", "height": "1910", "kbps": "1057"}
+check("הרזולוציה הגבוהה מנצחת - גם כשהיא טיקטוק",
+      ma.pick_preferred(_ig, _tt), _tt)
+check("וסימטרי", ma.pick_preferred(_tt, _ig), _tt)
+_ig_hi = {"platform": "instagram", "width": "720", "height": "1280", "kbps": "1599"}
+_tt_lo = {"platform": "tiktok", "width": "576", "height": "1018", "kbps": "682"}
+check("וגם כשהיא אינסטגרם", ma.pick_preferred(_ig_hi, _tt_lo), _ig_hi)
+_a = {"platform": "instagram", "width": "720", "height": "1280", "kbps": "900"}
+_b = {"platform": "tiktok", "width": "720", "height": "1280", "kbps": "1400"}
+check("שוויון בפיקסלים - הביטרייט מכריע", ma.pick_preferred(_a, _b), _b)
+_none = {"platform": "instagram", "width": "", "height": "", "kbps": ""}
+check("שניהם לא נמדדו - אין העדפה, לא ניחוש",
+      ma.pick_preferred(_none, dict(_none, platform="tiktok")), None)
+check("רק אחד נמדד - הוא המועדף", ma.pick_preferred(_none, _tt), _tt)
 
 
 print(f"\n{PASS} passed, {FAIL} failed\n")

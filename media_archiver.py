@@ -24,6 +24,7 @@ import re
 import sys
 import json
 import shutil
+import subprocess
 import tempfile
 import argparse
 from datetime import datetime, timedelta
@@ -91,6 +92,11 @@ INDEX_HEADER = [
     # המשמעות של כל ערך אחריה בכל 18 השורות שכבר בגיליון - זה בדיוק התקלה
     # ש-verify_collector.py קיים בשבילה.
     "deleted_at",
+    # נמדד ב-ffprobe אחרי ההורדה, לפני ההעלאה. נמדד 2026-09-06: אינסטגרם
+    # מגישה 716x1266 ואין לה רנדישן אחר (ig_quality_probe.py), טיקטוק מגישה
+    # 1080x1910 - לרוב, לא תמיד. לכן "מי העותק המועדף" נקבע מהמספרים האלה
+    # ולא מהפלטפורמה. preferred נכתב רק ע"י run_reconcile.
+    "width", "height", "kbps", "preferred",
 ]
 
 # הקובץ נגרע מהדרייב אחרי שבוע; **השורה נשארת**. הארכיון הזה הוא באפר ולא
@@ -321,10 +327,67 @@ def drive_filename(item):
             f"{item['platform']}_{item['id']}.mp4")
 
 
-def build_row(item, upload, drive_path, topic):
+def probe_media(path):
+    """רוחב, גובה, ביטרייט ומשך מהקובץ עצמו. None אם אין ffprobe או שהוא נכשל.
+
+    מדידה ולא ניחוש: שמות השדות של מטא (`format` עם 1084x1916) תיארו את
+    ההעלאה, לא את הקובץ שהגיע - רק הפיקסלים סגרו את זה. כשל כאן הוא פריט
+    בלי מדידה, לא פריט שלא נשמר.
+    """
+    if not shutil.which("ffprobe"):
+        return None
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height",
+             "-show_entries", "format=duration,bit_rate",
+             "-of", "json", path],
+            capture_output=True, text=True, timeout=60)
+        d = json.loads(out.stdout or "{}")
+        st = (d.get("streams") or [{}])[0]
+        fm = d.get("format") or {}
+        w, h = st.get("width"), st.get("height")
+        if not w or not h:
+            return None
+        return {"width": int(w), "height": int(h),
+                "kbps": int(fm.get("bit_rate") or 0) // 1000,
+                "duration_sec": round(float(fm.get("duration") or 0))}
+    except Exception:
+        return None
+
+
+def _pixels(row):
+    try:
+        return int(row.get("width") or 0) * int(row.get("height") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def pick_preferred(a, b):
+    """מי משני העותקים עדיף - לפי פיקסלים, ואז ביטרייט. None כשאין מדידה.
+
+    הכלל הישן אמר "אינסטגרם, כי טיקטוק מקודדת מחדש". המדידה (2026-09-06)
+    אמרה הפוך בשניים משלושה זוגות, ולכן אין כאן שום פלטפורמה - רק מספרים.
+    שניים לא מדודים = אין העדפה; ניחוש היה מסמן לצרכן את הקובץ הגרוע.
+    """
+    pa, pb = _pixels(a), _pixels(b)
+    if pa == pb == 0:
+        return None
+    if pa != pb:
+        return a if pa > pb else b
+    try:
+        ka, kb = int(a.get("kbps") or 0), int(b.get("kbps") or 0)
+    except (TypeError, ValueError):
+        return None
+    return a if ka >= kb else b
+
+
+def build_row(item, upload, drive_path, topic, probe=None):
     """שורת אינדקס אחת. הסיווג הדטרמיניסטי ומה ש-Gemini החזיר, בשורה אחת."""
     tags = tag_item(item.get("caption"), item["platform"])
     topic = topic or {}
+    probe = probe or {}
+    duration = item.get("duration_sec", "") or probe.get("duration_sec", "")
     return [
         str(item["id"]), item["platform"],
         item["posted"].strftime("%Y-%m-%d %H:%M"),
@@ -335,14 +398,15 @@ def build_row(item, upload, drive_path, topic):
         # השמור כאן בחזרה ל-extract_handles כדי "לתייג מחדש" - ניקוי ה-bidi
         # שכבר בוצע פה בדיוק ישחזר את השחתת הידיות ש-A1 קיים כדי למנוע.
         strip_bidi(item.get("caption") or ""),
-        upload["id"], drive_path, upload["bytes"], item.get("duration_sec", ""),
+        upload["id"], drive_path, upload["bytes"], duration,
         tags["person"], tags["program"], tags["program_source"],
         topic.get("category", ""), ", ".join(topic.get("tags") or []),
         topic.get("summary", ""),
         "כן" if CREDIT_RE.search(str(item.get("caption") or "")) else "",
         "", datetime.now(IL_TZ).strftime("%Y-%m-%d %H:%M"), ARCHIVER_VERSION,
         "",   # deleted_at - נכתב רק ע"י prune_old
-
+        probe.get("width", ""), probe.get("height", ""), probe.get("kbps", ""),
+        "",   # preferred - נכתב רק ע"י run_reconcile
     ]
 
 
@@ -429,6 +493,7 @@ def archive_item(item, drive, ws, client):
         name = drive_filename(item)
         local = os.path.join(tmpdir, name)
         download_media(item, local)
+        probe = probe_media(local)
 
         date_path = item["posted"].strftime("%Y/%m/%d")
         upload = drive.upload(local, name, drive.ensure_folder(date_path))
@@ -447,7 +512,7 @@ def archive_item(item, drive, ws, client):
             except Exception as e:   # קיצור שנכשל לא שווה איבוד הפריט
                 print(f"   ⚠️ קיצור ל-{folder} נכשל: {str(e)[:100]}")
 
-        row = build_row(item, upload, date_path, topic)
+        row = build_row(item, upload, date_path, topic, probe)
         ws.append_row(row, value_input_option="RAW")
         return row
     except Exception as e:
@@ -630,21 +695,28 @@ def run_reconcile(sh, days=7):
             row_numbers.append(n)
 
     same_col = header.index("same_as") + 1
+    pref_col = header.index("preferred") + 1
     pairs = find_pairs(rows)
-    updates = 0
+    updates, preferred = 0, 0
     for i, j in pairs:
         for src, dst in ((i, j), (j, i)):
             if not rows[src].get("same_as"):
                 ws.update_cell(row_numbers[src], same_col,
                                rows[dst].get("drive_file_id", ""))
                 updates += 1
+        win = pick_preferred(rows[i], rows[j])
+        if win is not None and not win.get("preferred"):
+            ws.update_cell(row_numbers[i if win is rows[i] else j],
+                           pref_col, "1")
+            preferred += 1
 
     linked = {i for p in pairs for i in p}
     only = {"instagram": [], "tiktok": []}
     for idx, r in enumerate(rows):
         if idx not in linked and r.get("platform") in only:
             only[r["platform"]].append(r)
-    print(f"🔗 {len(pairs)} זוגות קושרו ({updates} תאים עודכנו)")
+    print(f"🔗 {len(pairs)} זוגות קושרו ({updates} תאים עודכנו, "
+          f"{preferred} עותקים מועדפים סומנו לפי מדידה)")
     print(f"📊 דוח פערים ל-{days} הימים האחרונים: "
           f"{len(only['tiktok'])} רק בטיקטוק, "
           f"{len(only['instagram'])} רק באינסטגרם")
