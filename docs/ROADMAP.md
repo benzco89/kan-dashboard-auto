@@ -511,6 +511,24 @@ functions now detect a full page whose oldest item is still newer than the
 cutoff and print a partial-coverage warning. Going genuinely further back
 needs pagination, not a bigger number.
 
+**`PROGRAM_BY_PERSON` is now mined, not typed — `mine_programs.py`.** The
+programme is almost never written in a caption: a byline or an @mention says
+*who*, a hashtag says *which programme*, and the hashtag reaches only 9% of
+items. An item carrying **both** is therefore a labelled example, and 198 such
+items out of 2,564 captions were enough to derive the link that is missing
+from all the rest. The table went from 4 rows to 12 and programme coverage
+from **11.9% to 18.1%**, with nobody typing a row.
+
+Two things the threshold (3 occurrences, 70% dominance) is protecting, and
+they are not cosmetic. **Not every reporter has one programme:** אליאור לוי
+came out 4/4/5 across חדשות הלילה, בשכונה שלנו and שובר חומות, so assigning
+him to any of them would be an invention rather than a measurement — he stays
+out and gets a `person` with an empty programme, which is the readable state
+the design intends. And **a row a human decided is not overwritten by mining:**
+כרמלה מנשה measured "כאן בשש" ×3 and stays "רשת ב׳" by Ben's decision
+(2026-09-06); the script prints the conflict and leaves it. Re-run it as data
+accumulates — it writes nothing, it prints rows to paste after review.
+
 **The Hebrew names in `HANDLE_TO_PERSON` are an attribution, not a
 measurement.** The handle-to-handle pairings were derived from the caption
 CSVs — normalising `[._]` and trailing digits paired 28 people across the two
