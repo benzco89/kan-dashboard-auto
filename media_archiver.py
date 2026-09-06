@@ -97,6 +97,11 @@ INDEX_HEADER = [
     # 1080x1910 - לרוב, לא תמיד. לכן "מי העותק המועדף" נקבע מהמספרים האלה
     # ולא מהפלטפורמה. preferred נכתב רק ע"י run_reconcile.
     "width", "height", "kbps", "preferred",
+    # קישור לצפייה, נגזר מ-drive_file_id. הוא **אינו** מפר את כלל טריות
+    # ה-URL: media_url ו-play_addr חתומים ופגים תוך דקות, בעוד זה נגזר
+    # ממזהה יציב ואינו מעניק גישה - מי שאין לו הרשאה לתיקייה לא ייכנס.
+    # אחרי הגריעה הקישור מת, ו-deleted_at באותה שורה מסביר למה.
+    "drive_url",
 ]
 
 # הקובץ נגרע מהדרייב אחרי שבוע; **השורה נשארת**. הארכיון הזה הוא באפר ולא
@@ -327,6 +332,12 @@ def drive_filename(item):
             f"{item['platform']}_{item['id']}.mp4")
 
 
+def drive_url(file_id):
+    """קישור צפייה מהמזהה. ריק נשאר ריק - לא כתובת שבורה עם זנב חסר."""
+    fid = str(file_id or "").strip()
+    return f"https://drive.google.com/file/d/{fid}/view" if fid else ""
+
+
 def probe_media(path):
     """רוחב, גובה, ביטרייט ומשך מהקובץ עצמו. None אם אין ffprobe או שהוא נכשל.
 
@@ -407,6 +418,7 @@ def build_row(item, upload, drive_path, topic, probe=None):
         "",   # deleted_at - נכתב רק ע"י prune_old
         probe.get("width", ""), probe.get("height", ""), probe.get("kbps", ""),
         "",   # preferred - נכתב רק ע"י run_reconcile
+        drive_url(upload["id"]),
     ]
 
 

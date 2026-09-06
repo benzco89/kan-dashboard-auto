@@ -83,8 +83,13 @@ check("רק החדש עובר את הסינון",
 check("ריצה שנייה על אותו אינדקס לא משאירה כלום",
       ma.filter_new(items[:2], known), [])
 
+# הכלל הוא "אסור לשמור URL של מדיה", לא "אסור ששם עמודה יסתיים ב-_url":
+# media_url ו-play_addr חתומים ופגים תוך דקות, אז ערך שמור שלהם הוא ערך מת.
+# drive_url נגזר ממזהה יציב ואינו אישור גישה - הקובץ מאחוריו עדיין דורש
+# הרשאה לתיקייה. הבדיקה נוקבת בשמות האסורים במקום לסנן לפי סיומת.
 check("כותרת האינדקס אינה מכילה עמודת URL של מדיה",
-      [c for c in ma.INDEX_HEADER if c.endswith("_url")], [])
+      [c for c in ma.INDEX_HEADER
+       if c in ("media_url", "play_addr", "source", "download_addr")], [])
 check("אבל כן מכילה permalink", "permalink" in ma.INDEX_HEADER, True)
 check("ואת שני צירי הסיווג",
       all(c in ma.INDEX_HEADER for c in
@@ -490,7 +495,8 @@ _FROZEN = [
 ]
 check("20 העמודות ההיסטוריות לא זזו", ma.INDEX_HEADER[:20], _FROZEN)
 check("עמודות המדידה אחריהן, בסדר הזה",
-      ma.INDEX_HEADER[20:], ["width", "height", "kbps", "preferred"])
+      ma.INDEX_HEADER[20:], ["width", "height", "kbps", "preferred",
+                             "drive_url"])
 
 _item = {"id": "7", "platform": "tiktok", "posted": ma.datetime.now(ma.IL_TZ),
          "permalink": "", "caption": "כיתוב", "duration_sec": ""}
@@ -505,6 +511,14 @@ check("ביטרייט נכנס", _row[_h.index("kbps")], 1057)
 check("משך מהמדידה כשהפלטפורמה לא נתנה", _row[_h.index("duration_sec")], 8)
 check("preferred ריק בזמן הארכוב - נקבע רק בהצלבה",
       _row[_h.index("preferred")], "")
+# drive_file_id הוא מזהה אטום; הקישור נגזר ממנו ולא נשמר בנפרד, כדי שלא
+# יוכלו להיפרד. הוא מת אחרי הגריעה - וזה בסדר, deleted_at מסביר למה.
+check("הקישור לדרייב נגזר מהמזהה",
+      _row[_h.index("drive_url")],
+      "https://drive.google.com/file/d/f1/view")
+check("ופונקציית הבנייה עצמאית",
+      ma.drive_url("abc"), "https://drive.google.com/file/d/abc/view")
+check("בלי מזהה - אין קישור, לא כתובת שבורה", ma.drive_url(""), "")
 
 _item2 = dict(_item, duration_sec=31)
 _row2 = ma.build_row(_item2, _up, "2026/09/06", None, probe=_probe)
