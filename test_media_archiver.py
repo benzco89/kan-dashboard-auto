@@ -147,6 +147,8 @@ print("\nציר 2 - נושא\n")
 
 class FakeGeminiOK:
     seen = ""
+    seen_config = None
+    seen_models = []
 
     class models:
         @staticmethod
@@ -155,6 +157,8 @@ class FakeGeminiOK:
                 text = ('{"category": "משפט ופלילים", '
                         '"tags": ["חטיפת יהלי"], "summary": "שורה אחת"}')
             FakeGeminiOK.seen = contents
+            FakeGeminiOK.seen_config = config
+            FakeGeminiOK.seen_models.append(model)
             return R()
 
 
@@ -174,6 +178,19 @@ check("התוכנית נכנסת לפרומפט", "גליקותמר" in FakeGemi
 check("הקטגוריות מוצעות בפרומפט", "תרבות ובידור" in FakeGeminiOK.seen, True)
 check("כשל של Gemini מחזיר None ולא מתפוצץ",
       ma.classify_topic(FakeGeminiDown, topic_item, ""), None)
+
+# טוקני חשיבה מחויבים כפלט. נמדד 2026-09-06 על הפרומפט הזה עצמו:
+# gemini-3.5-flash חשב 595 טוקנים כדי להחזיר 73, וה-Pro שהיה בשרשרת הנפילה
+# חשב 855 ו**אינו מאפשר** thinking_budget=0 (400 INVALID_ARGUMENT). לכן אין
+# Pro בשרשרת, ולכן כל קריאה מכבה חשיבה במפורש.
+check("החשיבה מכובה בכל קריאה",
+      FakeGeminiOK.seen_config.thinking_config.thinking_budget, 0)
+check("אין Pro בשרשרת - הוא לא יודע לכבות חשיבה",
+      [m for m in ma.GEMINI_MODELS if "pro" in m], [])
+check("כל המודלים בשרשרת הם flash",
+      all("flash" in m for m in ma.GEMINI_MODELS), True)
+check("נקרא המודל הראשון בשרשרת",
+      FakeGeminiOK.seen_models[0], ma.GEMINI_MODELS[0])
 check("שורה עם topic=None עדיין נבנית מלאה",
       len(ma.build_row(
           item={"id": "1", "platform": "instagram",

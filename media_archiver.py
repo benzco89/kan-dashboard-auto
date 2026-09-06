@@ -347,7 +347,14 @@ TOPIC_SCHEMA = {
     "required": ["category", "tags", "summary"],
 }
 
-GEMINI_MODELS = ["gemini-3.5-flash", "gemini-2.5-pro"]
+# נמדד 2026-09-06 (gemini_model_probe.py, ריצה על הפרומפט הזה עצמו): טוקני
+# חשיבה מחויבים כפלט, ו-gemini-3.5-flash חשב 595 טוקנים כדי להחזיר 73 -
+# החשיבה, לא התשובה, היא רוב החשבון. שני אלה נבחרו כי הם היחידים שגם מוגשים
+# למפתח שלנו וגם מקבלים thinking_budget=0: 3.6-flash דוחה אותו ב-400, וכך גם
+# gemini-2.5-pro שהיה כאן כנפילה אחורה - שחשב 855 טוקנים לאותה שאלה. נפילה
+# שקטה למודל יקר פי ארבעה שאי אפשר להשתיק אינה נפילה בטוחה, ולכן היא הוסרה:
+# הכשל הנכון כאן הוא פריט בלי סיווג, לא חשבון מפתיע.
+GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash"]
 
 
 def classify_topic(client, item, program):
@@ -381,6 +388,10 @@ summary: שורה אחת בעברית שמתארת מה רואים בסרטון.
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     response_schema=TOPIC_SCHEMA,
+                    # ראו GEMINI_MODELS: בלי זה רוב העלות היא חשיבה שאיש
+                    # לא קורא. הסיווג הזה הוא בחירה מרשימה סגורה על כיתוב
+                    # של 150 תווים - אין שם מה להסיק.
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
             return json.loads(res.text)

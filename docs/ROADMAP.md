@@ -356,6 +356,23 @@ the Drive root on first use and finds it by name afterwards;
 `GDRIVE_ROOT_FOLDER_ID` survives only for an id the app itself produced.
 Sharing that folder outward is the human step, not creating it.
 
+**Thinking tokens were most of the Gemini bill, and the fallback could not
+turn them off.** Cost was first estimated from the length of the JSON the model
+returns (~73 tokens) — which ignores thinking, billed as output. Measured
+2026-09-06 by `gemini_model_probe.py` on the archive's own classify prompt:
+`gemini-3.5-flash` spent **595 thinking tokens to return 73**, and the
+`gemini-2.5-pro` fallback spent **855** — and Pro rejects
+`thinking_budget=0` outright (400 INVALID_ARGUMENT), as does `gemini-3.6-flash`.
+A silent fallback to a four-times-dearer model that cannot be quietened is not
+a safe fallback; the right failure here is an item with no topic, not a
+surprising invoice. The chain is now `gemini-3.8-flash` → `gemini-3.7-flash`,
+both served to this key and both accepting `thinking_budget=0`, which every
+call passes. Per 420 items/month: **$0.74 → $0.11**, and the Pro path that
+could have cost $4.08 is gone. Do not re-add a model to `GEMINI_MODELS`
+without running the probe: an id that is not served fails *every* call into
+whatever is next in the chain. `test_media_archiver.py` asserts the budget is
+zero and that no chain entry is a Pro model.
+
 **Signed URLs in the download path do not belong in a log.**
 The `requests` library embeds the failing URL inside its `HTTPError` message,
 so `str(e)` after a failed download published the signed, short-lived
