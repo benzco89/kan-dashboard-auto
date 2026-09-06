@@ -27,6 +27,7 @@ Env: FACEBOOK_TOKEN (required), FACEBOOK_PAGE_ID (optional, defaults to Kan),
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -104,6 +105,8 @@ def download(url, dest):
 
 
 def measure(path):
+    if not shutil.which("ffprobe"):
+        return None
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0",
          "-show_entries", "stream=width,height,codec_name",
@@ -157,6 +160,9 @@ def main():
             print(f"    ❌ download: {scrub(e)[:160]}")
             continue
         m = measure(dest)
+        if not m:
+            print(f"    ✅ {n / 1e6:.1f}MB downloaded, but ffprobe is absent")
+            continue
         ratio = (m["w"] / m["h"]) if m["w"] and m["h"] else 0
         shape = ("vertical" if ratio < 0.95 else
                  "square" if ratio < 1.05 else "LANDSCAPE")

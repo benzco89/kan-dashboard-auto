@@ -10,7 +10,7 @@ on:
       posts:
         description: 'How many recent reels to sample'
         required: false
-        default: '3'
+        default: '6'
 
 jobs:
   probe:
@@ -26,6 +26,11 @@ jobs:
 
       - name: Install requests
         run: pip install requests
+
+      # ffprobe is NOT on the runner image by default - the first run of this
+      # probe died on FileNotFoundError after a successful download.
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
 
       - name: Run reel-shape probe
         env:
