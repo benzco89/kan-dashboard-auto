@@ -405,15 +405,24 @@ class FakeWS:
     def __init__(self, values):
         self.values = values
         self.updates = []
+        self.batches = []
 
     def get_all_values(self):
         return self.values
 
     def update_cell(self, row, col, value):
-        self.updates.append((row, col, value))
-        while len(self.values[row - 1]) < col:
-            self.values[row - 1].append("")
-        self.values[row - 1][col - 1] = value
+        # מלכודת: כתיבת תא בודד היא בדיוק מה שהוחלף. אם היא חוזרת, הבדיקות
+        # שסופרות קריאות כתיבה ייכשלו במקום לעבור בשקט.
+        raise AssertionError("update_cell - היה אמור לעבור דרך batch_update")
+
+    def batch_update(self, data, value_input_option=None):
+        self.batches.append(list(data))
+        for entry in data:
+            row, col = ma.gspread.utils.a1_to_rowcol(entry["range"])
+            while len(self.values[row - 1]) < col:
+                self.values[row - 1].append("")
+            self.values[row - 1][col - 1] = entry["values"][0][0]
+            self.updates.append((row, col, entry["values"][0][0]))
 
 
 def _prune_rows(*specs):
@@ -448,12 +457,14 @@ _col = ma.INDEX_HEADER.index("deleted_at") + 1
 check("הסימון נכתב לעמודת deleted_at",
       [u for u in _ws.updates if u[1] == _col][0][0], 2)
 check("הנפח המשוחרר מדווח", _freed, 1000)
+check("כל הסימונים בקריאת כתיבה אחת", len(_ws.batches), 1)
 
 # הכיוון הבטוח: מוחקים קודם ומסמנים אחר כך. אילו הסימון היה קודם וההסרה
 # נכשלת, השורה כבר טוענת "נמחק" ואף ריצה לא תחזור אליה - הקובץ דולף לנצח.
 _ws2 = FakeWS(_prune_rows(("old", _old, "fileC", "")))
 ma.prune_old(FakeDrive(raise_on=["fileC"]), _ws2, days=7)
 check("כשל מחיקה לא מסמן את השורה", _ws2.updates, [])
+check("ואם אין מה לסמן - לא נשלחת כתיבה כלל", _ws2.batches, [])
 
 _ws3 = FakeWS(_prune_rows(("old", _old, "fileD", "2026-01-01")))
 _drive3 = FakeDrive()
@@ -622,6 +633,58 @@ check("המעבר קורא בלבד - לא נכתב דבר", len(_res["missing"]
 _clean = ma.audit_archive(_AuditDrive(["a"]), FakeWS(_audit_rows(("a", ""))))
 check("ארכיון תקין מחזיר שתי רשימות ריקות",
       (_clean["missing"], _clean["orphans"]), ([], []))
+
+
+
+print("\nהצלבה: כתיבה אחת לריצה\n")
+
+
+def _recon_rows(*specs):
+    hdr = list(ma.INDEX_HEADER)
+    out = [hdr]
+    for pid, plat, day, cap, fid in specs:
+        r = [""] * len(hdr)
+        r[hdr.index("post_id")] = pid
+        r[hdr.index("platform")] = plat
+        r[hdr.index("posted_at")] = day
+        r[hdr.index("caption")] = cap
+        r[hdr.index("drive_file_id")] = fid
+        r[hdr.index("width")] = "1080" if plat == "tiktok" else "716"
+        r[hdr.index("height")] = "1920" if plat == "tiktok" else "1266"
+        out.append(r)
+    return out
+
+
+_today = ma.datetime.now(ma.IL_TZ).strftime("%Y-%m-%d")
+_cap = "אלפא ביתא גמאא דלתא האאא ואוו זיינן חיתת טיתת יודד"
+_rws = FakeWS(_recon_rows(("1", "instagram", _today, _cap, "figA"),
+                          ("2", "tiktok", _today, _cap, "ftkB")))
+
+
+class _ReconSheet:
+    def __init__(self, ws):
+        self.ws = ws
+
+    def worksheet(self, title):
+        return self.ws
+
+
+_n = ma.run_reconcile(_ReconSheet(_rws))
+check("הזוג זוהה", _n, 1)
+check("כל התאים בקריאת כתיבה אחת", len(_rws.batches), 1)
+check("שלושה תאים בה - שני same_as ומועדף אחד",
+      len(_rws.batches[0]), 3)
+_h = ma.INDEX_HEADER
+check("same_as הדדי",
+      (_rws.values[1][_h.index("same_as")], _rws.values[2][_h.index("same_as")]),
+      ("ftkB", "figA"))
+check("המועדף הוא בעל הרזולוציה הגבוהה, לא הפלטפורמה",
+      (_rws.values[1][_h.index("preferred")],
+       _rws.values[2][_h.index("preferred")]), ("", "1"))
+
+_empty = FakeWS([list(ma.INDEX_HEADER)])
+check("אינדקס בלי זוגות לא שולח כתיבה",
+      (ma.run_reconcile(_ReconSheet(_empty)), _empty.batches), (0, []))
 
 
 print(f"\n{PASS} passed, {FAIL} failed\n")

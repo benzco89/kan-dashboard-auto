@@ -636,6 +636,23 @@ def find_pairs(rows):
     return pairs
 
 
+def write_cells(ws, cells):
+    """כל התאים בקריאה אחת. cells: [(שורה, עמודה, ערך)].
+
+    היה כאן update_cell לכל תא - עד ~76 קריאות מול מכסה של 60 לדקה, בלי טיפול
+    בשגיאות, וזה הפך את ההצלבה למסלול היחיד שיכול להפיל **ריצה** ולא פריט.
+    קריאה אחת גם הופכת את הכתיבה לאטומית מבחינתנו: או שכל הסימונים נכתבו או
+    שאף אחד, במקום מצב ביניים שבו חצי מהזוגות מקושרים.
+    """
+    if not cells:
+        return 0
+    ws.batch_update(
+        [{"range": gspread.utils.rowcol_to_a1(r, c), "values": [[v]]}
+         for r, c, v in cells],
+        value_input_option="RAW")
+    return len(cells)
+
+
 def audit_archive(drive, ws):
     """מצליב את האינדקס מול הדרייב. קורא בלבד - לא מוחק ולא מתקן.
 
@@ -710,7 +727,7 @@ def prune_old(drive, ws, days=RETENTION_DAYS, dry_run=False):
     cutoff = (datetime.now(IL_TZ) - timedelta(days=days)).strftime("%Y-%m-%d")
     now = datetime.now(IL_TZ).strftime("%Y-%m-%d %H:%M")
 
-    freed, removed, failed = 0, 0, 0
+    freed, removed, failed, cells = 0, 0, 0, []
     for n, raw in enumerate(body, start=2):
         row = list(raw) + [""] * (len(header) - len(raw))
         if row[i_del].strip() or not row[i_file].strip():
@@ -728,9 +745,14 @@ def prune_old(drive, ws, days=RETENTION_DAYS, dry_run=False):
             print(f"   ⚠️ {row[i_file]}: {_safe_exc_str(e)[:80]}")
             failed += 1
             continue
-        ws.update_cell(n, i_del + 1, now)
+        cells.append((n, i_del + 1, now))
         freed += int(row[i_bytes] or 0)
         removed += 1
+
+    # הסימונים נאספים ונכתבים בבת אחת, וזה בטוח כאן בזכות האידמפוטנטיות:
+    # אם הכתיבה נופלת אחרי שהקבצים כבר נמחקו, השורות נשארות לא מסומנות,
+    # הריצה הבאה מנסה למחוק שוב, מקבלת 404 - שנחשב הצלחה - ומסמנת.
+    write_cells(ws, cells)
 
     label = "יימחקו" if dry_run else "נמחקו"
     print(f"🧹 {removed} {label} (מעל {days} ימים), "
@@ -757,18 +779,19 @@ def run_reconcile(sh, days=7):
     same_col = header.index("same_as") + 1
     pref_col = header.index("preferred") + 1
     pairs = find_pairs(rows)
-    updates, preferred = 0, 0
+    cells, updates, preferred = [], 0, 0
     for i, j in pairs:
         for src, dst in ((i, j), (j, i)):
             if not rows[src].get("same_as"):
-                ws.update_cell(row_numbers[src], same_col,
-                               rows[dst].get("drive_file_id", ""))
+                cells.append((row_numbers[src], same_col,
+                              rows[dst].get("drive_file_id", "")))
                 updates += 1
         win = pick_preferred(rows[i], rows[j])
         if win is not None and not win.get("preferred"):
-            ws.update_cell(row_numbers[i if win is rows[i] else j],
-                           pref_col, "1")
+            cells.append((row_numbers[i if win is rows[i] else j],
+                          pref_col, "1"))
             preferred += 1
+    write_cells(ws, cells)
 
     linked = {i for p in pairs for i in p}
     only = {"instagram": [], "tiktok": []}

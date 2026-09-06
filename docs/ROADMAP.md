@@ -362,6 +362,17 @@ the Drive root on first use and finds it by name afterwards;
 `GDRIVE_ROOT_FOLDER_ID` survives only for an id the app itself produced.
 Sharing that folder outward is the human step, not creating it.
 
+**The last run-level failure mode is gone.** `run_reconcile` wrote one cell
+per call — up to ~76 `update_cell` calls against a 60-per-minute quota, with
+no error handling — which made it the only path that could fail a *run*
+rather than an item. Both it and `prune_old` now collect their cells and send
+one `batch_update` through `write_cells`. Batching is safe in prune despite
+its delete-then-mark ordering, and for the reason the ordering was chosen:
+if the write fails after the files are gone, the rows stay unmarked, the next
+run re-deletes, Drive answers 404, `DriveStore.delete` counts that as success
+and the mark lands. `FakeWS.update_cell` in the tests now raises, so a
+single-cell write cannot creep back in unnoticed.
+
 **720 is all Meta will give, and the design's "prefer the Instagram copy" is
 backwards.** Measured 2026-09-06 (`ig_quality_probe.py`, `fb_reel_shape_probe.py`).
 Every Instagram file in the archive is 716x1266 or 720x1280; TikTok's copy of
@@ -529,11 +540,6 @@ Known and deliberately not fixed:
   unpaired is correct. `find_pairs` was still changed to assign strongest-first
   with a stable tie-break, because scan-order dependence is a latent defect
   even where it does not currently bite; both versions produce the same 40.
-- **`run_reconcile` writes one cell at a time** — up to ~76 `update_cell`
-  calls against a 60-writes-per-minute quota, with no error handling, making
-  it the one path that can fail a *run* rather than an item. Bounded today
-  (`days` is hardcoded to 7 and true pairs are rare), but a `batch_update`
-  removes the last run-level failure mode.
 - `tag_item` takes a `platform` it does not use; `discover_instagram` requests
   `media_product_type` and never reads it — the field that would separate a
   Reel from an ordinary feed video, which the archive currently takes both of.
