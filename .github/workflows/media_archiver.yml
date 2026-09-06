@@ -24,6 +24,10 @@ on:
         description: 'אימות אישורי הדרייב בלבד, ויציאה (כל ערך = דלוק)'
         required: false
         default: ''
+      audit:
+        description: 'הצלבת האינדקס מול הדרייב, קריאה בלבד (כל ערך = דלוק)'
+        required: false
+        default: ''
 
 jobs:
   archive:
@@ -64,6 +68,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           PRUNE: ${{ inputs.prune }}
           CHECK: ${{ inputs.check }}
+          AUDIT: ${{ inputs.audit }}
         run: |
           # ה-inputs מגיעים דרך env ולא ישירות בתוך run: כי ביטוי GitHub Actions
           # מוחלף במחרוזת בתוך הסקריפט לפני שהשל מפרש אותו - ערך מה-dispatch
@@ -74,4 +79,5 @@ jobs:
           if [ -n "$DRY_RUN" ]; then ARGS+=(--dry-run); fi
           if [ -n "$PRUNE" ]; then ARGS+=(--prune); fi
           if [ -n "$CHECK" ]; then ARGS+=(--check); fi
+          if [ -n "$AUDIT" ]; then ARGS+=(--audit); fi
           python media_archiver.py "${ARGS[@]}"

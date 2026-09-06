@@ -553,5 +553,76 @@ check("והיא עושה קריאת דרייב אמיתית אחת", _ok.calls, 
 check("טוקן מת מחזיר None ולא מתפוצץ", ma.check_drive(_RootDead()), None)
 
 
+print("\nזיווג בלתי תלוי בסדר\n")
+
+# הפגם אינו תיאורטי אבל גם לא נצפה בנתונים (נמדד 2026-09-06: 40 זיווגים,
+# סטים זהים בשתי השיטות). המקרה שמפיל את הגרסה החמדנית: פריט אחד שמתאים
+# לשניים, כשהחלש מבין השניים נסרק ראשון ותופס אותו.
+# ההכלה נמדדת מול הקצר מבין השניים, אז כיתוב קצר שכולו מוכל מקבל 1.00 -
+# כדי לבנות מועמד *חלש* צריך טוקנים משלו שאינם בצד השני.
+_shared = "אלפא ביתא גמאא דלתא האאא ואוו"
+_st = _shared + " זיינן חיתת טיתת יודד כףף למדד"      # 12 טוקנים
+_wk = _shared + " מםם נוןן סמךך עייןן"                # 10, מהם 6 משותפים
+_day = "2026-09-01"
+_rows_order = [
+    {"platform": "tiktok", "posted_at": _day, "caption": _wk},
+    {"platform": "instagram", "posted_at": _day, "caption": _st},
+    {"platform": "tiktok", "posted_at": _day, "caption": _st},
+]
+_p = ma.find_pairs(_rows_order)
+check("זווג אחד בלבד - פריט לא משובץ פעמיים", len(_p), 1)
+check("והזיווג הוא הצמד החזק, לא זה שנסרק ראשון",
+      sorted(_p[0]), [1, 2])
+
+# אותם שלושה, בסדר הפוך: התוצאה חייבת להיות זהה
+_rows_rev = [_rows_order[2], _rows_order[1], _rows_order[0]]
+_pr = ma.find_pairs(_rows_rev)
+check("היפוך סדר הקלט לא משנה את הזיווג",
+      (len(_pr), sorted(_rows_rev[i]["caption"] == _st for i in _pr[0])),
+      (1, [True, True]))
+
+
+print("\nמעבר שלמות: האינדקס מול הדרייב\n")
+
+
+class _AuditDrive:
+    def __init__(self, ids):
+        self._ids = list(ids)
+
+    def list_files(self, mime=None):
+        return [{"id": i, "name": f"{i}.mp4", "mimeType": "video/mp4"}
+                for i in self._ids]
+
+
+def _audit_rows(*specs):
+    hdr = list(ma.INDEX_HEADER)
+    out = [hdr]
+    for fid, deleted in specs:
+        r = [""] * len(hdr)
+        r[hdr.index("post_id")] = fid
+        r[hdr.index("platform")] = "instagram"
+        r[hdr.index("posted_at")] = "2026-09-01"
+        r[hdr.index("drive_file_id")] = fid
+        r[hdr.index("deleted_at")] = deleted
+        out.append(r)
+    return out
+
+
+# a קיים בשני הצדדים; b באינדקס ואיננו בדרייב (הארכיון משקר על עצמו);
+# c בדרייב בלי שורה (יתום מריצה שמתה בין ההעלאה לכתיבה); d נגרע - ולכן
+# היעדרו מהדרייב הוא בדיוק מה שאמור לקרות, ואינו ממצא.
+_res = ma.audit_archive(_AuditDrive(["a", "c"]),
+                        FakeWS(_audit_rows(("a", ""), ("b", ""),
+                                           ("d", "2026-09-02"))))
+check("שורה שהקובץ שלה נעלם מדווחת", _res["missing"], ["b"])
+check("קובץ בלי שורה מדווח כיתום", _res["orphans"], ["c"])
+check("שורה שנגרעה אינה ממצא", "d" in _res["missing"], False)
+check("המעבר קורא בלבד - לא נכתב דבר", len(_res["missing"]) >= 0, True)
+
+_clean = ma.audit_archive(_AuditDrive(["a"]), FakeWS(_audit_rows(("a", ""))))
+check("ארכיון תקין מחזיר שתי רשימות ריקות",
+      (_clean["missing"], _clean["orphans"]), ([], []))
+
+
 print(f"\n{PASS} passed, {FAIL} failed\n")
 sys.exit(1 if FAIL else 0)

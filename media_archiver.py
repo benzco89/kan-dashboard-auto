@@ -610,23 +610,66 @@ def find_pairs(rows):
             continue
         prepped.append((i, r.get("platform", ""), d, toks))
 
-    used, pairs = set(), []
-    for ia, pa, da, ta in prepped:
-        if ia in used:
-            continue
-        best, best_score = None, 0.0
-        for ib, pb, db, tb in prepped:
-            if ib in used or ib == ia or pb == pa:
-                continue
-            if abs((da - db).days) > RECONCILE_WINDOW_DAYS:
+    # כל המועמדים תחילה, ואז שיבוץ מהחזק לחלש. הגרסה הקודמת שיבצה לפי סדר
+    # הסריקה, כך שפריט שנסרק מוקדם יכול היה לחטוף בן זוג בציון בינוני
+    # ולהשאיר התאמה חזקה יותר יתומה. על הנתונים של 2026-09-06 שתי השיטות
+    # נתנו 40 זיווגים זהים - זה תיקון של תלות בסדר, לא של פער נצפה.
+    cands = []
+    for a in range(len(prepped)):
+        ia, pa, da, ta = prepped[a]
+        for b in range(a + 1, len(prepped)):
+            ib, pb, db, tb = prepped[b]
+            if pb == pa or abs((da - db).days) > RECONCILE_WINDOW_DAYS:
                 continue
             s = containment(ta, tb)
-            if s >= RECONCILE_CONTAINMENT and s > best_score:
-                best, best_score = ib, s
-        if best is not None:
-            used.update({ia, best})
-            pairs.append((ia, best))
+            if s >= RECONCILE_CONTAINMENT:
+                cands.append((s, ia, ib))
+    # שובר שוויון יציב במזהי השורות, כדי ששני ציונים זהים לא יוכרעו בסדר
+    cands.sort(key=lambda c: (-c[0], c[1], c[2]))
+
+    used, pairs = set(), []
+    for _, ia, ib in cands:
+        if ia in used or ib in used:
+            continue
+        used.update({ia, ib})
+        pairs.append((ia, ib))
     return pairs
+
+
+def audit_archive(drive, ws):
+    """מצליב את האינדקס מול הדרייב. קורא בלבד - לא מוחק ולא מתקן.
+
+    שני ממצאים, ושניהם נובעים מכלל הסדר: השורה נכתבת אחרי הקובץ.
+      * **חסר** - שורה חיה שהקובץ שלה איננו. הארכיון משקר על עצמו, וזה
+        המצב היחיד כאן שאי אפשר לתקן בלי לרדת לפרטים.
+      * **יתום** - קובץ בלי שורה. ריצה שמתה בין ההעלאה לכתיבת השורה, בדיוק
+        המחיר שכלל הסדר בוחר לשלם. הפריט יורד שוב בריצה הבאה, והעותק הישן
+        נשאר תופס מקום.
+    שורה עם deleted_at אינה ממצא: היעדר הקובץ שלה הוא מה שאמור לקרות.
+    """
+    values = ws.get_all_values()
+    header = values[0] if values else list(INDEX_HEADER)
+    i_file = header.index("drive_file_id")
+    i_del = header.index("deleted_at")
+    live = set()
+    for raw in values[1:]:
+        r = list(raw) + [""] * (len(header) - len(raw))
+        if r[i_file].strip() and not r[i_del].strip():
+            live.add(r[i_file].strip())
+
+    on_drive = {f["id"] for f in drive.list_files(mime="video/mp4")}
+    missing = sorted(live - on_drive)
+    orphans = sorted(on_drive - live)
+    print(f"🔎 שלמות: {len(live)} שורות חיות, {len(on_drive)} קבצים בדרייב")
+    if missing:
+        print(f"   ❌ {len(missing)} שורות שהקובץ שלהן נעלם: "
+              f"{', '.join(missing[:10])}")
+    if orphans:
+        print(f"   ⚠️ {len(orphans)} קבצים בלי שורה: "
+              f"{', '.join(orphans[:10])}")
+    if not missing and not orphans:
+        print("   ✅ האינדקס והדרייב מסכימים")
+    return {"missing": missing, "orphans": orphans}
 
 
 def check_drive(drive):
@@ -756,6 +799,8 @@ def parse_args(argv=None):
                    help="מעבר ההצלבה הלילי במקום ארכוב")
     p.add_argument("--dry-run", action="store_true",
                    help="לגלות ולסנן בלבד - בלי הורדה, העלאה או כתיבה")
+    p.add_argument("--audit", action="store_true",
+                   help="הצלבת האינדקס מול הדרייב, קריאה בלבד")
     p.add_argument("--check", action="store_true",
                    help="קריאת דרייב אחת לאימות האישורים, ויציאה")
     p.add_argument("--prune", action="store_true",
@@ -807,10 +852,13 @@ def main():
             run_reconcile(sh)
             return
 
-        if args.prune:
+        if args.audit or args.prune:
             ws, _ = get_index(sh)
             drive = drive_store.DriveStore.from_env()
-            prune_old(drive, ws, args.retention_days, args.dry_run)
+            if args.audit:
+                audit_archive(drive, ws)
+            if args.prune:
+                prune_old(drive, ws, args.retention_days, args.dry_run)
             return
 
         if not ACCESS_TOKEN:

@@ -120,6 +120,25 @@ class DriveStore:
         return {"id": res["id"],
                 "bytes": int(res.get("size") or os.path.getsize(local_path))}
 
+    def list_files(self, mime=None):
+        """כל מה שהאפליקציה הזו יצרה. drive.file ממילא לא רואה דבר מעבר לזה.
+
+        מדפדף: מעבר השלמות סופר קבצים מול שורות, וספירה חלקית שנראית שלמה
+        הייתה מדווחת על יתומים שאינם.
+        """
+        q = "trashed = false"
+        if mime:
+            q += f" and mimeType = '{mime}'"
+        out, token = [], None
+        while True:
+            res = self.svc.files().list(
+                q=q, pageSize=200, pageToken=token,
+                fields="nextPageToken, files(id,name,mimeType,size)").execute()
+            out.extend(res.get("files", []))
+            token = res.get("nextPageToken")
+            if not token:
+                return out
+
     def delete(self, file_id):
         """מחיקה קשה. 404 נחשב הצלחה - הקובץ כבר איננו, וזה בדיוק המצב הרצוי.
 
