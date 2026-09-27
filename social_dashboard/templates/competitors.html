@@ -95,7 +95,7 @@
     var a = data.arena || { posts: [] };
     if (!a.posts.length) return "";
     return '<div class="section-label"><span>🥊 הזירה · ' + KS.fmtDate(a.dates[0]) + '–' + KS.fmtDate(a.dates[1]) + '</span><span></span></div>' +
-      '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">הפוסטים החזקים של כל החשבונות, כולל כאן, משלשום ומאתמול. מיון לפי לייקים+תגובות. לא תלוי בבורר הטווח.</div>' +
+      '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">הפוסטים החזקים של כל החשבונות, כולל כאן, משלשום ומאתמול. מיון לפי לייקים+תגובות, עד 2 פוסטים לכל חשבון. לא תלוי בבורר הטווח.</div>' +
       '<div class="comp-arena">' + a.posts.map(function (p) { return postRow(p, true); }).join("") + '</div></div>';
   }
 
@@ -108,7 +108,8 @@
       ? '<span class="comp-muted" style="font-size:11px;"> (עד ' + KS.fmtDate(g.end_date) + ')</span>'
       : "";
     return '<span style="color:' + color + ';">' + signedHtml(g.change) +
-      (g.pct == null ? "" : '<span class="comp-muted" style="font-size:11px;"> · <bdi dir="ltr">' + (g.pct >= 0 ? "+" : "") + g.pct.toFixed(2) + '%</bdi></span>') +
+      // inline % only where the % column is hidden (phones) — never twice on one row
+      (g.pct == null ? "" : '<span class="comp-muted comp-pct-inline" style="font-size:11px;"> · <bdi dir="ltr">' + (g.pct >= 0 ? "+" : "") + g.pct.toFixed(2) + '%</bdi></span>') +
       lag + '</span>';
   }
 

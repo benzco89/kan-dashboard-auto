@@ -22,6 +22,8 @@ NEW_ACCOUNT_SLACK_DAYS = 1   # יום אחד בולע ריצה שנכשלה; י�
                              # אחרת חשבון בן 4 ימים נמדד מול 7 ימים של האחרים
 
 ARENA_TOP = 12
+# הדירוג מוחלט, אז החשבון הגדול ממלא הכול: ב־27.9 היו 11 מ־12 המקומות של N12
+ARENA_PER_ACCOUNT = 2
 
 GAPS_TOP = 10
 GAP_WINDOW_H = 72         # פוסט מתחרה נבדק 72 שעות מפרסומו
@@ -115,7 +117,7 @@ def post_view(p, cap_col, username, name, is_kan):
 
 
 def arena(comp_posts, kan_posts, names, today):
-    """שלשום ואתמול, מכל הפוסטים בחלון — סינון לפני מיון וחיתוך."""
+    """שלשום ואתמול, מכל הפוסטים בחלון — סינון לפני מיון וחיתוך, עד ARENA_PER_ACCOUNT לחשבון."""
     days = (today - timedelta(days=2), today - timedelta(days=1))
     items = []
     for p in comp_posts:
@@ -126,7 +128,14 @@ def arena(comp_posts, kan_posts, names, today):
         if A._parse_date(p.get("date")) in days:
             items.append(post_view(p, "caption", "kan_news", "כאן חדשות", True))
     items.sort(key=lambda x: -x["eng"])
-    return {"dates": [str(days[0]), str(days[1])], "posts": items[:ARENA_TOP]}
+    picked, per = [], {}
+    for it in items:
+        if per.get(it["username"], 0) < ARENA_PER_ACCOUNT:
+            per[it["username"]] = per.get(it["username"], 0) + 1
+            picked.append(it)
+            if len(picked) == ARENA_TOP:
+                break
+    return {"dates": [str(days[0]), str(days[1])], "posts": picked}
 
 
 def feed_window(posts, days, today):

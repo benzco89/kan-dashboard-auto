@@ -102,6 +102,16 @@ check("a weak fresh post still makes the arena", [p["username"] for p in a["post
 check("Kan is marked", a["posts"][0]["is_kan"], True)
 check("today's posts are outside the window", any(p["date"] == "2026-09-27" for p in a["posts"]), False)
 
+# one big account must not fill the arena: at most ARENA_PER_ACCOUNT posts each
+# (live 27.9: 11 of 12 slots were N12, because the ranking is absolute)
+FLOOD = [post("aaa", "2026-09-26", f"{h:02d}:00", 9000 - h) for h in range(10)] + ARENA_POSTS
+fa = C.arena(FLOOD, KAN_IG, NAMES, TODAY)
+check("one account gets at most ARENA_PER_ACCOUNT slots",
+      sum(p["username"] == "aaa" for p in fa["posts"]), C.ARENA_PER_ACCOUNT)
+check("and the others still get in", {p["username"] for p in fa["posts"]}, {"aaa", "bbb", "kan_news"})
+check("the account's strongest posts are the ones kept", [p["eng"] for p in fa["posts"] if p["username"] == "aaa"],
+      [9000, 8999])
+
 FEED = [post("aaa", str(d), "10:00", 1) for d in days_between(date(2026, 9, 13), TODAY) for _ in (0, 1)]
 fw7 = C.feed_window(FEED, 7, TODAY)
 check("7d feed window: last seven full days", (str(fw7["first"]), str(fw7["last"]), fw7["days"]),
