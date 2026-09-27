@@ -15,7 +15,7 @@
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import aggregate as A
 
@@ -48,6 +48,20 @@ CANDIDATE_COLUMNS = ["run_at", "kind", "cluster_key", "n_outlets", "posted_at", 
                      "lead_username", "lead_eng", "lead_median", "lead_threshold",
                      "total_eng", "outlets", "best_kan_shared", "best_kan_containment",
                      "sources_checked"]
+
+# ---------- שלב 3: היסטוריית הספירות ----------
+# הספים של "עכשיו אצל המתחרים" לקוחים מהמפרט (3.2) ועוד לא כוילו. NOW_CALIBRATED
+# נשאר False עד שמריצים analyze_now_thresholds.py על שבוע של היסטוריה ומוודאים
+# שמה שנדלק צעיר אכן נוחת גבוה בבגרותו - אחרת החלק היה נדלק מעצמו על ניחוש.
+NOW_MAX_AGE_H = 24        # "עכשיו": פוסט בן פחות מיממה בריצה האחרונה
+NOW_AGE_TOL_H = 2         # בסיס: שאר הפוסטים של החשבון, בגיל ±2 שעות
+NOW_MIN_BASE = 8          # פחות נקודות בסיס = אין ציון
+NOW_MIN_RATIO = 2.0
+NOW_TOP = 10
+NOW_HISTORY_DAYS = 7
+NOW_CALIBRATED = False
+ENG24_MIN_H, ENG24_MAX_H = 20, 30
+ENG24_MIN_POSTS = 5
 
 # ---------- השוואה לאורך זמן ----------
 
@@ -120,6 +134,7 @@ def post_view(p, cap_col, username, name, is_kan):
             "type": p.get("type", ""),
             "caption": A._clean_caption(p.get(cap_col, ""))[:200],
             "likes": likes, "comments": comments, "eng": likes + comments,
+            "post_id": str(p.get("post_id") or p.get("media_id") or ""),
             "url": p.get("permalink", "")}
 
 
@@ -369,6 +384,91 @@ def gaps_from_log(rows, after, now):
             "missed": missed[:GAPS_TOP], "exclusive": exclusive[:GAPS_TOP]}
 
 
+# ---------- היסטוריה ----------
+
+def history_by_post(rows):
+    """{post_id: [(pulled_at, age_h, eng, username), ...]}, לפי זמן המשיכה."""
+    out = {}
+    for r in rows:
+        pid, pulled = str(r.get("post_id", "")).strip(), str(r.get("pulled_at", "")).strip()
+        if pid and pulled:
+            out.setdefault(pid, []).append(
+                (pulled, A._num(r.get("age_h")), _eng(r), str(r.get("username", "")).strip()))
+    for obs in out.values():
+        obs.sort()
+    return out
+
+
+def posts_by_account(hist):
+    by = {}
+    for pid, obs in hist.items():
+        by.setdefault(obs[-1][3], []).append((pid, obs))
+    return by
+
+
+def _closest(obs, age, tol):
+    best = min(obs, key=lambda o: abs(o[1] - age), default=None)
+    return best if best is not None and abs(best[1] - age) <= tol else None
+
+
+def baseline_at(by_user, user, pid, age):
+    """הספירות של שאר הפוסטים של החשבון כשהיו בני age שעות (±NOW_AGE_TOL_H),
+    תצפית אחת לפוסט - הקרובה ביותר לגיל."""
+    base = []
+    for other, obs in by_user.get(user, []):
+        if other != pid:
+            c = _closest(obs, age, NOW_AGE_TOL_H)
+            if c:
+                base.append(c[2])
+    return base
+
+
+def now_at_rivals(hist, comp_posts, names, now):
+    """פוסטים של מתחרים, בני פחות מיממה בריצה האחרונה, שרצים מהר מהרגיל של
+    החשבון שלהם באותו גיל. ההשוואה היא לאותו חשבון ולאותו גיל: פוסט בן 3 שעות
+    אינו בר השוואה לפוסט בן יום, ווואלה אינה N12."""
+    if not hist:
+        return {"status": "building", "since": None, "ready_on": None, "items": []}
+    since = min(obs[0][0] for obs in hist.values())[:10]
+    ready_on = str(date.fromisoformat(since) + timedelta(days=NOW_HISTORY_DAYS))
+    base = {"since": since, "ready_on": ready_on, "items": []}
+    if str(now.date()) < ready_on:
+        return dict(base, status="building")
+    if not NOW_CALIBRATED:
+        return dict(base, status="calibrating")
+
+    latest = max(obs[-1][0] for obs in hist.values())
+    by_user = posts_by_account(hist)
+    meta = {str(p.get("post_id", "")): p for p in comp_posts}
+    items = []
+    for pid, obs in hist.items():
+        pulled, age, eng, user = obs[-1]
+        if pulled != latest or age >= NOW_MAX_AGE_H or user == "kan_news":
+            continue
+        b = baseline_at(by_user, user, pid, age)
+        med = A._median(b) if len(b) >= NOW_MIN_BASE else 0
+        if not med or eng / med < NOW_MIN_RATIO:
+            continue
+        p = meta.get(pid, {})
+        items.append({"username": user, "name": names.get(user, user), "post_id": pid,
+                      "caption": A._clean_caption(p.get("caption", ""))[:200],
+                      "url": p.get("permalink", ""), "age_h": age, "eng": eng,
+                      "baseline": med, "ratio": round(eng / med, 1), "n_base": len(b)})
+    items.sort(key=lambda x: -x["ratio"])
+    return dict(base, status="ok", run_at=latest, items=items[:NOW_TOP])
+
+
+def eng_at_24h(posts):
+    """חציון הספירה בגיל ~24 שעות ומספר הפוסטים שנמדדו. תצפית אחת לפוסט,
+    בגיל 20-30 שעות, הקרובה ביותר ל-24."""
+    vals = []
+    for _pid, obs in posts:
+        near = [o for o in obs if ENG24_MIN_H <= o[1] <= ENG24_MAX_H]
+        if near:
+            vals.append(min(near, key=lambda o: abs(o[1] - 24))[2])
+    return (A._median(vals) if vals else 0), len(vals)
+
+
 # ---------- העמוד ----------
 
 def freshness(by_user, comp_posts=()):
@@ -409,6 +509,19 @@ def build(data, days, today=None, now=None):
     win = comparison_window(by_user, days)
     fw = feed_window(comp_posts, days, today)
 
+    hist = history_by_post(data.get("competitor_history", []) or [])
+    hist_users = posts_by_account(hist)
+
+    def eng_fields(user, followers_now, fallback):
+        med, n = eng_at_24h(hist_users.get(user, []))
+        if n >= ENG24_MIN_POSTS and followers_now:
+            return round(med / followers_now * 1000, 2), "24h"
+        return fallback, "estimate"
+
+    def with_trend(v):
+        obs = hist.get(v["post_id"], [])
+        return dict(v, trend=[o[2] for o in obs] if len(obs) > 1 else [])
+
     posts_by_user = {}
     for p in comp_posts:
         posts_by_user.setdefault(str(p.get("username", "")).strip(), []).append(p)
@@ -418,6 +531,8 @@ def build(data, days, today=None, now=None):
         latest = entries[-1][1]
         names[u] = latest.get("name") or u
         own = posts_by_user.get(u, [])
+        eng, basis = eng_fields(u, A._int(latest.get("followers")),
+                                round(A._num(latest.get("eng_per_1k")), 2))
         rows.append({
             "username": u, "name": names[u], "is_kan": False,
             "followers": A._int(latest.get("followers")),
@@ -425,10 +540,11 @@ def build(data, days, today=None, now=None):
             "change_1d": A._int(latest.get("followers_change")),
             "growth": growth(entries, win),
             "posts_per_day": posts_per_day(own, fw),
-            "eng_per_1k": round(A._num(latest.get("eng_per_1k")), 2),
+            "eng_per_1k": eng, "eng_basis": basis,
             "spark": [A._int(r.get("followers")) for d, r in entries if win and d >= win["base"]],
-            "posts": sorted((post_view(p, "caption", u, names[u], False) for p in own),
-                            key=lambda x: -x["eng"])[:POSTS_PER_ACCOUNT],
+            "posts": [with_trend(v) for v in sorted(
+                (post_view(p, "caption", u, names[u], False) for p in own),
+                key=lambda x: -x["eng"])[:POSTS_PER_ACCOUNT]],
         })
 
     # כאן — מהנתונים המלאים שלנו, באותם תאריכים בדיוק
@@ -438,6 +554,8 @@ def build(data, days, today=None, now=None):
                     key=lambda p: (str(p.get("date")), str(p.get("time", ""))), reverse=True)[:10]
     avg = sum(_eng(p) for p in recent) / len(recent) if recent else 0
     keep_from = today - timedelta(days=FEED_KEEP_DAYS)
+    kan_eng, kan_basis = eng_fields("kan_news", kan_followers,
+                                    round(avg / kan_followers * 1000, 2) if kan_followers else 0)
     rows.append({
         "username": "kan_news", "name": "כאן חדשות", "is_kan": True,
         "followers": kan_followers,
@@ -445,11 +563,12 @@ def build(data, days, today=None, now=None):
         "change_1d": A._int(followers[-1].get("ig_followers_change")) if followers else 0,
         "growth": growth(kan, win),
         "posts_per_day": posts_per_day(ig, fw),
-        "eng_per_1k": round(avg / kan_followers * 1000, 2) if kan_followers else 0,
+        "eng_per_1k": kan_eng, "eng_basis": kan_basis,
         "spark": [r["followers"] for d, r in kan if win and d >= win["base"]],
-        "posts": sorted((post_view(p, "caption", "kan_news", "כאן חדשות", True) for p in ig
-                         if (A._parse_date(p.get("date")) or keep_from) > keep_from),
-                        key=lambda x: -x["eng"])[:POSTS_PER_ACCOUNT],
+        "posts": [with_trend(v) for v in sorted(
+            (post_view(p, "caption", "kan_news", "כאן חדשות", True) for p in ig
+             if (A._parse_date(p.get("date")) or keep_from) > keep_from),
+            key=lambda x: -x["eng"])[:POSTS_PER_ACCOUNT]],
     })
 
     rows.sort(key=lambda c: -c["followers"])
@@ -466,6 +585,7 @@ def build(data, days, today=None, now=None):
         "summary": {"kan_rank": kan_rank, "ranked": len(rows),
                     "kan_growth": rows[kan_rank - 1]["growth"]},
         "arena": arena(comp_posts, ig, names, today),
+        "now": now_at_rivals(hist, comp_posts, names, now),
         "gaps": (gaps_from_log(data.get("gap_candidates", []) or [], after, now)
                  or coverage_gaps(data, now, sources)),
         "competitors": rows,

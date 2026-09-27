@@ -256,6 +256,62 @@ check("the page serves the intraday log when there is one", b_log["gaps"]["sourc
 check("and the morning computation otherwise", b7["gaps"]["source"], "morning")
 check("freshness says when the posts were last pulled", b7["freshness"]["posts_pulled_at"], "2026-09-27 23:00")
 
+print("\nhistory: now at rivals, engagement at 24h, trends\n" + "-" * 62)
+
+
+def hrow(pid, user, pulled, age, likes):
+    return {"post_id": pid, "username": user, "pulled_at": pulled, "age_h": str(age),
+            "likes": str(likes), "comments": "0"}
+
+
+# ten older posts of aaa, each seen at 5h (100) and at 24h (400)
+HIST = []
+for i in range(10):
+    t0 = datetime(2026, 9, 19, 10) + timedelta(days=i % 7, hours=i)
+    HIST.append(hrow(f"a{i}", "aaa", (t0 + timedelta(hours=5)).strftime("%Y-%m-%d %H:%M"), 5, 100))
+    HIST.append(hrow(f"a{i}", "aaa", (t0 + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M"), 24, 400))
+LAST = "2026-09-27 11:05"
+HIST += [hrow("hot", "aaa", LAST, 5.5, 350),                   # 3.5x its account at that age
+         hrow("calm", "aaa", LAST, 4.5, 120),                  # 1.2x
+         hrow("old", "aaa", LAST, 30, 5000),                   # past 24h
+         hrow("stale", "aaa", "2026-09-27 08:05", 5, 900),     # not in the latest run
+         hrow("k1", "kan_news", LAST, 5, 5000)]                # Kan is never "at rivals"
+H = C.history_by_post(HIST)
+
+check("observations are grouped per post, in pull order", [o[1] for o in H["a0"]], [5.0, 24.0])
+young = C.history_by_post([r for r in HIST if r["pulled_at"] == LAST])
+b = C.now_at_rivals(young, [], {}, NOW)
+check("a week of history comes first", (b["status"], b["ready_on"]), ("building", "2026-10-04"))
+check("with a week of history but before calibration, nothing is scored",
+      C.now_at_rivals(H, [], {}, NOW)["status"], "calibrating")
+C.NOW_CALIBRATED = True
+try:
+    n = C.now_at_rivals(H, [{"post_id": "hot", "caption": "כותרת", "permalink": "u"}], {"aaa": "AAA"}, NOW)
+finally:
+    C.NOW_CALIBRATED = False
+check("only a young post running well ahead of its own account at that age",
+      [i["post_id"] for i in n["items"]], ["hot"])
+check("measured against the account's other posts at the same age",
+      (n["items"][0]["ratio"], n["items"][0]["baseline"], n["items"][0]["n_base"]), (3.5, 100, 12))
+check("with its caption, link and account name",
+      (n["items"][0]["caption"], n["items"][0]["url"], n["items"][0]["name"]), ("כותרת", "u", "AAA"))
+
+check("engagement at ~24h: one observation per post, within 20-30h",
+      C.eng_at_24h(C.posts_by_account(H)["aaa"]), (400, 11))
+
+DATA3 = dict(DATA, competitor_history=HIST, competitor_posts=DATA["competitor_posts"] + [
+    {"post_id": "a0", "username": "aaa", "date": "2026-09-26", "time": "10:00", "likes": "99999",
+     "comments": "0", "caption": "x", "permalink": "p", "pulled_at": "2026-09-26 23:00"}])
+b3 = C.build(DATA3, 7, today=TODAY, now=NOW)
+aaa = [c for c in b3["competitors"] if c["username"] == "aaa"][0]
+check("engagement/1K comes from posts at ~24h once there are enough",
+      (aaa["eng_basis"], aaa["eng_per_1k"]), ("24h", round(400 / aaa["followers"] * 1000, 2)))
+check("without enough history it stays an estimate",
+      [c["eng_basis"] for c in b3["competitors"] if c["username"] == "bbb"], ["estimate"])
+check("a post with history carries its count trend",
+      [p["trend"] for p in aaa["posts"] if p["post_id"] == "a0"], [[100, 400]])
+check("the page reports the now-section state", b3["now"]["status"], "calibrating")
+
 print("-" * 62)
 print(f"{PASS}/{PASS + FAIL} passed")
 sys.exit(1 if FAIL else 0)
