@@ -12,13 +12,15 @@
 <script src="/static/app.js"></script>
 <script>
 (function () {
-  function stat(v, l) { return '<div class="stat"><div class="v">' + v + '</div><div class="l">' + l + '</div></div>'; }
-
   var TYPE_HE = { IMAGE: "תמונה", VIDEO: "וידאו", CAROUSEL_ALBUM: "קרוסלה", Reel: "ריל", Photo: "תמונה", Carousel: "קרוסלה" };
+  var sortKey = "followers";
+  var last = null;
+
+  function signedHtml(n) { return '<bdi dir="ltr">' + KS.signed(n) + '</bdi>'; }
 
   function postRow(p, withAccount) {
     var head = '<div class="hot-row-head"><span>' +
-      (withAccount ? (p.is_kan ? "🔴 " : "") + KS.esc(p.name || p.username) + ' · ' : "") +
+      (withAccount ? (p.is_kan ? "🔴 " : "") + KS.esc(p.name || p.username) + " · " : "") +
       (TYPE_HE[p.type] || KS.esc(p.type || "")) + '</span>' +
       '<span class="hot-time">' + KS.fmtDate(p.date) + (p.time ? " " + KS.esc(p.time) : "") + '</span></div>';
     var body = '<div class="hot-trig">' + KS.esc(p.caption || "(ללא כיתוב)") +
@@ -28,119 +30,208 @@
       : '<div class="hot-row">' + head + body + '</div>';
   }
 
-  var displayList = [];
-  function openAccountModal(c) {
+  // ---------- ראש העמוד ----------
+  function sourcesLine(data) {
+    var f = data.freshness, g = data.gaps || {};
+    var parts = [];
+    if (f) {
+      parts.push("עודכן " + KS.fmtDate(f.date) + (f.pulled_at ? " " + KS.esc(f.pulled_at.slice(11, 16)) : ""));
+      parts.push(f.updated + "/" + f.known + " חשבונות");
+    }
+    parts.push("בדיקת הסיקור: IG, FB, YouTube, X, TikTok — נכון לאיסוף הבוקר");
+    var warn = "";
+    if (f && f.missing.length) warn += '<div class="comp-warn">לא עודכנו באיסוף האחרון: ' + f.missing.map(KS.esc).join(", ") + '</div>';
+    if (g.stale && g.stale.length) warn += '<div class="comp-warn">לא נטענו עכשיו, מוצגים מהטעינה הקודמת: ' + g.stale.map(KS.esc).join(", ") + '</div>';
+    return '<p>' + parts.join(" · ") + '</p>' + warn;
+  }
+
+  // ---------- פערים ----------
+  function why(g, names) {
+    var l = g.lead, nm = names[l.username] || l.username;
+    if (l.ratio) return "פי " + l.ratio.toFixed(1) + " מפוסט רגיל של " + nm;
+    return KS.fmt(l.eng) + " לייקים+תגובות · הסף " + KS.fmt(l.threshold);
+  }
+
+  function gapRow(g, names) {
+    var chips = g.posts.map(function (o) {
+      var label = KS.esc(names[o.username] || o.username) + " · " + KS.fmt(o.eng);
+      return o.url
+        ? '<a class="km-theme" style="text-decoration:none;" href="' + KS.esc(o.url) + '" target="_blank" rel="noopener">' + label + '</a>'
+        : '<span class="km-theme">' + label + '</span>';
+    }).join("");
+    return '<div class="hot-row"><div class="hot-row-head"><span>' +
+      (g.n_outlets > 1 ? "רץ אצל " + g.n_outlets + " מתחרים" : KS.esc(names[g.lead.username] || g.lead.username)) +
+      '</span><span class="hot-time">' + KS.fmtDate(g.date) + " " + KS.esc(g.time) + '</span></div>' +
+      '<div class="hot-trig">' + KS.esc(g.caption) + '<br><span class="comp-muted">' + KS.esc(why(g, names)) + '</span></div>' +
+      '<div class="km-themes" style="margin-top:6px;">' + chips + '</div></div>';
+  }
+
+  function gapsSection(data, names) {
+    var g = data.gaps || { missed: [], exclusive: [] };
+    var body;
+    if (g.status === "unavailable") {
+      body = '<div class="comp-warn">בדיקת הסיקור לא זמינה — לא נטען: ' + g.failed.map(KS.esc).join(", ") + '</div>';
+    } else if (!g.missed.length) {
+      body = '<div class="comp-empty">לא נמצאו סיפורים של 2 מתחרים ומעלה בלי התאמה אצלנו.</div>';
+    } else {
+      body = g.missed.map(function (x) { return gapRow(x, names); }).join("");
+    }
+    var excl = (g.exclusive || []).length
+      ? '<details class="comp-more"><summary>💡 להיטים בלעדיים של מתחרים (' + g.exclusive.length + ') — תוכן של מתחרה אחד, לא פספוס</summary>' +
+        g.exclusive.map(function (x) { return gapRow(x, names); }).join("") + '</details>'
+      : "";
+    return '<div class="section-label"><span>🕳 סיפורים שאין לנו · 72 השעות האחרונות</span><span></span></div>' +
+      '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">סיפור שרץ חזק אצל 2 מתחרים ומעלה, ולא נמצא אצלנו פוסט עם מילים תואמות. זה חיפוש בטקסט הכיתובים, לא קביעה שהסיפור לא סוקר.</div>' +
+      body + excl + '</div>';
+  }
+
+  // ---------- זירה ----------
+  function arenaSection(data) {
+    var a = data.arena || { posts: [] };
+    if (!a.posts.length) return "";
+    return '<div class="section-label"><span>🥊 הזירה · ' + KS.fmtDate(a.dates[0]) + '–' + KS.fmtDate(a.dates[1]) + '</span><span></span></div>' +
+      '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">הפוסטים החזקים של כל החשבונות, כולל כאן, משלשום ומאתמול. מיון לפי לייקים+תגובות. לא תלוי בבורר הטווח.</div>' +
+      '<div class="comp-arena">' + a.posts.map(function (p) { return postRow(p, true); }).join("") + '</div></div>';
+  }
+
+  // ---------- השוואה ----------
+  function growthCell(g) {
+    if (!g || g.status === "none") return '<span class="comp-muted">—</span>';
+    if (g.status === "new") return '<span class="comp-muted" title="מדידה ראשונה: ' + KS.esc(g.base_date) + '">חדש במעקב</span>';
+    var color = g.change > 0 ? "var(--ok)" : g.change < 0 ? "var(--bad)" : "var(--muted)";
+    return '<span style="color:' + color + ';">' + signedHtml(g.change) +
+      (g.pct == null ? "" : '<span class="comp-muted" style="font-size:11px;"> · <bdi dir="ltr">' + (g.pct >= 0 ? "+" : "") + g.pct.toFixed(2) + '%</bdi></span>') +
+      '</span>';
+  }
+
+  function sortVal(c, k) {
+    var g = c.growth || {};
+    if (k === "change") return g.status === "ok" ? g.change : -Infinity;
+    if (k === "pct") return g.status === "ok" && g.pct != null ? g.pct : -Infinity;
+    if (k === "eng") return c.eng_per_1k;
+    if (k === "ppd") return c.posts_per_day == null ? -Infinity : c.posts_per_day;
+    return c.followers;
+  }
+
+  function sortBtn(k, label, cls) {
+    return '<button class="comp-sort ' + (cls || "") + (sortKey === k ? " active" : "") + '" data-sort="' + k + '">' +
+      label + (sortKey === k ? " ▾" : "") + '</button>';
+  }
+
+  function tableHtml(data) {
+    var comps = data.competitors.slice().sort(function (a, b) {
+      var x = sortVal(b, sortKey), y = sortVal(a, sortKey);
+      return x === y ? b.followers - a.followers : (x > y ? 1 : -1);
+    });
+    var thead = '<div class="thead comp-grid"><span class="center">#</span><span>חשבון</span>' +
+      sortBtn("followers", "עוקבים") + '<span class="center comp-hide-s">מגמה</span>' +
+      sortBtn("change", "שינוי בטווח") + sortBtn("ppd", "פוסטים/יום", "comp-hide-s") +
+      sortBtn("eng", "מעורבות/1K", "comp-hide-s") + '</div>';
+    var rows = comps.map(function (c, i) {
+      var spark = (c.spark && c.spark.length > 1)
+        ? '<span style="display:block;max-width:120px;margin:0 auto;">' + KS.sparkSvg(c.spark, c.is_kan ? "#F7381B" : "#8b8fa3") + '</span>'
+        : '<span class="comp-muted" style="font-size:11px;">—</span>';
+      return '<div class="trow comp-grid' + (c.is_kan ? " comp-kan" : "") + '" data-u="' + KS.esc(c.username) + '" tabindex="0" role="button">' +
+        '<span class="cell" style="color:var(--faint);">' + (i + 1) + '</span>' +
+        '<span style="min-width:0;"><span class="t-title">' + (c.is_kan ? "🔴 " : "") + KS.esc(c.name) + '</span>' +
+        '<span class="t-date">@' + KS.esc(c.username) + (c.change_1d ? ' · היום: ' + signedHtml(c.change_1d) : "") + '</span></span>' +
+        '<span class="cell strong">' + KS.fmt(c.followers) + '</span>' +
+        '<span class="center comp-hide-s">' + spark + '</span>' +
+        '<span class="cell">' + growthCell(c.growth) + '</span>' +
+        '<span class="cell comp-hide-s">' + (c.posts_per_day == null ? "—" : c.posts_per_day.toFixed(1)) + '</span>' +
+        '<span class="cell comp-hide-s">' + c.eng_per_1k.toFixed(1) + '</span></div>';
+    }).join("");
+    return thead + rows;
+  }
+
+  function windowNote(data) {
+    var w = data.window;
+    if (!w) return "";
+    var s = "שינוי עוקבים " + KS.fmtDate(w.base) + " → " + KS.fmtDate(w.end) + ", זהה לכל החשבונות";
+    if (w.partial) s += ' · <b>טווח חלקי: ' + w.covered_days + ' ימים</b> (המעקב התחיל ' + KS.fmtDate(w.history_start) + ')';
+    return s;
+  }
+
+  function rangePicker() {
+    return '<div class="ranges">' + [7, 14, 30, 90].map(function (r) {
+      return '<button class="range' + (r === KanSocial.range ? " active" : "") + '" data-r="' + r + '">' + r + '</button>';
+    }).join("") + '</div>';
+  }
+
+  function card(label, value, sub) {
+    return '<div class="comp-card"><div class="l">' + label + '</div><div class="v">' + value + '</div>' +
+      (sub ? '<div class="l">' + sub + '</div>' : "") + '</div>';
+  }
+
+  function aboutSection() {
+    return '<details class="comp-more"><summary>על הנתונים</summary><ul class="comp-about">' +
+      '<li>המקור: Business Discovery של אינסטגרם — נתונים ציבוריים בלבד. אין צפיות, חשיפה או שמירות.</li>' +
+      '<li>כאן חדשות: מהנתונים המלאים שלנו, באותם תאריכים.</li>' +
+      '<li>שינוי עוקבים: בין תאריך הבסיס לתאריך הסוף שמעל הטבלה. התאריכים זהים לכל החשבונות.</li>' +
+      '<li>מעורבות/1K: ממוצע לייקים+תגובות של 10 הפוסטים האחרונים ברגע האיסוף, חלקי אלף עוקבים. פוסטים טריים נספרים לפני שהבשילו, לכן זו הערכה.</li>' +
+      '<li>פוסטים/יום: ממוצע על הימים המלאים בפיד השמור (עד 14). האיסוף מושך 25 פוסטים לחשבון ביום, ולכן אצל מי שמפרסם הרבה המספר עלול להיות נמוך מהאמת.</li>' +
+      '<li>סיפורים שאין לנו: פוסט מתחרה מ־72 השעות האחרונות, עם פי 3 לפחות מהחציון של החשבון (ולא פחות מ־300), שלא נמצא לו אצלנו פוסט עם 4 מילים משותפות ב־96 השעות האחרונות. אתר ושידור אינם נבדקים.</li>' +
+      '</ul></details>';
+  }
+
+  // ---------- מודל ----------
+  function openFor(username) {
+    var c = (last.competitors || []).filter(function (x) { return x.username === username; })[0];
+    if (!c) return;
     var posts = c.posts || [];
     var body = posts.length
-      ? KS.kmSection("הפוסטים החזקים בטווח · לפי מעורבות") + posts.map(function (p) { return postRow(p, false); }).join("")
-      : '<div style="padding:16px;color:var(--muted);">אין פוסטים שמורים בטווח — האיסוף התחיל היום, הפיד מתמלא מיום ליום (עד 14 יום אחורה)</div>';
+      ? KS.kmSection("הפוסטים החזקים · לפי לייקים+תגובות") +
+        '<div class="panel-sub" style="padding:0 4px 8px;">מהפיד השמור (14 הימים האחרונים), גם כשנבחר טווח ארוך יותר.</div>' +
+        posts.map(function (p) { return postRow(p, false); }).join("")
+      : '<div class="comp-empty" style="padding:16px;">אין פוסטים בפיד השמור של החשבון.</div>';
     KS.openModal({
       iconHtml: KS.fillIcon("ig", "#fff", 19),
       iconBg: c.is_kan ? "var(--pf)" : "linear-gradient(135deg,#feda75,#d62976 45%,#962fbf 80%)",
       type: "@" + c.username + " · " + KS.fmt(c.followers) + " עוקבים",
       title: (c.is_kan ? "🔴 " : "") + (c.name || c.username),
-      date: "",
+      date: c.as_of ? "עודכן " + KS.fmtDate(c.as_of) : "",
       bodyHtml: body
     });
   }
 
-  function render(data, app) {
-    var rl = KS.RANGE_LABEL[data.range];
-    var s = data.summary;
-    var comps = data.competitors || [];
-    displayList = comps;
-
-    var NAME_BY_USER = {};
-    comps.forEach(function (c) { NAME_BY_USER[c.username] = c.name || c.username; });
-
-    var gaps = data.gaps || [];
-    var gapsSection =
-      '<div class="section-label"><span>🕳 פערי סיקור · 72 השעות האחרונות</span><span></span></div>' +
-      '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">סיפורים שרצו חזק אצל המתחרים (פי-3 מהחציון שלהם) בלי פוסט תואם אצלנו באף פלטפורמה</div>' +
-      (gaps.length ? gaps.map(function (g) {
-        var outlets = g.outlets.map(function (o) {
-          var nm = NAME_BY_USER[o.username] || o.username;
-          return o.url
-            ? '<a class="km-theme" style="text-decoration:none;" href="' + KS.esc(o.url) + '" target="_blank" rel="noopener">' + KS.esc(nm) + ' · ' + KS.fmt(o.eng) + '</a>'
-            : '<span class="km-theme">' + KS.esc(nm) + ' · ' + KS.fmt(o.eng) + '</span>';
-        }).join("");
-        return '<div class="hot-row"><div class="hot-row-head"><span>' +
-          (g.outlets.length > 1 ? "רץ אצל " + g.outlets.length + " מתחרים" : "") +
-          '</span><span class="hot-time">' + KS.fmtDate(g.date) + '</span></div>' +
-          '<div class="hot-trig">' + KS.esc(g.caption) + '</div>' +
-          '<div class="km-themes" style="margin-top:6px;">' + outlets + '</div></div>';
-      }).join("")
-      : '<div style="padding:8px 4px;color:var(--muted);font-size:13px;">✔ אין פערים בולטים — כל מה שרץ חזק אצל המתחרים קיבל כיסוי אצלנו</div>') +
-      '</div>';
-
-    var arena = data.arena || [];
-    var arenaSection = arena.length
-      ? '<div class="section-label"><span>🥊 הזירה · 48 השעות האחרונות</span><span></span></div>' +
-        '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">הפוסטים החזקים של כל החשבונות (כולל כאן), לפי לייקים+תגובות</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;">' +
-        arena.map(function (p) { return postRow(p, true); }).join("") + '</div></div>'
-      : "";
-
-    var stats = [
-      stat("" + s.tracked, "חשבונות במעקב"),
-      stat(KS.esc(s.leader || "—"), "המוביל בעוקבים"),
-      stat(s.fastest ? KS.esc(s.fastest.name) + " +" + KS.fmt(s.fastest.change) : "—", "הצומח בטווח"),
-      stat("#" + s.kan_rank, "המיקום של כאן")
-    ].join("");
-
-    var cols = "40px minmax(150px,1.3fr) 95px minmax(120px,1fr) 110px 85px 90px";
-    var thead = '<div class="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;">' +
-      '<span class="center">#</span><span>חשבון</span><span class="center">עוקבים</span><span class="center">מגמה</span>' +
-      '<span class="center">צמיחה בטווח</span><span class="center">פוסטים/יום</span><span class="center">מעורבות/1K</span></div>';
-
-    var rows = comps.map(function (c, i) {
-      var kanBg = c.is_kan ? "background:var(--pf-bg);" : "";
-      var growth = "—";
-      if (c.change_range) {
-        var pct = c.followers ? (c.change_range / (c.followers - c.change_range) * 100) : 0;
-        growth = '<span style="color:' + (c.change_range > 0 ? "var(--ok)" : "var(--bad)") + ';">' +
-          KS.signed(c.change_range) + '<span style="color:var(--muted);font-size:11px;"> · ' + (pct >= 0 ? "+" : "") + pct.toFixed(2) + '%</span></span>';
-      }
-      var spark = (c.spark && c.spark.length > 1)
-        ? '<span style="display:block;max-width:120px;margin:0 auto;">' + KS.sparkSvg(c.spark, c.is_kan ? "#F7381B" : "#8b8fa3") + '</span>'
-        : '<span style="color:var(--faint);font-size:11px;">נבנית מיום ליום</span>';
-      return '<div class="trow" data-idx="' + i + '" style="' + kanBg + 'display:grid;grid-template-columns:' + cols + ';gap:10px;cursor:pointer;align-items:center;">' +
-        '<span class="cell" style="color:var(--faint);">' + (i + 1) + '</span>' +
-        '<span style="min-width:0;"><span class="t-title">' + (c.is_kan ? "🔴 " : "") + KS.esc(c.name || c.username) + '</span>' +
-        '<span class="t-date">@' + KS.esc(c.username) + (c.change_1d ? ' · היום: ' + KS.signed(c.change_1d) : "") + '</span></span>' +
-        '<span class="cell strong">' + KS.fmt(c.followers) + '</span>' +
-        '<span class="center">' + spark + '</span>' +
-        '<span class="cell">' + growth + '</span>' +
-        '<span class="cell">' + c.posts_24h + '</span>' +
-        '<span class="cell">' + c.eng_per_1k.toFixed(1) + '</span></div>';
-    }).join("");
-
+  // ---------- רינדור ----------
+  function render(data) {
+    last = data;
+    var names = {};
+    (data.competitors || []).forEach(function (c) { names[c.username] = c.name || c.username; });
+    var s = data.summary || {};
     document.getElementById("main").innerHTML =
-      '<div class="page-head"><div><h1>מעקב מתחרים · Instagram</h1>' +
-      '<p>נתונים ציבוריים (Business Discovery) — עוקבים, קצב פרסום ומעורבות · ' + rl + '</p></div>' +
-      '<div style="text-align:left;"><div class="asof-label">נתונים עד</div><div class="asof-date">' + KS.fmtFullDate(data.last_date) + '</div></div></div>' +
-
-      '<div class="panel mb-m"><div class="grid-4">' + stats + '</div></div>' +
-
-      gapsSection +
-
-      arenaSection +
-
-      '<div class="table"><div class="table-head"><div><div class="panel-title">דירוג לפי עוקבים</div>' +
-      '<div class="panel-sub">מעורבות/1K = ממוצע לייקים+תגובות ל-10 הפוסטים האחרונים, מנורמל לגודל הקהל · צפיות אינן ציבוריות · לחצו על חשבון לפוסטים שלו</div></div></div>' +
-      '<div class="table-scroll" id="comp-body">' + thead + rows + '</div></div>' +
-
-      '<div class="panel-sub" style="margin-top:10px;">🔴 = כאן חדשות (מהנתונים המלאים שלנו) · שינויי עוקבים מצטברים מיום תחילת המעקב</div>';
-
-    document.getElementById("comp-body").addEventListener("click", function (e) {
-      if (e.target.closest("a")) return;  // קישור לפוסט גובר על המודל
-      var row = e.target.closest(".trow"); if (!row) return;
-      var idx = parseInt(row.getAttribute("data-idx"), 10);
-      if (!isNaN(idx) && displayList[idx]) openAccountModal(displayList[idx]);
-    });
+      '<div class="page-head"><div><h1>מתחרים · Instagram</h1>' + sourcesLine(data) + '</div></div>' +
+      gapsSection(data, names) +
+      arenaSection(data) +
+      '<div class="section-label"><span>📊 השוואה לאורך זמן</span><span></span></div>' +
+      '<div class="table"><div class="table-head"><div><div class="panel-title">עוקבים וצמיחה</div>' +
+      '<div class="panel-sub">' + windowNote(data) + '</div></div>' + rangePicker() + '</div>' +
+      '<div class="comp-cards">' +
+        card("צמיחת כאן בטווח", growthCell(s.kan_growth)) +
+        card("דירוג כאן לפי עוקבים", "#" + s.kan_rank + ' <span class="comp-muted" style="font-size:13px;">מתוך ' + s.ranked + '</span>', "במדידה האחרונה, לא דירוג היסטורי") +
+      '</div>' +
+      '<div class="table-scroll" id="comp-body">' + tableHtml(data) + '</div></div>' +
+      aboutSection();
   }
 
-  KanSocial.init("competitors", render);
+  var main = document.getElementById("main");
+  main.addEventListener("click", function (e) {
+    var r = e.target.closest("[data-r]");
+    if (r) { KanSocial.pickRange(parseInt(r.getAttribute("data-r"), 10)); return; }
+    var s = e.target.closest("[data-sort]");
+    if (s) { sortKey = s.getAttribute("data-sort"); document.getElementById("comp-body").innerHTML = tableHtml(last); return; }
+    if (e.target.closest("a") || e.target.closest("summary")) return;
+    var row = e.target.closest(".trow[data-u]");
+    if (row) openFor(row.getAttribute("data-u"));
+  });
+  main.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    var row = e.target.closest(".trow[data-u]");
+    if (row) openFor(row.getAttribute("data-u"));
+  });
+
+  KanSocial.init("competitors", render, { rangeKey: "pm_comp_range", headerRanges: false });
 })();
 </script>
 </body>
