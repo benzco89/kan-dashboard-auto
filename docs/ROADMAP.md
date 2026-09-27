@@ -42,8 +42,9 @@ spec `docs/superpowers/specs/2026-09-27-competitors-design.md`:
   Kan's IG counts to the history), count trends in the account modal. The "now"
   section is **off** (`NOW_CALIBRATED = False`) until
   `social_dashboard/analyze_now_thresholds.py` is run on a week of history
-  (from 2026-10-04) and the threshold is set by precision at maturity, not by
-  firing rate.
+  (from 2026-10-04) and the threshold is set by precision at a fixed age (where
+  the post stood at 33h, ranked against the account's other posts), by age of
+  first firing — not by firing rate.
 - **4** — Telegram for missed stories, only after 2–3 weeks of logged
   candidates and a precision check (≥30 marked by Ben).
 
