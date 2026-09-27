@@ -8,6 +8,7 @@ those against a fixture with a fixed today.
     python social_dashboard/test_competitors.py
 """
 
+import json
 import os
 import sys
 from datetime import date, datetime, timedelta
@@ -214,6 +215,36 @@ check("build() touches every GAP_SOURCES key before reading source_status",
 stale_snaps = SNAPS + [{"date": "2026-09-26", "username": "eee", "name": "E", "followers": 10}]
 f = C.freshness(C.snapshots_by_user(stale_snaps))
 check("an account that missed today's run is named", f["missing"], ["eee"])
+
+print("\nintraday log\n" + "-" * 62)
+items, checked = C.gap_clusters(GAP_DATA, NOW)
+check("gap_clusters keeps every story, uncut", sorted(i["kind"] for i in items),
+      ["exclusive", "exclusive", "missed"])
+check("each post carries its id", items[0]["posts"][0]["post_id"], "x1")
+check("the closest Kan post is measured",
+      C._best_overlap(frozenset("אבגדה"), [frozenset("אבזח")]), {"shared": 2, "containment": 0.5})
+
+rows = C.candidate_rows(items, "2026-09-27 11:00", "ig:live,fb:live")
+check("one run marker plus one row per story", ([r["kind"] for r in rows][:1], len(rows)), (["run"], 4))
+as_read = [{k: str(v) for k, v in r.items()} for r in rows]     # the sheet hands back strings
+back = C.gaps_from_log(as_read, TODAY)
+live = C.coverage_gaps(GAP_DATA, NOW)
+shape = lambda g: {k: g[k] for k in ("caption", "date", "time", "n_outlets", "total_eng", "lead", "posts")}
+check("the log reads back as what the page would have computed",
+      [shape(g) for g in back["missed"] + back["exclusive"]],
+      [shape(g) for g in live["missed"] + live["exclusive"]])
+check("the log is marked intraday, with its run time", (back["source"], back["run_at"]),
+      ("intraday", "2026-09-27 11:00"))
+empty = [{k: str(v) for k, v in r.items()} for r in C.candidate_rows([], "2026-09-27 14:00", "x")]
+check("a run with no stories still counts as a run", C.gaps_from_log(empty, TODAY)["missed"], [])
+check("yesterday's run is not today's", C.gaps_from_log(as_read, TODAY + timedelta(days=1)), None)
+later = C.candidate_rows(items[:1], "2026-09-27 14:00", "x")
+check("the latest run of the day wins", len(C.gaps_from_log(rows + later, TODAY)["exclusive"]), 0)
+
+b_log = C.build(dict(DATA, gap_candidates=rows), 7, today=TODAY, now=NOW)
+check("the page serves the intraday log when there is one", b_log["gaps"]["source"], "intraday")
+check("and the morning computation otherwise", b7["gaps"]["source"], "morning")
+check("freshness says when the posts were last pulled", b7["freshness"]["posts_pulled_at"], "2026-09-27 23:00")
 
 print("-" * 62)
 print(f"{PASS}/{PASS + FAIL} passed")
