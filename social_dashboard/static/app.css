@@ -300,6 +300,12 @@ a.hot-row:hover{ border-color:var(--line2); }
 
 /* ---------- competitors page ---------- */
 .comp-grid{ display:grid; grid-template-columns:40px minmax(150px,1.3fr) 95px minmax(110px,1fr) 130px 80px 85px; gap:10px; align-items:center; }
+/* the shared @media(max-width:900px) rule above forces .table-scroll .thead/.trow
+   to min-width:640px so other pages' tables scroll sideways instead of clipping;
+   this page's grid is meant to reflow to a compact 4-column layout below 640px
+   instead, so reset that forced width for comp-grid specifically (same
+   specificity as the global rule, but this comes later in the file, so it wins). */
+.table-scroll .comp-grid{ min-width:0; }
 .trow.comp-grid{ cursor:pointer; }
 .comp-kan{ background:var(--pf-bg); }
 .comp-sort{ font:inherit; color:inherit; background:none; border:none; cursor:pointer; text-align:center; padding:0; }
