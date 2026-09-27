@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import aggregate
-import competitors_page
+import competitors_page as comp_page
 import gsheets
 
 BASE_DIR = os.path.dirname(__file__)
@@ -70,7 +70,7 @@ _BUILDERS = {
     "twitter": aggregate.build_twitter,
     "tiktok": aggregate.build_tiktok,
     "viral": aggregate.build_viral,
-    "competitors": competitors_page.build,
+    "competitors": comp_page.build,
     "alerts": aggregate.build_alerts,
 }
 

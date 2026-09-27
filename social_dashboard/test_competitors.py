@@ -173,6 +173,34 @@ check("dates are strings in the payload", b90["window"]["base"], "2026-07-13")
 check("freshness counts today's snapshots", (b7["freshness"]["updated"], b7["freshness"]["known"]), (3, 3))
 check("a plain dict has no source status", b7["sources"], {})
 
+print("\nsource status read after the lazy tabs are touched\n" + "-" * 62)
+
+
+class OrderStub(dict):
+    """Mirrors gsheets.SheetData: a tab's failure only shows up in
+    source_status() once something actually did a get() for it (that's what
+    triggers the lazy read). build() used to read source_status() before
+    touching the GAP_SOURCES tabs, so an unavailable tab it hadn't looked at
+    yet was invisible."""
+
+    def __init__(self, base):
+        super().__init__(base)
+        self.fetched = set()
+
+    def get(self, key, default=None):
+        self.fetched.add(key)
+        return super().get(key, default)
+
+    def source_status(self):
+        return {k: ("unavailable" if k == "tiktok" and k in self.fetched else "ok")
+                for k in C.GAP_SOURCES}
+
+
+stub = OrderStub(DATA)
+b_stub = C.build(stub, 7, today=TODAY, now=NOW)
+check("build() touches every GAP_SOURCES key before reading source_status",
+      b_stub["gaps"]["status"], "unavailable")
+
 stale_snaps = SNAPS + [{"date": "2026-09-26", "username": "eee", "name": "E", "followers": 10}]
 f = C.freshness(C.snapshots_by_user(stale_snaps))
 check("an account that missed today's run is named", f["missing"], ["eee"])

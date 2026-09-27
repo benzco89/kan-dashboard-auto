@@ -48,7 +48,7 @@
   // ---------- פערים ----------
   function why(g, names) {
     var l = g.lead, nm = names[l.username] || l.username;
-    if (l.ratio) return "פי " + l.ratio.toFixed(1) + " מפוסט רגיל של " + nm;
+    if (l.ratio) return "פי " + l.ratio.toFixed(1) + " מפוסט בשל רגיל של " + nm;
     return KS.fmt(l.eng) + " לייקים+תגובות · הסף " + KS.fmt(l.threshold);
   }
 
@@ -71,10 +71,15 @@
     var body;
     if (g.status === "unavailable") {
       body = '<div class="comp-warn">בדיקת הסיקור לא זמינה — לא נטען: ' + g.failed.map(KS.esc).join(", ") + '</div>';
-    } else if (!g.missed.length) {
-      body = '<div class="comp-empty">לא נמצאו סיפורים של 2 מתחרים ומעלה בלי התאמה אצלנו.</div>';
     } else {
-      body = g.missed.map(function (x) { return gapRow(x, names); }).join("");
+      var staleNote = (g.status === "stale" && g.stale && g.stale.length)
+        ? '<div class="comp-warn">לא ניתן לקבוע שאין פערים — נבדק מול נתונים מהטעינה הקודמת של: ' + g.stale.map(KS.esc).join(", ") + '</div>'
+        : "";
+      if (!g.missed.length) {
+        body = staleNote || '<div class="comp-empty">לא נמצאו סיפורים של 2 מתחרים ומעלה בלי התאמה אצלנו.</div>';
+      } else {
+        body = staleNote + g.missed.map(function (x) { return gapRow(x, names); }).join("");
+      }
     }
     var excl = (g.exclusive || []).length
       ? '<details class="comp-more"><summary>💡 להיטים בלעדיים של מתחרים (' + g.exclusive.length + ') — תוכן של מתחרה אחד, לא פספוס</summary>' +
@@ -95,13 +100,22 @@
   }
 
   // ---------- השוואה ----------
-  function growthCell(g) {
+  function growthCell(g, win) {
     if (!g || g.status === "none") return '<span class="comp-muted">—</span>';
     if (g.status === "new") return '<span class="comp-muted" title="מדידה ראשונה: ' + KS.esc(g.base_date) + '">חדש במעקב</span>';
     var color = g.change > 0 ? "var(--ok)" : g.change < 0 ? "var(--bad)" : "var(--muted)";
+    var lag = (win && g.end_date !== win.end)
+      ? '<span class="comp-muted" style="font-size:11px;"> (עד ' + KS.fmtDate(g.end_date) + ')</span>'
+      : "";
     return '<span style="color:' + color + ';">' + signedHtml(g.change) +
       (g.pct == null ? "" : '<span class="comp-muted" style="font-size:11px;"> · <bdi dir="ltr">' + (g.pct >= 0 ? "+" : "") + g.pct.toFixed(2) + '%</bdi></span>') +
-      '</span>';
+      lag + '</span>';
+  }
+
+  function pctCell(g) {
+    if (!g || g.status !== "ok" || g.pct == null) return '<span class="comp-muted">—</span>';
+    var color = g.pct > 0 ? "var(--ok)" : g.pct < 0 ? "var(--bad)" : "var(--muted)";
+    return '<span style="color:' + color + ';"><bdi dir="ltr">' + (g.pct >= 0 ? "+" : "") + g.pct.toFixed(2) + '%</bdi></span>';
   }
 
   function sortVal(c, k) {
@@ -125,8 +139,9 @@
     });
     var thead = '<div class="thead comp-grid"><span class="center">#</span><span>חשבון</span>' +
       sortBtn("followers", "עוקבים") + '<span class="center comp-hide-s">מגמה</span>' +
-      sortBtn("change", "שינוי בטווח") + sortBtn("ppd", "פוסטים/יום", "comp-hide-s") +
-      sortBtn("eng", "מעורבות/1K", "comp-hide-s") + '</div>';
+      sortBtn("change", "שינוי בטווח") + sortBtn("pct", "שינוי %", "comp-hide-s") +
+      sortBtn("ppd", "פוסטים/יום", "comp-hide-s") +
+      sortBtn("eng", "מעורבות/1K (הערכה)", "comp-hide-s") + '</div>';
     var rows = comps.map(function (c, i) {
       var spark = (c.spark && c.spark.length > 1)
         ? '<span style="display:block;max-width:120px;margin:0 auto;">' + KS.sparkSvg(c.spark, c.is_kan ? "#F7381B" : "#8b8fa3") + '</span>'
@@ -137,7 +152,8 @@
         '<span class="t-date">@' + KS.esc(c.username) + (c.change_1d ? ' · היום: ' + signedHtml(c.change_1d) : "") + '</span></span>' +
         '<span class="cell strong">' + KS.fmt(c.followers) + '</span>' +
         '<span class="center comp-hide-s">' + spark + '</span>' +
-        '<span class="cell">' + growthCell(c.growth) + '</span>' +
+        '<span class="cell">' + growthCell(c.growth, data.window) + '</span>' +
+        '<span class="cell comp-hide-s">' + pctCell(c.growth) + '</span>' +
         '<span class="cell comp-hide-s">' + (c.posts_per_day == null ? "—" : c.posts_per_day.toFixed(1)) + '</span>' +
         '<span class="cell comp-hide-s">' + c.eng_per_1k.toFixed(1) + '</span></div>';
     }).join("");
@@ -147,7 +163,11 @@
   function windowNote(data) {
     var w = data.window;
     if (!w) return "";
-    var s = "שינוי עוקבים " + KS.fmtDate(w.base) + " → " + KS.fmtDate(w.end) + ", זהה לכל החשבונות";
+    var anyLagging = (data.competitors || []).some(function (c) {
+      return c.growth && c.growth.status === "ok" && c.growth.end_date !== w.end;
+    });
+    var s = "שינוי עוקבים " + KS.fmtDate(w.base) + " → " + KS.fmtDate(w.end) +
+      (anyLagging ? "" : ", זהה לכל החשבונות");
     if (w.partial) s += ' · <b>טווח חלקי: ' + w.covered_days + ' ימים</b> (המעקב התחיל ' + KS.fmtDate(w.history_start) + ')';
     return s;
   }
@@ -208,7 +228,7 @@
       '<div class="table"><div class="table-head"><div><div class="panel-title">עוקבים וצמיחה</div>' +
       '<div class="panel-sub">' + windowNote(data) + '</div></div>' + rangePicker() + '</div>' +
       '<div class="comp-cards">' +
-        card("צמיחת כאן בטווח", growthCell(s.kan_growth)) +
+        card("צמיחת כאן בטווח", growthCell(s.kan_growth, data.window)) +
         card("דירוג כאן לפי עוקבים", "#" + s.kan_rank + ' <span class="comp-muted" style="font-size:13px;">מתוך ' + s.ranked + '</span>', "במדידה האחרונה, לא דירוג היסטורי") +
       '</div>' +
       '<div class="table-scroll" id="comp-body">' + tableHtml(data) + '</div></div>' +
@@ -226,9 +246,11 @@
     if (row) openFor(row.getAttribute("data-u"));
   });
   main.addEventListener("keydown", function (e) {
-    if (e.key !== "Enter") return;
+    if (e.key !== "Enter" && e.key !== " ") return;
     var row = e.target.closest(".trow[data-u]");
-    if (row) openFor(row.getAttribute("data-u"));
+    if (!row) return;
+    if (e.key === " ") e.preventDefault();
+    openFor(row.getAttribute("data-u"));
   });
 
   KanSocial.init("competitors", render, { rangeKey: "pm_comp_range", headerRanges: false });

@@ -148,9 +148,12 @@ def _store(key, rows, stamp):
     """Caller holds _lock. rows=None means the read failed."""
     if rows is None:
         if key in _cache and _cache[key][0]:
-            _status[key] = "stale"            # keep the rows and their old stamp
+            # keep the rows, but bump the stamp so it retries in ~60s, not on
+            # every single request while the failure persists
+            _cache[key] = (_cache[key][0], time.time() - _CACHE_TTL + 60)
+            _status[key] = "stale"
         else:
-            _cache[key] = ([], 0)             # stamp 0: retried on the next request
+            _cache[key] = ([], time.time() - _CACHE_TTL + 60)  # retried after ~60s
             _status[key] = "unavailable"
         return
     _cache[key] = (rows, stamp)

@@ -290,7 +290,12 @@ def build(data, days, today=None, now=None):
     today = today or A.israel_today()
     if now is None:
         now = datetime.now(A._TZ).replace(tzinfo=None) if A._TZ else datetime.now()
-    sources = data.source_status() if hasattr(data, "source_status") else {}
+    if hasattr(data, "source_status"):
+        for k in GAP_SOURCES:
+            data.get(k)
+        sources = data.source_status()
+    else:
+        sources = {}
 
     by_user = snapshots_by_user(data.get("competitors", []) or [])
     comp_posts = data.get("competitor_posts", []) or []

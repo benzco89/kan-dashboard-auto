@@ -299,7 +299,7 @@ a.hot-row:hover{ border-color:var(--line2); }
 @media (max-width:560px){ .km-hero{ grid-template-columns:repeat(3,1fr); } .kmodal-backdrop{ padding:0; } .kmodal{ border-radius:0; min-height:100vh; max-width:none; } }
 
 /* ---------- competitors page ---------- */
-.comp-grid{ display:grid; grid-template-columns:40px minmax(150px,1.3fr) 95px minmax(110px,1fr) 130px 80px 85px; gap:10px; align-items:center; }
+.comp-grid{ display:grid; grid-template-columns:40px minmax(150px,1.3fr) 95px minmax(110px,1fr) 110px 80px 80px 85px; gap:10px; align-items:center; }
 /* the shared @media(max-width:900px) rule above forces .table-scroll .thead/.trow
    to min-width:640px so other pages' tables scroll sideways instead of clipping;
    this page's grid is meant to reflow to a compact 4-column layout below 640px

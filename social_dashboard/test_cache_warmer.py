@@ -100,10 +100,16 @@ check("and marks them stale", gsheets.source_status(["instagram"]), {"instagram"
 check("a failed read with nothing cached serves []", got["competitor_posts"], [])
 check("and marks it unavailable", gsheets.source_status(["competitor_posts"]),
       {"competitor_posts": "unavailable"})
-check("an unavailable tab is retried on the next request",
-      gsheets._fresh("competitor_posts", time.time()), False)
+check("an unavailable tab is not retried on every request",
+      gsheets._fresh("competitor_posts", time.time()), True)
+check("but is retried on the next request 61s later",
+      gsheets._fresh("competitor_posts", time.time() + 61), False)
 
 gsheets._fetch = lambda keys: {k: [] for k in keys}
+# the retry stamp holds it "fresh" for ~60s (checked above) — move the clock
+# past that before expecting _load to actually retry it
+stamp = gsheets._cache["competitor_posts"][1]
+gsheets._cache["competitor_posts"] = (gsheets._cache["competitor_posts"][0], stamp - 61)
 gsheets._load(["competitor_posts"])
 check("a sheet that is really empty is ok", gsheets.source_status(["competitor_posts"]),
       {"competitor_posts": "ok"})
