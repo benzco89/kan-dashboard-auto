@@ -64,11 +64,6 @@ def history_rows(post_rows, pulled_at):
     return out
 
 
-def keep_recent(rows, col, days, now):
-    cutoff = (now - timedelta(days=days)).strftime("%Y-%m-%d")
-    return [r for r in rows if str(r.get(col, ""))[:10] >= cutoff and str(r.get(col, ""))]
-
-
 def _il_date(ts):
     try:
         return (datetime.fromisoformat(str(ts).replace("Z", "+00:00").replace("+0000", "+00:00"))
@@ -88,11 +83,12 @@ def kan_fresh_rows(ig_media, fb_posts):
 
 
 def fetch_kan_posts(own_ig):
-    """25 האחרונים של כאן באינסטגרם ובפייסבוק: טקסט ותאריך, קריאה אחת לכל פלטפורמה."""
+    """50 האחרונים של כאן באינסטגרם ובפייסבוק: טקסט ותאריך, קריאה אחת לכל פלטפורמה.
+    25 לא הספיקו: יום חדשות כבד עובר 25 פוסטי פייסבוק בין 08:30 ל-23:05."""
     ig = http_get_json(f"{CC.BASE}/{own_ig}/media", params={
-        "access_token": CC.ACCESS_TOKEN, "fields": "caption,timestamp", "limit": 25})
+        "access_token": CC.ACCESS_TOKEN, "fields": "caption,timestamp", "limit": 50})
     fb = http_get_json(f"{CC.BASE}/{PAGE_ID}/published_posts", params={
-        "access_token": CC.ACCESS_TOKEN, "fields": "message,created_time", "limit": 25})
+        "access_token": CC.ACCESS_TOKEN, "fields": "message,created_time", "limit": 50})
     for name, res in (("instagram", ig), ("facebook", fb)):
         if "error" in res:
             raise RuntimeError(f"Kan {name}: {res['error'].get('message', '')[:120]}")
@@ -112,18 +108,33 @@ def read_tab(sh, name):
             for row in values[1:]]
 
 
-def write_tab(sh, name, rows, columns):
-    """כותב את הלשונית כולה מחדש (אותו דפוס של save_posts), ויוצר אותה אם אינה קיימת."""
+def append_log(sh, name, new_rows, columns, date_col, keep_days, now):
+    """מוסיף שורות ללשונית יומן בלבד (never clear+rewrite — spec §2.3): כשל
+    באמצע לא מוחק היסטוריה, ועמודה שנוספה לגיליון בעבודת יד לא נמחקת ולא
+    זזה, כי השורות נכתבות לפי הכותרת שכבר בלשונית ולא לפי `columns`."""
     if name not in WRITTEN_TABS:
         raise ValueError(f"refusing to write {name!r}: the intraday run writes only {WRITTEN_TABS}")
     try:
         ws = sh.worksheet(name)
     except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title=name, rows=len(rows) + 200, cols=len(columns))
-    if ws.row_count < len(rows) + 1:
-        ws.resize(rows=len(rows) + 200)
-    ws.clear()
-    ws.update([columns] + [[r.get(c, "") for c in columns] for r in rows])
+        ws = sh.add_worksheet(title=name, rows=len(new_rows) + 200, cols=len(columns))
+        ws.update([columns])
+
+    header = ws.row_values(1)
+    values = [[r.get(h, "") for h in header] for r in new_rows]
+    if values:
+        ws.append_rows(values, value_input_option="RAW", insert_data_option="INSERT_ROWS")
+
+    cutoff = (now - timedelta(days=keep_days)).strftime("%Y-%m-%d")
+    dates = ws.col_values(header.index(date_col) + 1)[1:]
+    k = 0
+    for d in dates:
+        if d[:10] < cutoff:
+            k += 1
+        else:
+            break
+    if k:
+        ws.delete_rows(2, k + 1)
 
 
 def main():
@@ -175,16 +186,14 @@ def main():
         return
 
     # 1. מועמדים - לפני הפוסטים (ראו הדוקסטרינג)
-    log = keep_recent(read_tab(sh, CANDIDATES_SHEET), "run_at", CANDIDATES_KEEP_DAYS, now) + cand
-    write_tab(sh, CANDIDATES_SHEET, log, CP.CANDIDATE_COLUMNS)
-    print(f"✅ {CANDIDATES_SHEET}: +{len(cand)} rows ({len(log)} kept)")
+    append_log(sh, CANDIDATES_SHEET, cand, CP.CANDIDATE_COLUMNS, "run_at", CANDIDATES_KEEP_DAYS, now)
+    print(f"✅ {CANDIDATES_SHEET}: +{len(cand)} rows")
     # 2. פוסטים - אותו מיזוג בדיוק כמו בריצה היומית
     CC.save_posts(sh, pd.DataFrame(post_rows))
     # 3. היסטוריה
-    hist = (keep_recent(read_tab(sh, HISTORY_SHEET), "pulled_at", HISTORY_KEEP_DAYS, now)
-            + history_rows(post_rows, run_at))
-    write_tab(sh, HISTORY_SHEET, hist, HISTORY_COLUMNS)
-    print(f"✅ {HISTORY_SHEET}: +{len(post_rows)} rows ({len(hist)} kept)")
+    hist = history_rows(post_rows, run_at)
+    append_log(sh, HISTORY_SHEET, hist, HISTORY_COLUMNS, "pulled_at", HISTORY_KEEP_DAYS, now)
+    print(f"✅ {HISTORY_SHEET}: +{len(hist)} rows")
 
 
 if __name__ == "__main__":
