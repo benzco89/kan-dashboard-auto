@@ -39,6 +39,7 @@ LAZY_SHEETS = {
     "competitors": "מתחרים",
     "competitor_posts": "פוסטים מתחרים",
     "gap_candidates": "מועמדי פערים",
+    "competitor_history": "היסטוריית פוסטים מתחרים",
     "demographics": "דמוגרפיה",
 }
 
