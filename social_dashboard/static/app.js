@@ -287,8 +287,8 @@
   // ---------- theme + state ----------
   function getTheme() { try { return localStorage.getItem("pm_theme") || "dark"; } catch (e) { return "dark"; } }
   function setTheme(t) { try { localStorage.setItem("pm_theme", t); } catch (e) {} document.documentElement.setAttribute("data-theme", t); }
-  function getRange() { try { return parseInt(localStorage.getItem("pm_range") || "7", 10); } catch (e) { return 7; } }
-  function setRange(r) { try { localStorage.setItem("pm_range", r); } catch (e) {} }
+  function getRange(key) { try { return parseInt(localStorage.getItem(key || "pm_range") || "7", 10); } catch (e) { return 7; } }
+  function setRange(r, key) { try { localStorage.setItem(key || "pm_range", r); } catch (e) {} }
 
   var RANGE_LABEL = { 7: "7 הימים האחרונים", 14: "14 הימים האחרונים", 30: "30 הימים האחרונים", 90: "90 הימים האחרונים" };
 
@@ -335,8 +335,8 @@
           // a page with no data of its own (the glossary) gets no range picker and
           // no refresh — both would promise a reload that has nothing to reload
           (self.noData ? "" :
-            '<div class="ranges">' + ranges + "</div>" +
-            '<button class="iconbtn" id="btnRefresh" title="רענון">' + refreshIcon + "</button>") +
+            (self.headerRanges === false ? "" : '<div class="ranges">' + ranges + "</div>") +
+            '<button class="iconbtn" id="btnRefresh" title="טעינה מחדש מהגיליון — לא מפעיל איסוף חדש">' + refreshIcon + "</button>") +
           '<button class="iconbtn" id="btnTheme" title="החלפת מצב תצוגה">' + themeIcon + "</button>" +
         "</div></div>";
       var el = document.getElementById("header");
@@ -345,7 +345,7 @@
       el.querySelectorAll(".range").forEach(function (b) {
         b.addEventListener("click", function () {
           self.range = parseInt(b.getAttribute("data-range"), 10);
-          setRange(self.range);
+          setRange(self.range, self.rangeKey);
           self.buildHeader();
           self.load();
         });
@@ -379,14 +379,26 @@
       });
     },
 
-    init: function (page, onRender) {
+    init: function (page, onRender, opts) {
+      opts = opts || {};
       this.page = page;
       this.theme = getTheme();
-      this.range = getRange();
+      this.rangeKey = opts.rangeKey || "pm_range";
+      this.headerRanges = opts.headerRanges !== false;
+      this.range = getRange(this.rangeKey);
       this.onRender = onRender;
       document.body.setAttribute("data-page", page);
       setTheme(this.theme);
       this.buildHeader();
+      this.load();
+    },
+
+    // For a page whose range picker sits next to the section it changes
+    // (competitors): the same fetch, remembered under the page's own key so it
+    // never changes the range of every other page.
+    pickRange: function (r) {
+      this.range = r;
+      setRange(r, this.rangeKey);
       this.load();
     },
 
