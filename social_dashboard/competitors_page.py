@@ -14,6 +14,7 @@
 הפונקציות מקבלות today/now מבחוץ כדי שאפשר יהיה לבדוק אותן.
 """
 
+import json
 from datetime import datetime, timedelta
 
 import aggregate as A
@@ -41,6 +42,12 @@ OUR_SOURCES = (("instagram", "caption", "date"), ("facebook", "title", "date"),
 POSTS_PER_ACCOUNT = 15
 FEED_KEEP_DAYS = 14       # כמו POSTS_RETENTION_DAYS באספן
 
+# יומן הריצה התוך־יומית ("מועמדי פערים"): שורת סימון לכל ריצה ושורה לכל סיפור
+RUN_MARKER = "run"
+CANDIDATE_COLUMNS = ["run_at", "kind", "cluster_key", "n_outlets", "posted_at", "caption",
+                     "lead_username", "lead_eng", "lead_median", "lead_threshold",
+                     "total_eng", "outlets", "best_kan_shared", "best_kan_containment",
+                     "sources_checked"]
 
 # ---------- השוואה לאורך זמן ----------
 
@@ -212,14 +219,20 @@ def _covered(toks, ours):
     return False
 
 
-def coverage_gaps(data, now, sources=None):
-    sources = sources or {}
-    unavailable = [k for k in GAP_SOURCES if sources.get(k, "ok") == "unavailable"]
-    stale = [k for k in GAP_SOURCES if sources.get(k, "ok") == "stale"]
-    if unavailable:
-        return {"status": "unavailable", "failed": unavailable, "stale": stale,
-                "checked": 0, "missed": [], "exclusive": []}
+def _best_overlap(toks, ours):
+    """החפיפה הגבוהה ביותר מול פוסט שלנו. נרשמת ביומן כדי שאפשר יהיה לכייל
+    בדיעבד את סף "כוסה אצלנו" (0.3 ו־4 מילים) מול מה שעורך סימן."""
+    best = (0, 0.0)
+    for o in ours:
+        inter = len(toks & o)
+        if inter:
+            best = max(best, (inter, round(inter / min(len(toks), len(o)), 2)))
+    return {"shared": best[0], "containment": best[1]}
 
+
+def gap_clusters(data, now):
+    """כל המועמדים, מאוחדים לסיפורים, בלי חיתוך — (items, פוסטים שנבדקו).
+    הריצה התוך־יומית רושמת את כולם; העמוד מציג רק את העליונים."""
     comp = data.get("competitor_posts", []) or []
     med = account_medians(comp)
     ours = our_token_sets(data, now)
@@ -238,7 +251,8 @@ def coverage_gaps(data, now, sources=None):
         toks = A._viral_tokens(p.get("caption", ""))
         if len(toks) < A._MIN_TOKENS or _covered(toks, ours):
             continue
-        cands.append({"username": u, "posted": posted, "eng": eng, "median": m,
+        cands.append({"username": u, "post_id": str(p.get("post_id", "")), "posted": posted,
+                      "eng": eng, "median": m,
                       "ratio": round(eng / m, 1) if m else None, "threshold": threshold,
                       "caption": A._clean_caption(p.get("caption", ""))[:180],
                       "url": p.get("permalink", ""), "toks": toks})
@@ -254,29 +268,110 @@ def coverage_gaps(data, now, sources=None):
         else:
             clusters.append({"toks": c["toks"], "posts": [c]})
 
-    missed, exclusive = [], []
+    items = []
     for g in clusters:
         lead = g["posts"][0]
         users = list(dict.fromkeys(c["username"] for c in g["posts"]))
-        item = {
+        items.append({
+            "kind": "missed" if len(users) >= 2 else "exclusive",
             "caption": lead["caption"],
             "date": lead["posted"].strftime("%Y-%m-%d"),
             "time": lead["posted"].strftime("%H:%M"),
             "n_outlets": len(users),
             "total_eng": sum(c["eng"] for c in g["posts"]),
             "lead": {k: lead[k] for k in ("username", "eng", "median", "ratio", "threshold")},
-            "posts": [{"username": c["username"], "eng": c["eng"], "url": c["url"]}
-                      for c in g["posts"]],
-        }
-        (missed if len(users) >= 2 else exclusive).append(item)
+            "posts": [{"username": c["username"], "post_id": c["post_id"], "eng": c["eng"],
+                       "url": c["url"]} for c in g["posts"]],
+            "best_kan_overlap": _best_overlap(g["toks"], ours),
+        })
+    return items, len(cands)
 
-    return {"status": "stale" if stale else "ok", "failed": [], "stale": stale,
-            "checked": len(cands), "missed": missed[:GAPS_TOP], "exclusive": exclusive[:GAPS_TOP]}
+
+def coverage_gaps(data, now, sources=None):
+    sources = sources or {}
+    unavailable = [k for k in GAP_SOURCES if sources.get(k, "ok") == "unavailable"]
+    stale = [k for k in GAP_SOURCES if sources.get(k, "ok") == "stale"]
+    base = {"failed": [], "stale": stale, "source": "morning", "run_at": None}
+    if unavailable:
+        return dict(base, status="unavailable", failed=unavailable, checked=0,
+                    missed=[], exclusive=[])
+    items, checked = gap_clusters(data, now)
+    return dict(base, status="stale" if stale else "ok", checked=checked,
+                missed=[g for g in items if g["kind"] == "missed"][:GAPS_TOP],
+                exclusive=[g for g in items if g["kind"] == "exclusive"][:GAPS_TOP])
+
+
+def candidate_rows(items, run_at, sources_checked):
+    """שורות היומן של ריצה אחת: שורת סימון, גם כשאין מועמדים — כך העמוד יודע
+    שהבדיקה רצה — ושורה לכל סיפור."""
+    rows = [{"run_at": run_at, "kind": RUN_MARKER, "n_outlets": 0,
+             "sources_checked": sources_checked}]
+    for g in items:
+        lead = g["lead"]
+        rows.append({
+            "run_at": run_at, "kind": g["kind"], "cluster_key": g["posts"][0]["post_id"],
+            "n_outlets": g["n_outlets"], "posted_at": g["date"] + " " + g["time"],
+            "caption": g["caption"], "lead_username": lead["username"],
+            "lead_eng": lead["eng"], "lead_median": lead["median"],
+            "lead_threshold": lead["threshold"], "total_eng": g["total_eng"],
+            "outlets": json.dumps(g["posts"], ensure_ascii=False),
+            "best_kan_shared": g["best_kan_overlap"]["shared"],
+            "best_kan_containment": g["best_kan_overlap"]["containment"],
+            "sources_checked": sources_checked,
+        })
+    return rows
+
+
+def gaps_from_log(rows, after, now):
+    """הריצה התוך־יומית האחרונה, באותה צורה של coverage_gaps. None אם אין
+    ריצה כזו — אז העמוד מחשב מנתוני הבוקר, שבהם המתחרים וכאן נכונים לאותה
+    שעה. בלי זה, ספירות מתחרים של 14:00 מול פוסטים שלנו מהבוקר היו מסמנות
+    כפער כל סיפור שפרסמנו מאז הבוקר.
+
+    "היום" לפי תאריך קלנדרי אינו מספיק: אחרי חצות, ריצת 23:05 שייכת ל"אתמול"
+    ונשמטת, והעמוד היה נופל בחזרה ל-coverage_gaps וזוגג פוסטי מתחרים מ-23:05
+    מול לשוניות כאן מ-08:30 הקודם. לכן הקריטריון הוא עדכניות: הריצה חייבת
+    להיות אחרי המשיכה של הבוקר (`after`, מ-freshness) וגם בתוך 24 השעות
+    האחרונות (`now`), לא לפי "אותו תאריך קלנדרי"."""
+    cutoff = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M")
+    runs = [str(r.get("run_at", "")) for r in rows
+            if r.get("kind") == RUN_MARKER and str(r.get("run_at", "")) > str(after)
+            and str(r.get("run_at", "")) >= cutoff]
+    if not runs:
+        return None
+    last = max(runs)
+    missed, exclusive = [], []
+    for r in rows:
+        if str(r.get("run_at", "")) != last or r.get("kind") == RUN_MARKER:
+            continue
+        try:
+            posts = json.loads(r.get("outlets") or "[]")
+        except ValueError:
+            posts = []
+        eng, med = A._int(r.get("lead_eng")), A._num(r.get("lead_median"))
+        posted = str(r.get("posted_at", ""))
+        item = {
+            "kind": r.get("kind"), "caption": r.get("caption", ""),
+            "date": posted[:10], "time": posted[11:16],
+            "n_outlets": A._int(r.get("n_outlets")), "total_eng": A._int(r.get("total_eng")),
+            "lead": {"username": r.get("lead_username", ""), "eng": eng, "median": med,
+                     "ratio": round(eng / med, 1) if med else None,
+                     "threshold": A._int(r.get("lead_threshold"))},
+            "posts": posts,
+        }
+        (missed if item["kind"] == "missed" else exclusive).append(item)
+    for lst in (missed, exclusive):
+        lst.sort(key=lambda g: -g["lead"]["eng"])
+    # כאן checked סופר סיפורים (אשכולות), בעוד ב-coverage_gaps הוא סופר פוסטי
+    # מועמדים לפני האיחוד לאשכולות — שני דברים שונים באותו שם שדה.
+    return {"status": "ok", "failed": [], "stale": [], "source": "intraday", "run_at": last,
+            "checked": len(missed) + len(exclusive),
+            "missed": missed[:GAPS_TOP], "exclusive": exclusive[:GAPS_TOP]}
 
 
 # ---------- העמוד ----------
 
-def freshness(by_user):
+def freshness(by_user, comp_posts=()):
     if not by_user:
         return None
     last = max(e[-1][0] for e in by_user.values())
@@ -285,6 +380,7 @@ def freshness(by_user):
     return {
         "date": str(last),
         "pulled_at": max((str(r.get("pulled_at", "")) for r in today_rows), default=""),
+        "posts_pulled_at": max((str(p.get("pulled_at", "")) for p in comp_posts), default=""),
         "updated": len(today_rows),
         "known": len(known),
         "missing": sorted(u for u in known if by_user[u][-1][0] != last),
@@ -358,16 +454,19 @@ def build(data, days, today=None, now=None):
 
     rows.sort(key=lambda c: -c["followers"])
     kan_rank = next(i + 1 for i, c in enumerate(rows) if c["is_kan"])
+    fresh = freshness(by_user, comp_posts)
+    after = (fresh or {}).get("pulled_at", "")
     return {
         "range": days,
         "last_date": A._last_data_date(data),
         "window": {k: _iso(v) for k, v in win.items()} if win else None,
         "feed": {k: _iso(v) for k, v in fw.items()} if fw else None,
-        "freshness": freshness(by_user),
+        "freshness": fresh,
         "sources": sources,
         "summary": {"kan_rank": kan_rank, "ranked": len(rows),
                     "kan_growth": rows[kan_rank - 1]["growth"]},
         "arena": arena(comp_posts, ig, names, today),
-        "gaps": coverage_gaps(data, now, sources),
+        "gaps": (gaps_from_log(data.get("gap_candidates", []) or [], after, now)
+                 or coverage_gaps(data, now, sources)),
         "competitors": rows,
     }

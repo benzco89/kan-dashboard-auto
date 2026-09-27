@@ -39,9 +39,10 @@ Stage 1 (accuracy) shipped: one date pair for every account and Kan, fixed
 arena window, gaps split into missed (2+ rivals) and exclusive, and a failed
 sheet read shown as unavailable instead of "no gaps". Still open, in order —
 spec `docs/superpowers/specs/2026-09-27-competitors-design.md`:
-- **2** — intraday run at the sniffer hours (11/14/17/20/23), writing only the
+- **2** — intraday run built (`competitors_intraday.py`, `competitors_intraday.yml`,
+  VPS timer `kan-competitors-intraday` at 11/14/17/20/23:05). Writes only the
   posts tab and two new tabs (post history, gap candidates). The daily run is
-  untouched.
+  untouched. Exit: 3 days of clean runs + `verify_collector check competitor_posts`.
 - **3** — "now at rivals" (pace vs the account's own posts at the same age) and
   engagement/1K from posts at ~24h. Needs a week of history.
 - **4** — Telegram for missed stories, only after 2–3 weeks of logged
