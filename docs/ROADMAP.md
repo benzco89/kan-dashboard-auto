@@ -37,8 +37,13 @@ spec `docs/superpowers/specs/2026-09-27-competitors-design.md`:
   VPS timer `kan-competitors-intraday` at 11/14/17/20/23:05). Writes only the
   posts tab and two new tabs (post history, gap candidates). The daily run is
   untouched. Exit: 3 days of clean runs + `verify_collector check competitor_posts`.
-- **3** — "now at rivals" (pace vs the account's own posts at the same age) and
-  engagement/1K from posts at ~24h. Needs a week of history.
+- **3** — built: "now at rivals" (pace vs the account's own posts at the same
+  age), engagement/1K from posts at ~24h (Kan included: the intraday run logs
+  Kan's IG counts to the history), count trends in the account modal. The "now"
+  section is **off** (`NOW_CALIBRATED = False`) until
+  `social_dashboard/analyze_now_thresholds.py` is run on a week of history
+  (from 2026-10-04) and the threshold is set by precision at maturity, not by
+  firing rate.
 - **4** — Telegram for missed stories, only after 2–3 weeks of logged
   candidates and a precision check (≥30 marked by Ben).
 
