@@ -18,6 +18,19 @@
 
   function signedHtml(n) { return '<bdi dir="ltr">' + KS.signed(n) + '</bdi>'; }
 
+  function trendTitle(p) {
+    var ages = p.trend_ages || [];
+    if (ages.length < 2) return "לייקים+תגובות לאורך המשיכות";
+    return "לייקים+תגובות לפי גיל: מגיל " + Math.round(ages[0]) + "ש׳ עד " + Math.round(ages[ages.length - 1]) + "ש׳";
+  }
+
+  // הספים מגיעים מהשרת (now.thresholds); ברירת המחדל רק למקרה שחסרים
+  function nowThresholds(data) {
+    return (data.now && data.now.thresholds) || { min_ratio: 2, age_tol_h: 2, min_base: 8, max_age_h: 24 };
+  }
+
+  function hhmm(ts) { return KS.esc(String(ts || "").slice(11, 16)); }
+
   function postRow(p, withAccount) {
     var head = '<div class="hot-row-head"><span>' +
       (withAccount ? (p.is_kan ? "🔴 " : "") + KS.esc(p.name || p.username) + " · " : "") +
@@ -26,7 +39,7 @@
     var body = '<div class="hot-trig">' + KS.esc(p.caption || "(ללא כיתוב)") +
       '<br>❤️ ' + KS.fmt(p.likes) + ' · 💬 ' + KS.fmt(p.comments) +
       (p.trend && p.trend.length > 1
-        ? '<span class="comp-trend" title="לייקים+תגובות לאורך המשיכות">' + KS.sparkSvg(p.trend, "#8b8fa3") + '</span>'
+        ? '<span class="comp-trend" title="' + KS.esc(trendTitle(p)) + '">' + KS.sparkSvg(p.trend, "#8b8fa3") + '</span>'
         : "") + '</div>';
     return p.url
       ? '<a class="hot-row" href="' + KS.esc(p.url) + '" target="_blank" rel="noopener">' + head + body + '</a>'
@@ -77,19 +90,24 @@
   // ---------- עכשיו אצל המתחרים ----------
   function nowSection(data) {
     var n = data.now || { status: "building", items: [] };
+    var th = nowThresholds(data);
     var body;
-    if (n.status === "building") {
-      body = '<div class="comp-empty">נאסף' + (n.since ? " מאז " + KS.fmtDate(n.since) : "") +
-        (n.ready_on ? ", יהיה זמין ב־" + KS.fmtDate(n.ready_on) : "") +
-        ' — צריך שבוע של ספירות כדי לדעת מה "רגיל" לכל חשבון.</div>';
+    if (n.status === "unavailable") {
+      body = '<div class="comp-warn">היסטוריית הפוסטים לא נטענה</div>';
+    } else if (n.status === "building") {
+      body = '<div class="comp-empty">נאסף' + (n.since ? " מאז " + KS.fmtDate(n.since) : "") + "." +
+        (n.ready_on ? " יהיה מספיק היסטוריה ב־" + KS.fmtDate(n.ready_on) + "; אחרי זה — כיול ופתיחה." : "") + '</div>';
     } else if (n.status === "calibrating") {
       body = '<div class="comp-empty">יש מספיק היסטוריה. החלק ייפתח אחרי כיול הספים מול הנתונים.</div>';
+    } else if (n.status === "stale") {
+      body = '<div class="comp-warn">הריצה האחרונה הייתה ב־' + hhmm(n.run_at) + ' — אין נתון עדכני</div>';
     } else if (!n.items.length) {
-      body = '<div class="comp-empty">אין כרגע פוסט שרץ פי 2 ומעלה מהרגיל של החשבון שלו.</div>';
+      body = '<div class="comp-empty">אין כרגע פוסט שרץ פי ' + th.min_ratio + ' ומעלה מהרגיל של החשבון שלו.</div>';
     } else {
       body = n.items.map(function (it) {
+        var ageNow = it.age_now_h != null ? it.age_now_h : it.age_h;
         var head = '<div class="hot-row-head"><span>' + KS.esc(it.name) + '</span>' +
-          '<span class="hot-time">בן ' + Math.round(it.age_h) + ' שעות</span></div>';
+          '<span class="hot-time">בן ' + Math.round(ageNow) + ' שעות</span></div>';
         var txt = '<div class="hot-trig">' + KS.esc(it.caption || "(ללא כיתוב)") +
           '<br><span class="comp-muted">פי ' + it.ratio.toFixed(1) + ' מפוסט רגיל של ' + KS.esc(it.name) +
           ' בגיל ' + Math.round(it.age_h) + ' שעות · ' + KS.fmt(it.eng) + ' לייקים+תגובות</span></div>';
@@ -98,8 +116,9 @@
           : '<div class="hot-row">' + head + txt + '</div>';
       }).join("");
     }
-    return '<div class="section-label"><span>🔥 עכשיו אצל המתחרים · 24 השעות האחרונות</span><span></span></div>' +
-      '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">פוסטים שרצים מהר מהרגיל של החשבון שלהם, בהשוואה לפוסטים שלו באותו גיל.</div>' +
+    var asOf = (n.status === "ok" && n.run_at) ? " נכון ל־" + hhmm(n.run_at) + "." : "";
+    return '<div class="section-label"><span>🔥 עכשיו אצל המתחרים · ' + th.max_age_h + ' השעות האחרונות</span><span></span></div>' +
+      '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">פוסטים שרצים מהר מהרגיל של החשבון שלהם, בהשוואה לפוסטים שלו באותו גיל.' + asOf + '</div>' +
       body + '</div>';
   }
 
@@ -160,13 +179,15 @@
     var g = c.growth || {};
     if (k === "change") return g.status === "ok" ? g.change : -Infinity;
     if (k === "pct") return g.status === "ok" && g.pct != null ? g.pct : -Infinity;
-    if (k === "eng") return c.eng_per_1k;
+    // "הערכה" אחרי כל מי שנמדד בגיל 24 - שני בסיסים שונים לא מתערבבים במיון
+    if (k === "eng") return c.eng_basis === "estimate" ? c.eng_per_1k - 1e9 : c.eng_per_1k;
     if (k === "ppd") return c.posts_per_day == null ? -Infinity : c.posts_per_day;
     return c.followers;
   }
 
-  function sortBtn(k, label, cls) {
-    return '<button class="comp-sort ' + (cls || "") + (sortKey === k ? " active" : "") + '" data-sort="' + k + '">' +
+  function sortBtn(k, label, cls, title) {
+    return '<button class="comp-sort ' + (cls || "") + (sortKey === k ? " active" : "") + '" data-sort="' + k + '"' +
+      (title ? ' title="' + KS.esc(title) + '"' : "") + '>' +
       label + (sortKey === k ? " ▾" : "") + '</button>';
   }
 
@@ -179,7 +200,8 @@
       sortBtn("followers", "עוקבים") + '<span class="center comp-hide-s">מגמה</span>' +
       sortBtn("change", "שינוי בטווח") + sortBtn("pct", "שינוי %", "comp-hide-s") +
       sortBtn("ppd", "פוסטים/יום", "comp-hide-s") +
-      sortBtn("eng", "מעורבות/1K", "comp-hide-s") + '</div>';
+      sortBtn("eng", "מעורבות/1K", "comp-hide-s",
+        data.history_unavailable ? "היסטוריית הפוסטים לא נטענה — המדידה בגיל 24 שעות לא זמינה, כל המספרים הם הערכה" : "") + '</div>';
     var rows = comps.map(function (c, i) {
       var spark = (c.spark && c.spark.length > 1)
         ? '<span style="display:block;max-width:120px;margin:0 auto;">' + KS.sparkSvg(c.spark, c.is_kan ? "#F7381B" : "#8b8fa3") + '</span>'
@@ -223,13 +245,14 @@
       (sub ? '<div class="l">' + sub + '</div>' : "") + '</div>';
   }
 
-  function aboutSection() {
+  function aboutSection(data) {
+    var th = nowThresholds(data);
     return '<details class="comp-more"><summary>על הנתונים</summary><ul class="comp-about">' +
       '<li>המקור: Business Discovery של אינסטגרם — נתונים ציבוריים בלבד. אין צפיות, חשיפה או שמירות.</li>' +
       '<li>כאן חדשות: מהנתונים המלאים שלנו, באותם תאריכים.</li>' +
       '<li>שינוי עוקבים: בין תאריך הבסיס לתאריך הסוף שמעל הטבלה. התאריכים זהים לכל החשבונות.</li>' +
       '<li>מעורבות/1K: חציון לייקים+תגובות של פוסטים בגיל ~24 שעות, חלקי אלף עוקבים — כל החשבונות, וכאן, נמדדים באותו גיל. ~ = עוד אין מספיק היסטוריה, והמספר הוא ממוצע 10 הפוסטים האחרונים ברגע האיסוף (הערכה).</li>' +
-      '<li>עכשיו אצל המתחרים: פוסט בן פחות מיממה, שהספירה שלו גבוהה לפחות פי 2 מהחציון של שאר הפוסטים של אותו חשבון כשהיו באותו גיל (±2 שעות, לפחות 8 פוסטים להשוואה).</li>' +
+      '<li>עכשיו אצל המתחרים: פוסט בן פחות מ־' + th.max_age_h + ' שעות, שהספירה שלו גבוהה לפחות פי ' + th.min_ratio + ' מהחציון של שאר הפוסטים של אותו חשבון כשהיו באותו גיל (<bdi dir="ltr">±' + th.age_tol_h + '</bdi> שעות, לפחות ' + th.min_base + ' פוסטים להשוואה).</li>' +
       '<li>פוסטים/יום: ממוצע על הימים המלאים בפיד השמור (עד 14). האיסוף מושך 25 פוסטים לחשבון ביום, ולכן אצל מי שמפרסם הרבה המספר עלול להיות נמוך מהאמת.</li>' +
       '<li>סיפורים שאין לנו: פוסט מתחרה מ־72 השעות האחרונות, עם פי 3 לפחות מהחציון של החשבון (ולא פחות מ־300), שלא נמצא לו אצלנו פוסט עם 4 מילים משותפות ב־96 השעות האחרונות. אתר ושידור אינם נבדקים.</li>' +
       '</ul></details>';
@@ -273,7 +296,7 @@
         card("דירוג כאן לפי עוקבים", "#" + s.kan_rank + ' <span class="comp-muted" style="font-size:13px;">מתוך ' + s.ranked + '</span>', "במדידה האחרונה, לא דירוג היסטורי") +
       '</div>' +
       '<div class="table-scroll" id="comp-body">' + tableHtml(data) + '</div></div>' +
-      aboutSection();
+      aboutSection(data);
   }
 
   var main = document.getElementById("main");

@@ -50,6 +50,8 @@ PAGE_ID = os.environ.get("FACEBOOK_PAGE_ID") or "220634478361516"   # or, not a 
 DRY_RUN = os.environ.get("DRY_RUN", "").strip() not in ("", "0")
 
 
+# הזמנים כאן נאיביים בשעון ישראל. גיל שנמדד מעבר למעבר שעון קיץ/חורף שגוי
+# בשעה אחת; זה נבלע בחלונות של הדשבורד (±2 שעות ל"עכשיו", 20-30 שעות למעורבות).
 def history_rows(post_rows, pulled_at):
     """שורה לכל פוסט שנמשך: הספירה וגיל הפוסט ברגע המשיכה."""
     pulled = datetime.strptime(pulled_at, "%Y-%m-%d %H:%M")

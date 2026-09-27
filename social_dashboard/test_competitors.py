@@ -295,6 +295,21 @@ check("measured against the account's other posts at the same age",
       (n["items"][0]["ratio"], n["items"][0]["baseline"], n["items"][0]["n_base"]), (3.5, 100, 12))
 check("with its caption, link and account name",
       (n["items"][0]["caption"], n["items"][0]["url"], n["items"][0]["name"]), ("כותרת", "u", "AAA"))
+check("each item says how old the post is now, not at the last pull (5.5h + 55min)",
+      n["items"][0]["age_now_h"], 6.4)
+check("the section says when it was measured", n["run_at"], LAST)
+check("the thresholds travel with the payload",
+      n["thresholds"], {"min_ratio": C.NOW_MIN_RATIO, "age_tol_h": C.NOW_AGE_TOL_H,
+                        "min_base": C.NOW_MIN_BASE, "max_age_h": C.NOW_MAX_AGE_H})
+STALE_H = C.history_by_post([dict(r, pulled_at=r["pulled_at"].replace(LAST, "2026-09-27 01:05"))
+                             for r in HIST if r["post_id"] != "stale"])
+C.NOW_CALIBRATED = True
+try:
+    st = C.now_at_rivals(STALE_H, [], {}, NOW)
+finally:
+    C.NOW_CALIBRATED = False
+check("a last run older than NOW_STALE_H is not 'now'", (st["status"], st["run_at"], st["items"]),
+      ("stale", "2026-09-27 01:05", []))
 
 check("engagement at ~24h: one observation per post, within 20-30h",
       C.eng_at_24h(C.posts_by_account(H)["aaa"]), (400, 11))
@@ -310,6 +325,28 @@ check("without enough history it stays an estimate",
       [c["eng_basis"] for c in b3["competitors"] if c["username"] == "bbb"], ["estimate"])
 check("a post with history carries its count trend",
       [p["trend"] for p in aaa["posts"] if p["post_id"] == "a0"], [[100, 400]])
+check("and the age of each point, for the tooltip",
+      [p["trend_ages"] for p in aaa["posts"] if p["post_id"] == "a0"], [[5.0, 24.0]])
+check("the history loaded: no flag", b3["history_unavailable"], False)
+
+
+class HistoryDownStub(OrderStub):
+    """The history tab failed to load (and nothing was cached)."""
+
+    def source_status(self):
+        return {k: ("unavailable" if k == "competitor_history" and k in self.fetched else "ok")
+                for k in C.GAP_SOURCES + ("competitor_history",)}
+
+
+down = HistoryDownStub(dict(DATA, competitor_history=[]))
+b_down = C.build(down, 7, today=TODAY, now=NOW)
+check("build() touches the history tab before reading source_status",
+      "competitor_history" in down.fetched, True)
+check("a failed history read is not 'still collecting'", b_down["now"]["status"], "unavailable")
+check("and the payload says so", b_down["history_unavailable"], True)
+check("engagement falls back to the estimate",
+      {c["eng_basis"] for c in b_down["competitors"]}, {"estimate"})
+check("the gaps are unaffected", b_down["gaps"]["status"], "ok")
 check("the page reports the now-section state", b3["now"]["status"], "calibrating")
 
 print("-" * 62)

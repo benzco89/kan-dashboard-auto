@@ -60,6 +60,7 @@ NOW_MIN_RATIO = 2.0
 NOW_TOP = 10
 NOW_HISTORY_DAYS = 7
 NOW_CALIBRATED = False
+NOW_STALE_H = 6           # ריצה אחרונה ישנה מזה: "עכשיו" כבר אינו עכשיו
 ENG24_MIN_H, ENG24_MAX_H = 20, 30
 ENG24_MIN_POSTS = 5
 
@@ -387,7 +388,10 @@ def gaps_from_log(rows, after, now):
 # ---------- היסטוריה ----------
 
 def history_by_post(rows):
-    """{post_id: [(pulled_at, age_h, eng, username), ...]}, לפי זמן המשיכה."""
+    """{post_id: [(pulled_at, age_h, eng, username), ...]}, לפי זמן המשיכה.
+
+    pulled_at ו-age_h הם בשעון ישראל נאיבי: גיל שנמדד מעבר למעבר שעון
+    קיץ/חורף שגוי בשעה אחת, וזה נבלע בחלונות (±2 שעות, 20-30 שעות)."""
     out = {}
     for r in rows:
         pid, pulled = str(r.get("post_id", "")).strip(), str(r.get("pulled_at", "")).strip()
@@ -423,21 +427,32 @@ def baseline_at(by_user, user, pid, age):
     return base
 
 
+def now_thresholds():
+    """הספים כפי שהעמוד מציג אותם - מכאן, לא מספרים קשיחים בתבנית."""
+    return {"min_ratio": NOW_MIN_RATIO, "age_tol_h": NOW_AGE_TOL_H,
+            "min_base": NOW_MIN_BASE, "max_age_h": NOW_MAX_AGE_H}
+
+
 def now_at_rivals(hist, comp_posts, names, now):
     """פוסטים של מתחרים, בני פחות מיממה בריצה האחרונה, שרצים מהר מהרגיל של
     החשבון שלהם באותו גיל. ההשוואה היא לאותו חשבון ולאותו גיל: פוסט בן 3 שעות
     אינו בר השוואה לפוסט בן יום, ווואלה אינה N12."""
     if not hist:
-        return {"status": "building", "since": None, "ready_on": None, "items": []}
+        return {"status": "building", "since": None, "ready_on": None, "items": [],
+                "thresholds": now_thresholds()}
     since = min(obs[0][0] for obs in hist.values())[:10]
     ready_on = str(date.fromisoformat(since) + timedelta(days=NOW_HISTORY_DAYS))
-    base = {"since": since, "ready_on": ready_on, "items": []}
+    base = {"since": since, "ready_on": ready_on, "items": [], "thresholds": now_thresholds()}
     if str(now.date()) < ready_on:
         return dict(base, status="building")
     if not NOW_CALIBRATED:
         return dict(base, status="calibrating")
 
     latest = max(obs[-1][0] for obs in hist.values())
+    latest_dt = _ts(latest[:10], latest[11:16])
+    if latest_dt is None or latest_dt < now - timedelta(hours=NOW_STALE_H):
+        return dict(base, status="stale", run_at=latest)
+    since_run_h = (now - latest_dt).total_seconds() / 3600
     by_user = posts_by_account(hist)
     meta = {str(p.get("post_id", "")): p for p in comp_posts}
     items = []
@@ -452,7 +467,8 @@ def now_at_rivals(hist, comp_posts, names, now):
         p = meta.get(pid, {})
         items.append({"username": user, "name": names.get(user, user), "post_id": pid,
                       "caption": A._clean_caption(p.get("caption", ""))[:200],
-                      "url": p.get("permalink", ""), "age_h": age, "eng": eng,
+                      "url": p.get("permalink", ""), "age_h": age,
+                      "age_now_h": round(age + since_run_h, 1), "eng": eng,
                       "baseline": med, "ratio": round(eng / med, 1), "n_base": len(b)})
     items.sort(key=lambda x: -x["ratio"])
     return dict(base, status="ok", run_at=latest, items=items[:NOW_TOP])
@@ -496,11 +512,13 @@ def build(data, days, today=None, now=None):
     if now is None:
         now = datetime.now(A._TZ).replace(tzinfo=None) if A._TZ else datetime.now()
     if hasattr(data, "source_status"):
-        for k in GAP_SOURCES:
+        for k in GAP_SOURCES + ("competitor_history",):
             data.get(k)
         sources = data.source_status()
     else:
         sources = {}
+    # היסטוריה שלא נטענה אינה "עוד נאסף": בלעדיה אין "עכשיו" ואין מעורבות בגיל 24
+    history_unavailable = sources.get("competitor_history") == "unavailable"
 
     by_user = snapshots_by_user(data.get("competitors", []) or [])
     comp_posts = data.get("competitor_posts", []) or []
@@ -520,7 +538,9 @@ def build(data, days, today=None, now=None):
 
     def with_trend(v):
         obs = hist.get(v["post_id"], [])
-        return dict(v, trend=[o[2] for o in obs] if len(obs) > 1 else [])
+        if len(obs) < 2:
+            return dict(v, trend=[], trend_ages=[])
+        return dict(v, trend=[o[2] for o in obs], trend_ages=[o[1] for o in obs])
 
     posts_by_user = {}
     for p in comp_posts:
@@ -575,6 +595,9 @@ def build(data, days, today=None, now=None):
     kan_rank = next(i + 1 for i, c in enumerate(rows) if c["is_kan"])
     fresh = freshness(by_user, comp_posts)
     after = (fresh or {}).get("pulled_at", "")
+    now_part = ({"status": "unavailable", "since": None, "ready_on": None, "items": [],
+                 "thresholds": now_thresholds()}
+                if history_unavailable else now_at_rivals(hist, comp_posts, names, now))
     return {
         "range": days,
         "last_date": A._last_data_date(data),
@@ -585,7 +608,8 @@ def build(data, days, today=None, now=None):
         "summary": {"kan_rank": kan_rank, "ranked": len(rows),
                     "kan_growth": rows[kan_rank - 1]["growth"]},
         "arena": arena(comp_posts, ig, names, today),
-        "now": now_at_rivals(hist, comp_posts, names, now),
+        "now": now_part,
+        "history_unavailable": history_unavailable,
         "gaps": (gaps_from_log(data.get("gap_candidates", []) or [], after, now)
                  or coverage_gaps(data, now, sources)),
         "competitors": rows,
