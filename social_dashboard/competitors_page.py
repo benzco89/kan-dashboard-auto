@@ -21,6 +21,8 @@ import aggregate as A
 NEW_ACCOUNT_SLACK_DAYS = 1   # יום אחד בולע ריצה שנכשלה; יותר מזה = "חדש במעקב",
                              # אחרת חשבון בן 4 ימים נמדד מול 7 ימים של האחרים
 
+ARENA_TOP = 12
+
 
 # ---------- השוואה לאורך זמן ----------
 
@@ -81,3 +83,54 @@ def kan_entries(followers_rows):
             out.append((d, {"followers": v}))
     out.sort(key=lambda e: e[0])
     return out
+
+
+# ---------- פוסטים ----------
+
+def post_view(p, cap_col, username, name, is_kan):
+    likes, comments = A._int(p.get("likes")), A._int(p.get("comments"))
+    return {"username": username, "name": name, "is_kan": is_kan,
+            "date": str(A._parse_date(p.get("date")) or ""),
+            "time": str(p.get("time", ""))[:5],
+            "type": p.get("type", ""),
+            "caption": A._clean_caption(p.get(cap_col, ""))[:200],
+            "likes": likes, "comments": comments, "eng": likes + comments,
+            "url": p.get("permalink", "")}
+
+
+def arena(comp_posts, kan_posts, names, today):
+    """שלשום ואתמול, מכל הפוסטים בחלון — סינון לפני מיון וחיתוך."""
+    days = (today - timedelta(days=2), today - timedelta(days=1))
+    items = []
+    for p in comp_posts:
+        if A._parse_date(p.get("date")) in days:
+            u = str(p.get("username", "")).strip()
+            items.append(post_view(p, "caption", u, names.get(u, u), False))
+    for p in kan_posts:
+        if A._parse_date(p.get("date")) in days:
+            items.append(post_view(p, "caption", "kan_news", "כאן חדשות", True))
+    items.sort(key=lambda x: -x["eng"])
+    return {"dates": [str(days[0]), str(days[1])], "posts": items[:ARENA_TOP]}
+
+
+def feed_window(posts, days, today):
+    """הימים המלאים שהפיד השמור (עד 14 יום) מכסה בתוך הטווח: [first, אתמול]."""
+    last = today - timedelta(days=1)
+    dates = [d for d in (A._parse_date(p.get("date")) for p in posts) if d]
+    if not dates:
+        return None
+    first = max(last - timedelta(days=days - 1), min(dates))
+    if first > last:
+        return None
+    return {"first": first, "last": last, "days": (last - first).days + 1}
+
+
+def _in_window(p, fw):
+    d = A._parse_date(p.get("date"))
+    return d is not None and fw["first"] <= d <= fw["last"]
+
+
+def posts_per_day(posts, fw):
+    if not fw:
+        return None
+    return round(sum(1 for p in posts if _in_window(p, fw)) / fw["days"], 1)

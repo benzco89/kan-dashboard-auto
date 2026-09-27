@@ -78,6 +78,39 @@ check("and has no change", C.growth(by["ccc"], w7)["change"], None)
 check("an account without snapshots has no growth",
       C.growth([], w7)["status"], "none")
 
+print("\narena and posting rate\n" + "-" * 62)
+
+
+def post(user, d, t, likes, comments=0, caption="", pulled=None, pid=None):
+    return {"post_id": pid or f"{user}-{d}-{t}-{likes}", "username": user, "date": d, "time": t,
+            "type": "VIDEO", "caption": caption, "likes": likes, "comments": comments,
+            "permalink": f"https://instagram.com/p/{user}{d}{t}", "pulled_at": pulled or f"{d} 23:00"}
+
+
+# 16 strong posts ten days old and one weak post from yesterday: the weak one
+# must still reach the arena (it used to be cut by a per-account top-15 first)
+ARENA_POSTS = ([post("aaa", "2026-09-17", f"{h:02d}:00", 5000) for h in range(16)]
+               + [post("bbb", "2026-09-26", "10:00", 10)]
+               + [post("aaa", "2026-09-27", "07:00", 9000)])           # today: outside
+KAN_IG = [{"media_id": "k1", "date": "2026-09-25", "time": "09:00", "type": "Reel",
+           "caption": "כאן", "likes": 100, "comments": 5, "permalink": "https://instagram.com/p/k1"}]
+NAMES = {"aaa": "AAA", "bbb": "BBB"}
+
+a = C.arena(ARENA_POSTS, KAN_IG, NAMES, TODAY)
+check("arena window is the day before yesterday and yesterday", a["dates"], ["2026-09-25", "2026-09-26"])
+check("a weak fresh post still makes the arena", [p["username"] for p in a["posts"]], ["kan_news", "bbb"])
+check("Kan is marked", a["posts"][0]["is_kan"], True)
+check("today's posts are outside the window", any(p["date"] == "2026-09-27" for p in a["posts"]), False)
+
+FEED = [post("aaa", str(d), "10:00", 1) for d in days_between(date(2026, 9, 13), TODAY) for _ in (0, 1)]
+fw7 = C.feed_window(FEED, 7, TODAY)
+check("7d feed window: last seven full days", (str(fw7["first"]), str(fw7["last"]), fw7["days"]),
+      ("2026-09-20", "2026-09-26", 7))
+check("posts per day is an average over the window", C.posts_per_day(FEED, fw7), 2.0)
+fw30 = C.feed_window(FEED, 30, TODAY)
+check("30d is clipped to what the feed keeps", fw30["days"], 14)
+check("no feed, no rate", C.posts_per_day(FEED, C.feed_window([], 7, TODAY)), None)
+
 print("-" * 62)
 print(f"{PASS}/{PASS + FAIL} passed")
 sys.exit(1 if FAIL else 0)
