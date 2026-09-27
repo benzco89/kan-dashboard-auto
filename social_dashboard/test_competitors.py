@@ -158,6 +158,25 @@ check("and claims nothing", (u["missed"], u["exclusive"]), ([], []))
 s = C.coverage_gaps(GAP_DATA, NOW, {"facebook": "stale"})
 check("a stale source still shows gaps, flagged", (s["status"], len(s["missed"])), ("stale", 1))
 
+print("\nbuild\n" + "-" * 62)
+DATA = dict(GAP_DATA, competitors=SNAPS, followers=FOLLOWERS,
+            competitor_posts=GAP_POSTS + ARENA_POSTS, instagram=KAN_IG + GAP_DATA["instagram"])
+b7 = C.build(DATA, 7, today=TODAY, now=NOW)
+b90 = C.build(DATA, 90, today=TODAY, now=NOW)
+check("the arena does not move with the range", b7["arena"], b90["arena"])
+check("the gaps do not move with the range", b7["gaps"], b90["gaps"])
+kan7 = [c for c in b7["competitors"] if c["is_kan"]][0]
+check("Kan's row carries the range growth", kan7["growth"]["change"], 350)
+check("Kan's rank counts every account", (b7["summary"]["kan_rank"], b7["summary"]["ranked"]), (1, 4))
+check("the partial flag reaches the payload", b90["window"]["partial"], True)
+check("dates are strings in the payload", b90["window"]["base"], "2026-07-13")
+check("freshness counts today's snapshots", (b7["freshness"]["updated"], b7["freshness"]["known"]), (3, 3))
+check("a plain dict has no source status", b7["sources"], {})
+
+stale_snaps = SNAPS + [{"date": "2026-09-26", "username": "eee", "name": "E", "followers": 10}]
+f = C.freshness(C.snapshots_by_user(stale_snaps))
+check("an account that missed today's run is named", f["missing"], ["eee"])
+
 print("-" * 62)
 print(f"{PASS}/{PASS + FAIL} passed")
 sys.exit(1 if FAIL else 0)

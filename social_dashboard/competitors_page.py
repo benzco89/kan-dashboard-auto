@@ -36,6 +36,9 @@ OUR_SOURCES = (("instagram", "caption", "date"), ("facebook", "title", "date"),
                ("youtube", "title", "published_at"), ("twitter", "text", "date"),
                ("tiktok", "title", "date"))
 
+POSTS_PER_ACCOUNT = 15
+FEED_KEEP_DAYS = 14       # כמו POSTS_RETENTION_DAYS באספן
+
 
 # ---------- השוואה לאורך זמן ----------
 
@@ -260,3 +263,97 @@ def coverage_gaps(data, now, sources=None):
 
     return {"status": "stale" if stale else "ok", "failed": [], "stale": stale,
             "checked": len(cands), "missed": missed[:GAPS_TOP], "exclusive": exclusive[:GAPS_TOP]}
+
+
+# ---------- העמוד ----------
+
+def freshness(by_user):
+    if not by_user:
+        return None
+    last = max(e[-1][0] for e in by_user.values())
+    known = [u for u, e in by_user.items() if (last - e[-1][0]).days <= 7]
+    today_rows = [e[-1][1] for e in by_user.values() if e[-1][0] == last]
+    return {
+        "date": str(last),
+        "pulled_at": max((str(r.get("pulled_at", "")) for r in today_rows), default=""),
+        "updated": len(today_rows),
+        "known": len(known),
+        "missing": sorted(u for u in known if by_user[u][-1][0] != last),
+    }
+
+
+def _iso(v):
+    return v.isoformat() if hasattr(v, "isoformat") else v
+
+
+def build(data, days, today=None, now=None):
+    today = today or A.israel_today()
+    if now is None:
+        now = datetime.now(A._TZ).replace(tzinfo=None) if A._TZ else datetime.now()
+    sources = data.source_status() if hasattr(data, "source_status") else {}
+
+    by_user = snapshots_by_user(data.get("competitors", []) or [])
+    comp_posts = data.get("competitor_posts", []) or []
+    ig = data.get("instagram", []) or []
+    followers = data.get("followers", []) or []
+    win = comparison_window(by_user, days)
+    fw = feed_window(comp_posts, days, today)
+
+    posts_by_user = {}
+    for p in comp_posts:
+        posts_by_user.setdefault(str(p.get("username", "")).strip(), []).append(p)
+
+    names, rows = {}, []
+    for u, entries in by_user.items():
+        latest = entries[-1][1]
+        names[u] = latest.get("name") or u
+        own = posts_by_user.get(u, [])
+        rows.append({
+            "username": u, "name": names[u], "is_kan": False,
+            "followers": A._int(latest.get("followers")),
+            "as_of": str(entries[-1][0]),
+            "change_1d": A._int(latest.get("followers_change")),
+            "growth": growth(entries, win),
+            "posts_per_day": posts_per_day(own, fw),
+            "eng_per_1k": round(A._num(latest.get("eng_per_1k")), 2),
+            "spark": [A._int(r.get("followers")) for d, r in entries if win and d >= win["base"]],
+            "posts": sorted((post_view(p, "caption", u, names[u], False) for p in own),
+                            key=lambda x: -x["eng"])[:POSTS_PER_ACCOUNT],
+        })
+
+    # כאן — מהנתונים המלאים שלנו, באותם תאריכים בדיוק
+    kan = kan_entries(followers)
+    kan_followers = kan[-1][1]["followers"] if kan else 0
+    recent = sorted((p for p in ig if A._parse_date(p.get("date"))),
+                    key=lambda p: (str(p.get("date")), str(p.get("time", ""))), reverse=True)[:10]
+    avg = sum(_eng(p) for p in recent) / len(recent) if recent else 0
+    keep_from = today - timedelta(days=FEED_KEEP_DAYS)
+    rows.append({
+        "username": "kan_news", "name": "כאן חדשות", "is_kan": True,
+        "followers": kan_followers,
+        "as_of": str(kan[-1][0]) if kan else None,
+        "change_1d": A._int(followers[-1].get("ig_followers_change")) if followers else 0,
+        "growth": growth(kan, win),
+        "posts_per_day": posts_per_day(ig, fw),
+        "eng_per_1k": round(avg / kan_followers * 1000, 2) if kan_followers else 0,
+        "spark": [r["followers"] for d, r in kan if win and d >= win["base"]],
+        "posts": sorted((post_view(p, "caption", "kan_news", "כאן חדשות", True) for p in ig
+                         if (A._parse_date(p.get("date")) or keep_from) > keep_from),
+                        key=lambda x: -x["eng"])[:POSTS_PER_ACCOUNT],
+    })
+
+    rows.sort(key=lambda c: -c["followers"])
+    kan_rank = next(i + 1 for i, c in enumerate(rows) if c["is_kan"])
+    return {
+        "range": days,
+        "last_date": A._last_data_date(data),
+        "window": {k: _iso(v) for k, v in win.items()} if win else None,
+        "feed": {k: _iso(v) for k, v in fw.items()} if fw else None,
+        "freshness": freshness(by_user),
+        "sources": sources,
+        "summary": {"kan_rank": kan_rank, "ranked": len(rows),
+                    "kan_growth": rows[kan_rank - 1]["growth"]},
+        "arena": arena(comp_posts, ig, names, today),
+        "gaps": coverage_gaps(data, now, sources),
+        "competitors": rows,
+    }
