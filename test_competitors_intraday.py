@@ -119,6 +119,18 @@ check("save_posts is never called when the candidates append_log raises",
       "save_posts" in calls2, False)
 check("main() propagates the failure instead of swallowing it", raised2 is not None, True)
 
+print("\nKan in the history\n" + "-" * 62)
+kh = CI.kan_history_rows([
+    {"id": "k1", "timestamp": "2026-09-27T06:30:00+0000", "like_count": 10, "comments_count": 2},
+    {"id": "k2", "timestamp": "2026-09-27T07:00:00+0000"},
+    {"timestamp": "2026-09-27T07:00:00+0000", "like_count": 5}], "2026-09-27 14:00")
+check("Kan's IG counts enter the history as kan_news, dated in Israel",
+      {k: kh[0][k] for k in ("post_id", "username", "posted_at", "age_h", "likes", "comments")},
+      {"post_id": "k1", "username": "kan_news", "posted_at": "2026-09-27 09:30", "age_h": 4.5,
+       "likes": 10, "comments": 2})
+check("a hidden like count reads as 0", (kh[1]["likes"], kh[1]["comments"]), (0, 0))
+check("a post without an id is skipped", len(kh), 2)
+
 print("\nenvironment\n" + "-" * 62)
 # the FACEBOOK_PAGE_ID secret exists but is empty; the workflow still sets the
 # variable, and a get() default never fires for "" (first live dry run, 27.9)
