@@ -111,6 +111,53 @@ fw30 = C.feed_window(FEED, 30, TODAY)
 check("30d is clipped to what the feed keeps", fw30["days"], 14)
 check("no feed, no rate", C.posts_per_day(FEED, C.feed_window([], 7, TODAY)), None)
 
+print("\ncoverage gaps\n" + "-" * 62)
+
+MATURE = ([post("aaa", "2026-09-20", "10:00", 200, pulled="2026-09-24 08:40", pid=f"am{i}") for i in range(10)]
+          + [post("bbb", "2026-09-20", "10:00", 100, pulled="2026-09-24 08:40", pid=f"bm{i}") for i in range(10)])
+YOUNG = [post("aaa", "2026-09-27", "06:00", 10, pulled="2026-09-27 08:40", pid="ay")]
+STORY = "הפגנה גדולה בכיכר הבימה נגד הממשלה אלפי מפגינים הגיעו"
+EXCL = "ראיון בלעדי הזמרת המפורסמת מדברת על הקריירה והמשפחה שלה"
+QUAKE = "רעידת אדמה חזקה הורגשה בצפון הארץ בלילה ללא נפגעים"
+GAP_POSTS = MATURE + YOUNG + [
+    post("aaa", "2026-09-26", "09:00", 2000, caption=STORY, pid="x1"),
+    post("bbb", "2026-09-26", "11:00", 900, caption=STORY + " היום", pid="x2"),
+    post("aaa", "2026-09-26", "13:00", 1500, caption=EXCL, pid="y1"),
+    post("aaa", "2026-09-26", "18:00", 1200, caption=EXCL + " בערב", pid="y2"),
+    post("aaa", "2026-09-26", "20:00", 3000, caption=QUAKE, pid="z1"),
+    post("aaa", "2026-09-23", "10:00", 5000, caption="סיפור ישן מאוד שכבר לא בחלון הזמן", pid="old"),
+    post("ddd", "2026-09-26", "10:00", 400, caption="חשבון בלי פוסטים בשלים מפרסם כתבה על מזג האוויר", pid="d1"),
+]
+GAP_DATA = {"competitor_posts": GAP_POSTS,
+            "instagram": [{"date": "2026-09-26", "caption": "רעידת אדמה חזקה הורגשה בצפון הארץ הלילה תושבים דיווחו"}],
+            "facebook": [], "youtube": [], "twitter": [], "tiktok": []}
+
+med = C.account_medians(GAP_POSTS)
+check("median comes from mature posts only", med["aaa"], 200)
+check("an account with no mature post has no median", "ddd" in med, False)
+
+g = C.coverage_gaps(GAP_DATA, NOW)
+check("status ok when every source loaded", g["status"], "ok")
+check("a story at two rivals is 'missed'", [x["n_outlets"] for x in g["missed"]], [2])
+check("its explanation is against the lead's own median", g["missed"][0]["lead"]["ratio"], 10.0)
+excl = {x["caption"][:10]: x for x in g["exclusive"]}
+check("one rival twice is still one outlet", excl[EXCL[:10]]["n_outlets"], 1)
+check("and keeps both links", len(excl[EXCL[:10]]["posts"]), 2)
+check("a story Kan posted is not a gap",
+      any(QUAKE[:10] in x["caption"] for x in g["missed"] + g["exclusive"]), False)
+check("posts older than 72h are out",
+      any("ישן" in x["caption"] for x in g["missed"] + g["exclusive"]), False)
+zero = [x for x in g["exclusive"] if x["lead"]["username"] == "ddd"][0]
+check("no median: no ratio", zero["lead"]["ratio"], None)
+check("no median: the floor is the threshold", zero["lead"]["threshold"], 300)
+
+u = C.coverage_gaps(GAP_DATA, NOW, {"instagram": "unavailable"})
+check("a source that did not load: unavailable", u["status"], "unavailable")
+check("and names it", u["failed"], ["instagram"])
+check("and claims nothing", (u["missed"], u["exclusive"]), ([], []))
+s = C.coverage_gaps(GAP_DATA, NOW, {"facebook": "stale"})
+check("a stale source still shows gaps, flagged", (s["status"], len(s["missed"])), ("stale", 1))
+
 print("-" * 62)
 print(f"{PASS}/{PASS + FAIL} passed")
 sys.exit(1 if FAIL else 0)

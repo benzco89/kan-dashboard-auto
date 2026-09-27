@@ -23,6 +23,19 @@ NEW_ACCOUNT_SLACK_DAYS = 1   # יום אחד בולע ריצה שנכשלה; י�
 
 ARENA_TOP = 12
 
+GAPS_TOP = 10
+GAP_WINDOW_H = 72         # פוסט מתחרה נבדק 72 שעות מפרסומו
+OURS_WINDOW_H = 96        # מול כל מה שפרסמנו ב־96 השעות האחרונות
+MATURE_H = 48             # חציון החשבון רק מפוסטים שהבשילו
+GAP_FLOOR = 300
+GAP_MULT = 3
+# בלי כל אחד מאלה, כל פוסט מתחרה נראה כפער
+GAP_SOURCES = ("competitor_posts", "instagram", "facebook", "youtube", "twitter", "tiktok")
+# (sheet key, caption column, date column)
+OUR_SOURCES = (("instagram", "caption", "date"), ("facebook", "title", "date"),
+               ("youtube", "title", "published_at"), ("twitter", "text", "date"),
+               ("tiktok", "title", "date"))
+
 
 # ---------- השוואה לאורך זמן ----------
 
@@ -134,3 +147,116 @@ def posts_per_day(posts, fw):
     if not fw:
         return None
     return round(sum(1 for p in posts if _in_window(p, fw)) / fw["days"], 1)
+
+
+# ---------- פערים ----------
+
+def _ts(date_s, time_s=""):
+    d = str(date_s or "").strip()[:10]
+    t = str(time_s or "").strip()[:5] or "00:00"
+    try:
+        return datetime.strptime(d + " " + t, "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+
+
+def _eng(p):
+    return A._int(p.get("likes")) + A._int(p.get("comments"))
+
+
+def account_medians(comp_posts):
+    """חציון לייקים+תגובות לחשבון, רק מפוסטים שהיו בני 48 שעות ומעלה במשיכה
+    האחרונה שלהם. פוסט צעיר מוריד את החציון ומנפח כל מכפיל."""
+    per = {}
+    for p in comp_posts:
+        posted = _ts(p.get("date"), p.get("time"))
+        pulled_s = str(p.get("pulled_at", ""))
+        pulled = _ts(pulled_s[:10], pulled_s[11:16])
+        if posted and pulled and pulled - posted >= timedelta(hours=MATURE_H):
+            per.setdefault(str(p.get("username", "")).strip(), []).append(_eng(p))
+    return {u: A._median(v) for u, v in per.items()}
+
+
+def our_token_sets(data, now):
+    since = (now - timedelta(hours=OURS_WINDOW_H)).date()
+    out = []
+    for key, cap_col, date_col in OUR_SOURCES:
+        for p in data.get(key, []) or []:
+            d = A._parse_date(p.get(date_col))
+            if d and d >= since:
+                toks = A._viral_tokens(p.get(cap_col, ""))
+                if len(toks) >= A._MIN_TOKENS:
+                    out.append(toks)
+    return out
+
+
+def _covered(toks, ours):
+    # 0.3 ו־4 מילים, לא 0.6: מתחרה מנסח את אותו סיפור במילים שלו
+    # (גלית/תאילנד חפפה 0.35 בין N12 לכאן וסומנה בטעות כפער ב־0.6)
+    for o in ours:
+        inter = len(toks & o)
+        if inter >= 4 and inter / min(len(toks), len(o)) >= 0.3:
+            return True
+    return False
+
+
+def coverage_gaps(data, now, sources=None):
+    sources = sources or {}
+    unavailable = [k for k in GAP_SOURCES if sources.get(k, "ok") == "unavailable"]
+    stale = [k for k in GAP_SOURCES if sources.get(k, "ok") == "stale"]
+    if unavailable:
+        return {"status": "unavailable", "failed": unavailable, "stale": stale,
+                "checked": 0, "missed": [], "exclusive": []}
+
+    comp = data.get("competitor_posts", []) or []
+    med = account_medians(comp)
+    ours = our_token_sets(data, now)
+    since = now - timedelta(hours=GAP_WINDOW_H)
+
+    cands = []
+    for p in comp:
+        posted = _ts(p.get("date"), p.get("time"))
+        u = str(p.get("username", "")).strip()
+        if not posted or posted < since or not u:
+            continue
+        eng, m = _eng(p), med.get(u, 0)
+        threshold = max(GAP_FLOOR, GAP_MULT * m)
+        if eng < threshold:
+            continue
+        toks = A._viral_tokens(p.get("caption", ""))
+        if len(toks) < A._MIN_TOKENS or _covered(toks, ours):
+            continue
+        cands.append({"username": u, "posted": posted, "eng": eng, "median": m,
+                      "ratio": round(eng / m, 1) if m else None, "threshold": threshold,
+                      "caption": A._clean_caption(p.get("caption", ""))[:180],
+                      "url": p.get("permalink", ""), "toks": toks})
+
+    cands.sort(key=lambda c: -c["eng"])
+    clusters = []
+    for c in cands:
+        home = next((g for g in clusters
+                     if len(c["toks"] & g["toks"]) / min(len(c["toks"]), len(g["toks"]))
+                     >= A._MATCH_CONTAINMENT), None)
+        if home:
+            home["posts"].append(c)
+        else:
+            clusters.append({"toks": c["toks"], "posts": [c]})
+
+    missed, exclusive = [], []
+    for g in clusters:
+        lead = g["posts"][0]
+        users = list(dict.fromkeys(c["username"] for c in g["posts"]))
+        item = {
+            "caption": lead["caption"],
+            "date": lead["posted"].strftime("%Y-%m-%d"),
+            "time": lead["posted"].strftime("%H:%M"),
+            "n_outlets": len(users),
+            "total_eng": sum(c["eng"] for c in g["posts"]),
+            "lead": {k: lead[k] for k in ("username", "eng", "median", "ratio", "threshold")},
+            "posts": [{"username": c["username"], "eng": c["eng"], "url": c["url"]}
+                      for c in g["posts"]],
+        }
+        (missed if len(users) >= 2 else exclusive).append(item)
+
+    return {"status": "stale" if stale else "ok", "failed": [], "stale": stale,
+            "checked": len(cands), "missed": missed[:GAPS_TOP], "exclusive": exclusive[:GAPS_TOP]}
