@@ -119,9 +119,7 @@ check("save_posts is never called when the candidates append_log raises",
       "save_posts" in calls2, False)
 check("main() propagates the failure instead of swallowing it", raised2 is not None, True)
 
-print("
-environment
-" + "-" * 62)
+print("\nenvironment\n" + "-" * 62)
 # the FACEBOOK_PAGE_ID secret exists but is empty; the workflow still sets the
 # variable, and a get() default never fires for "" (first live dry run, 27.9)
 import importlib
