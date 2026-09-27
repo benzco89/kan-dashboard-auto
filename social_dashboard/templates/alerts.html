@@ -47,6 +47,7 @@
 <header id="header"></header>
 <main id="main" class="main"></main>
 <script src="/static/app.js"></script>
+<script src="/static/glossary.js"></script>
 <script>
 (function () {
   var PIC = {
@@ -158,7 +159,7 @@
     var PLAT_HE = { instagram: "📸 אינסטגרם", facebook: "📘 פייסבוק", youtube: "▶️ יוטיוב" };
     var hotHtml = "";
     if ((data.hot_history || []).length) {
-      hotHtml = '<div class="section-label" style="margin-top:18px;"><span>🔥 מה התפוצץ לאחרונה</span><span></span></div>' +
+      hotHtml = '<div class="section-label" style="margin-top:18px;"><span>🔥 מה התפוצץ לאחרונה' + KS.term("hot") + '</span><span></span></div>' +
         '<div class="panel mb-m"><div class="panel-sub" style="margin-bottom:10px;">התראות "מתפוצץ עכשיו" שנשלחו לטלגרם · ' + rl + '</div>' +
         data.hot_history.map(function (h) {
           var inner = '<div class="hot-row-head"><span>' + (PLAT_HE[h.platform] || h.platform) + '</span>' +

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>ארכיון וידאו — כלי פנימי</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; padding:2.5rem 1.25rem; font:16px/1.7 system-ui, "Segoe UI", Arial, sans-serif;
+         max-width:44rem; margin-inline:auto; }
+  h1 { font-size:1.5rem; margin:0 0 .35rem; }
+  .sub { opacity:.7; margin:0 0 2rem; }
+  h2 { font-size:1.05rem; margin:2rem 0 .5rem; }
+  ul { padding-inline-start:1.2rem; }
+  footer { margin-top:2.5rem; padding-top:1rem; border-top:1px solid rgba(128,128,128,.3);
+           font-size:.9rem; opacity:.75; }
+  a { color:inherit; }
+</style>
+</head>
+<body>
+<h1>ארכיון וידאו</h1>
+<p class="sub">כלי פנימי לשמירה וסיווג של סרטונים שכבר פורסמו ברשתות החברתיות.</p>
+
+<h2>מה הכלי עושה</h2>
+<p>
+  הכלי פועל אוטומטית כל כמה שעות. הוא קורא, דרך ממשקי ה-API הרשמיים של הרשתות,
+  את רשימת הסרטונים שפורסמו לאחרונה בחשבונות שהמפעיל מנהל, שומר עותק של כל
+  סרטון בתיקיית Google Drive של המפעיל, ורושם שורה בגיליון עם התאריך, הקישור
+  לפרסום המקורי, וסיווג נושאי.
+</p>
+
+<h2>למי הוא מיועד</h2>
+<p>
+  זהו כלי פרטי בשימוש מפעילו בלבד. אין בו הרשמה, אין בו משתמשים, ואין ממשק
+  ציבורי. הדף הזה קיים כדי לעמוד בדרישת Google להצגת דף בית ומדיניות פרטיות
+  עבור אפליקציה המשתמשת ב-Google Drive API.
+</p>
+
+<h2>הרשאות שהכלי מבקש</h2>
+<ul>
+  <li><code>drive.file</code> — גישה אך ורק לקבצים ולתיקיות שהכלי עצמו יצר.
+      הוא אינו יכול לקרוא, לשנות או למחוק שום דבר אחר ב-Drive.</li>
+</ul>
+
+<footer>
+  <p>
+    כלי פרטי המופעל על ידי בן כהן. אינו מוצר רשמי ואינו מייצג אף ארגון.
+    <br>
+    <a href="/archive/privacy/">מדיניות פרטיות</a>
+  </p>
+</footer>
+</body>
+</html>

@@ -10,6 +10,7 @@
 <header id="header"></header>
 <main id="main" class="main"></main>
 <script src="/static/app.js"></script>
+<script src="/static/glossary.js"></script>
 <script>
 (function () {
   var TYPE_COLOR = { Reel: "var(--pf)", Photo: "var(--amber)", Carousel: "var(--purp)" };
@@ -34,9 +35,9 @@
     var k = data.kpis;
     var kpis = [
       kpi({ label: "עוקבים", value: data.followers.value, weekly: data.followers.weekly_change, growth: data.followers.growth_pct, icon: "users" }),
-      kpi({ label: "צפיות", value: k.views.value, prev: k.views.prev, icon: "eye" }),
-      kpi({ label: "שמירות", value: k.saved.value, prev: k.saved.prev, icon: "save" }),
-      kpi({ label: "שיתופים", value: k.shares.value, prev: k.shares.prev, icon: "share" })
+      kpi({ label: "צפיות" + KS.term("views"), value: k.views.value, prev: k.views.prev, icon: "eye" }),
+      kpi({ label: "שמירות" + KS.term("saves"), value: k.saved.value, prev: k.saved.prev, icon: "save" }),
+      kpi({ label: "שיתופים" + KS.term("shares"), value: k.shares.value, prev: k.shares.prev, icon: "share" })
     ].join("");
 
     // when Meta stops returning reach (happened with the v25 metric removal),
@@ -125,14 +126,14 @@
       var inter = KS.kmSection("אינטראקציות") + '<div class="km-grid">' +
         KS.kmCell("לייקים", KS.fmtFull(p.likes)) +
         KS.kmCell("תגובות", KS.fmtFull(p.comments)) +
-        KS.kmCell("שמירות", KS.fmtFull(p.saved)) +
+        KS.kmCell("שמירות", KS.fmtFull(p.saved), null, "saves") +
         KS.kmCell("שיתופים", KS.fmtFull(p.shares)) +
         (p.reposts ? KS.kmCell("שיתופים חוזרים", KS.fmtFull(p.reposts)) : "") +
         KS.kmCell("סה״כ אינטראקציות", KS.fmtFull(p.total_interactions)) + '</div>';
       var rates = KS.kmSection("שיעורים") + '<div class="km-grid">' +
         KS.kmCell("שיעור שמירה", p.save_rate.toFixed(2) + "%") +
         KS.kmCell("שיעור שיתוף", p.share_rate.toFixed(2) + "%") +
-        (p.skip_rate ? KS.kmCell("Skip% (הוק)", p.skip_rate.toFixed(1) + "%") : "") +
+        (p.skip_rate ? KS.kmCell("Skip% (הוק)", p.skip_rate.toFixed(1) + "%", null, "skip_rate") : "") +
         (p.avg_watch ? KS.kmCell("צפייה ממוצעת", p.avg_watch.toFixed(1), "שנ׳") : "") + '</div>';
       var conv = (p.profile_visits || p.follows) ? (KS.kmSection("המרה") + '<div class="km-grid">' +
         KS.kmCell("ביקורי פרופיל", KS.fmtFull(p.profile_visits)) +

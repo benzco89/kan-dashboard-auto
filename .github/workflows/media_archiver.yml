@@ -1,0 +1,92 @@
+name: Media Archiver
+
+on:
+  workflow_dispatch:      # הטריגר: טיימר על ה-VPS (kan-media-archiver.timer), כמו
+                          # הרחרחן. בכוונה בלי schedule: - ה-cron של GitHub מפגר בשעות.
+    inputs:
+      since_days:
+        description: 'לחזור כמה ימים אחורה במקום חלון ברירת המחדל (24 שעות)'
+        required: false
+        default: ''
+      reconcile:
+        description: 'מעבר ההצלבה במקום ארכוב (כל ערך = דלוק)'
+        required: false
+        default: ''
+      dry_run:
+        description: 'גילוי וסינון בלבד, בלי הורדה או כתיבה (כל ערך = דלוק)'
+        required: false
+        default: ''
+      prune:
+        description: 'גריעת קבצים שעברו את חלון השמירה (כל ערך = דלוק)'
+        required: false
+        default: ''
+      check:
+        description: 'אימות אישורי הדרייב בלבד, ויציאה (כל ערך = דלוק)'
+        required: false
+        default: ''
+      audit:
+        description: 'הצלבת האינדקס מול הדרייב, קריאה בלבד (כל ערך = דלוק)'
+        required: false
+        default: ''
+
+# ריצות מסתדרות בתור ולא רצות במקביל. שני טעמים, ושניהם אמיתיים: שתי ריצות
+# ארכוב שקוראות את אותו אינדקס היו מורידות את אותו פריט פעמיים ומשאירות קובץ
+# כפול בדרייב, ושורה חדשה נכנסת עכשיו בראש הגיליון - כלומר מזיזה שורות -
+# בעוד ההצלבה והגריעה כותבות לפי מספרי שורות שקראו קודם. cancel-in-progress
+# כבוי בכוונה: ריצה שכבר מורידה קבצים לא תיקטע באמצע.
+concurrency:
+  group: media-archiver
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    # ללא תקרה, הריצה חשופה לתקוע על סטרימינג עשרות מגהבייט לפריט (בניגוד
+    # לרחרחן, שאין לו הורדות מדיה בכלל) - תקוע כאן משמע ריצה שאף פעם לא מסיימת.
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # ffprobe is not on the runner image (probe_fb_reel.yml found out the
+      # hard way). Without it every row simply lacks width/height/kbps and
+      # reconcile marks no preferred copy - the archive itself is unaffected.
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Run Media Archiver
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+          GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+          SINCE_DAYS: ${{ inputs.since_days }}
+          RECONCILE: ${{ inputs.reconcile }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          PRUNE: ${{ inputs.prune }}
+          CHECK: ${{ inputs.check }}
+          AUDIT: ${{ inputs.audit }}
+        run: |
+          # ה-inputs מגיעים דרך env ולא ישירות בתוך run: כי ביטוי GitHub Actions
+          # מוחלף במחרוזת בתוך הסקריפט לפני שהשל מפרש אותו - ערך מה-dispatch
+          # יכול להפוך לפקודת של. env נקבע ע"י הראנר, לא בהחלפת מחרוזות.
+          ARGS=()
+          if [ -n "$SINCE_DAYS" ]; then ARGS+=(--since-days "$SINCE_DAYS"); fi
+          if [ -n "$RECONCILE" ]; then ARGS+=(--reconcile); fi
+          if [ -n "$DRY_RUN" ]; then ARGS+=(--dry-run); fi
+          if [ -n "$PRUNE" ]; then ARGS+=(--prune); fi
+          if [ -n "$CHECK" ]; then ARGS+=(--check); fi
+          if [ -n "$AUDIT" ]; then ARGS+=(--audit); fi
+          python media_archiver.py "${ARGS[@]}"

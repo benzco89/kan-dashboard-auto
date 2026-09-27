@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>כאן חדשות · סושיאל — מילון המדדים</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .gl-intro{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px 20px; margin-bottom:18px; }
+  .gl-intro p{ margin:0; font-size:14.5px; line-height:1.7; color:var(--body); }
+  .gl-intro p + p{ margin-top:10px; }
+
+  .gl-jump{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:22px; }
+  .gl-jump a{ font-size:12.5px; font-weight:700; text-decoration:none; color:var(--muted);
+    border:1px solid var(--line); background:var(--console); border-radius:999px; padding:6px 13px; transition:all .12s; }
+  .gl-jump a:hover{ color:var(--text); border-color:var(--line2); }
+
+  .gl-group{ margin-bottom:26px; }
+  .gl-list{ display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:10px; }
+
+  .gl-card{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:15px 17px 14px; scroll-margin-top:80px; }
+  .gl-card:target{ border-color:var(--orange); box-shadow:0 0 0 1px var(--orange); }
+  .gl-head{ display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; margin-bottom:7px; }
+  .gl-name{ font-size:16px; font-weight:700; color:var(--text); }
+  .gl-col{ font-family:ui-monospace,monospace; font-size:10.5px; color:var(--faint); }
+  .gl-short{ font-size:13.5px; font-weight:600; color:var(--body); line-height:1.55; margin-bottom:8px; }
+  .gl-body{ font-size:13px; color:var(--muted); line-height:1.7; }
+  .gl-body code{ font-family:ui-monospace,monospace; font-size:11.5px; background:var(--chip); border-radius:4px; padding:1px 5px; }
+  /* Isolate the Latin run so it cannot reorder the Hebrew punctuation around it.
+     The mirrored brackets a Hebrew reader sees around an inline code span are
+     correct bidi, not a bug — this only stops a span from dragging a neighbour. */
+  .gl-body code, .gl-warn code{ direction:ltr; unicode-bidi:isolate; }
+  .gl-warn{ display:flex; gap:8px; margin-top:11px; padding:10px 12px; border-radius:6px;
+    background:var(--orange-bg); border:1px solid transparent; font-size:12.5px; line-height:1.65; color:var(--body); }
+  .gl-warn b{ color:var(--text); }
+  .gl-warn code{ font-family:ui-monospace,monospace; font-size:11px; }
+  .gl-warn .ico{ flex:none; }
+</style>
+</head>
+<body>
+<header id="header"></header>
+<main id="main" class="main"></main>
+<script src="/static/app.js"></script>
+<script src="/static/glossary.js"></script>
+<script>
+(function () {
+  var WARN = '<svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>';
+
+  function card(t) {
+    return '<div class="gl-card" id="term-' + t.key + '">' +
+      '<div class="gl-head"><span class="gl-name">' + KS.esc(t.label) + '</span>' +
+      (t.col && t.col !== "—" ? '<span class="gl-col">' + KS.esc(t.col) + '</span>' : "") + '</div>' +
+      '<div class="gl-short">' + t.short + '</div>' +
+      '<div class="gl-body">' + t.body + '</div>' +
+      (t.warn ? '<div class="gl-warn">' + WARN + '<div>' + t.warn + '</div></div>' : "") +
+      '</div>';
+  }
+
+  function render() {
+    var terms = window.KS_TERMS || [];
+    // groups in first-appearance order — the file's order is the reading order
+    var order = [], byGroup = {};
+    terms.forEach(function (t) {
+      if (!byGroup[t.group]) { byGroup[t.group] = []; order.push(t.group); }
+      byGroup[t.group].push(t);
+    });
+
+    var jump = order.map(function (g) {
+      return '<a href="#g-' + encodeURIComponent(g) + '">' + KS.esc(g) + "</a>";
+    }).join("");
+
+    var groups = order.map(function (g) {
+      return '<section class="gl-group" id="g-' + encodeURIComponent(g) + '">' +
+        '<div class="section-label"><span>' + KS.esc(g) + "</span><span></span></div>" +
+        '<div class="gl-list">' + byGroup[g].map(card).join("") + "</div></section>";
+    }).join("");
+
+    document.getElementById("main").innerHTML =
+      '<div class="page-head"><div><h1>מילון המדדים</h1>' +
+      '<p>מה כל מספר בדשבורד אומר — ומתי הוא לא אומר את מה שנדמה</p></div></div>' +
+
+      '<div class="gl-intro">' +
+      '<p>המספרים כאן נאספים אוטומטית מפייסבוק, אינסטגרם, יוטיוב, טיקטוק ו-X, פעם ביום בבוקר. ' +
+      'רובם מובנים מאליהם. חלקם לא — ודווקא אלה נוטים להופיע במצגות ובדוחות.</p>' +
+      '<p>המסגרות הכתומות הן המקומות שבהם המספר מטעה אם קוראים אותו כפשוטו. ' +
+      'כל אזהרה כאן נמדדה על הנתונים שלנו, לא שוערה.</p>' +
+      "</div>" +
+
+      '<div class="gl-jump">' + jump + "</div>" + groups;
+
+    // Arriving from a ?-chip on another page. The browser's own hash jump already
+    // happened — before this script wrote the cards — so it found nothing and we
+    // repeat it here. "start" (not "center") because a card near the top would
+    // otherwise scroll the document past its own beginning.
+    if (location.hash) {
+      var el = document.querySelector(location.hash);
+      if (el) el.scrollIntoView({ block: "start" });
+    }
+  }
+
+  KanSocial.initStatic("glossary", render);
+})();
+</script>
+</body>
+</html>

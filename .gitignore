@@ -27,6 +27,7 @@ Thumbs.db
 *.key
 credentials.json
 service-account.json
+client_secret*.json
 token.json
 .env
 
@@ -65,3 +66,6 @@ mintty.*.png
 *.xlsx
 *.xls
 .verify/
+
+# צילומי שקפים — נוצרים מחדש ב-shoot.py
+analysis/presentation/shots/

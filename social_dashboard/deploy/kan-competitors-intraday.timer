@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh competitor posts every 3h during the day (morning is the 08:30 daily run)
+
+[Timer]
+# five minutes after the sniffer, so the two do not hit the Graph API in the same second
+OnCalendar=*-*-* 11,14,17,20,23:05:00 Asia/Jerusalem
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

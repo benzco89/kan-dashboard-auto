@@ -1,0 +1,66 @@
+name: Competitors Intraday
+
+on:
+  workflow_dispatch:      # הטריגר: טיימר ב-VPS (kan-competitors-intraday.timer), כמו הסניפר.
+                          # בכוונה בלי schedule: - ה-cron של GitHub מפגר בשעות.
+    inputs:
+      dry_run:
+        description: 'מצב בדיקה: קורא, מחשב ומדפיס - בלי לכתוב לגיליון'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: competitors-intraday
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      # הריצה היומית וגם test_competitors.yml כותבים את "פוסטים מתחרים" באותה
+      # שיטה (קריאה-מיזוג-כתיבה); שתי ריצות במקביל = אחת דורסת את השנייה.
+      # אז מחכים לתור הבא.
+      - name: Skip while the daily run is in flight
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          busy_daily=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow daily_update.yml --limit 5 \
+            --json status --jq '[.[] | select(.status != "completed")] | length')
+          busy_test=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test_competitors.yml --limit 5 \
+            --json status --jq '[.[] | select(.status != "completed")] | length')
+          busy=$((busy_daily + busy_test))
+          echo "daily runs in flight: $busy"
+          if [ "$busy" -gt 0 ]; then
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+            echo "::notice::daily run in flight - intraday refresh skipped"
+          else
+            echo "skip=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout code
+        if: steps.guard.outputs.skip == '0'
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        if: steps.guard.outputs.skip == '0'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        if: steps.guard.outputs.skip == '0'
+        run: pip install -r requirements.txt
+
+      - name: Refresh competitor posts and gap candidates
+        if: steps.guard.outputs.skip == '0'
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: python competitors_intraday.py

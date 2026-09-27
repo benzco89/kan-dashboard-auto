@@ -10,6 +10,7 @@
 <header id="header"></header>
 <main id="main" class="main"></main>
 <script src="/static/app.js"></script>
+<script src="/static/glossary.js"></script>
 <script>
 (function () {
   var TYPE_COLOR = { Video: "var(--pf)", Photo: "var(--purp)" };
@@ -41,9 +42,9 @@
     var k = data.kpis;
     var kpis = [
       kpi({ label: "עוקבים", value: data.followers.value, weekly: data.followers.weekly_change, growth: data.followers.growth_pct, icon: "users" }),
-      kpi({ label: "צפיות", value: k.views.value, prev: k.views.prev, icon: "eye" }),
+      kpi({ label: "צפיות" + KS.term("views"), value: k.views.value, prev: k.views.prev, icon: "eye" }),
       kpi({ label: "לייקים", value: k.likes.value, prev: k.likes.prev, icon: "heart" }),
-      kpi({ label: "שיתופים", value: k.shares.value, prev: k.shares.prev, icon: "share" })
+      kpi({ label: "שיתופים" + KS.term("shares"), value: k.shares.value, prev: k.shares.prev, icon: "share" })
     ].join("");
 
     var chart = KS.chart({
@@ -117,7 +118,7 @@
         KS.kmCell("שיתופים", KS.fmtFull(p.shares)) +
         KS.kmCell("מתוכם בוואטסאפ", KS.fmtFull(p.whatsapp_shares)) +
         KS.kmCell("תגובות", KS.fmtFull(p.comments)) +
-        KS.kmCell("שמירות", KS.fmtFull(p.saves)) +
+        KS.kmCell("שמירות", KS.fmtFull(p.saves), null, "saves") +
         KS.kmCell("הורדות", KS.fmtFull(p.downloads)) +
         (p.duration_sec ? KS.kmCell("משך", fmtDur(p.duration_sec), "דק׳") : "") +
         (p.total_engagement ? KS.kmCell("סה״כ מעורבות", KS.fmtFull(p.total_engagement)) : "") + '</div>';

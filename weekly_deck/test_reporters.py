@@ -71,6 +71,14 @@ CASES = [
     ("ועו״ד מטעם ארגון חננו מסייע להן בייעוץ משפטי | דנה שרון #בחציהיום", "דנה שרון",
      "a trailing name is still found behind an appended programme hashtag"),
     ("תיעוד: רגע הפגיעה בעוטף (יואב לימור)", "יואב לימור", "trailing parens name"),
+    # a surname ending in a geresh failed the name test outright, and the credit
+    # written plainly in the caption was dropped — two live items on 2-8/8
+    ("טרגדיה בירושלים: הזמר אבישי לוי נהרג בתאונת דרכים (יואב בורוביץ')",
+     "יואב בורוביץ'", "parens name whose surname ends in a geresh"),
+    ("האודישן ההוליוודי של סוול אריאל אור (שרון דוידוביץ')",
+     "שרון דוידוביץ'", "another trailing-geresh surname in parens"),
+    ("כשגיא ג'ורג'י צפה בצילומי האבטחה (גיא ג'ורג'י)", "גיא ג'ורג'י",
+     "geresh INSIDE both words of a name"),
     ("הרגע שבו נעצר החשוד (צילום: דוד לוי) (איתי בלומנטל)", "איתי בלומנטל",
      "reporter after a photo credit — do not truncate at צילום:"),
     ("תיעוד נדיר מהזירה (צילום: מוטי מילרוד)", "", "photographer only"),

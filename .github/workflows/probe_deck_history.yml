@@ -1,0 +1,44 @@
+name: Probe deck history (read-only)
+
+# ההיסטוריה שחסרה למצגת 2024–היום: הגיליונות כמו שהם, כל היסטוריית טיקטוק,
+# וכמה אחורה GetXAPI בכלל מגיע בטוויטר. קריאה בלבד — הרשאת הגיליונות היא
+# .readonly, שום קולקטור לא נוגע בזה. ידני בלבד.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'מה למשוך'
+        type: choice
+        default: 'all'
+        options: [all, sheets, tiktok, youtube, twitter]
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests gspread google-auth
+
+      - name: Run the deck history probe
+        env:
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          TIKHUB_TOKEN: ${{ secrets.TIKHUB_TOKEN }}
+          GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python deck_history_probe.py ${{ inputs.target }}
+
+      - name: Upload the pulled history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deck-history
+          path: deck_history/
+          if-no-files-found: warn

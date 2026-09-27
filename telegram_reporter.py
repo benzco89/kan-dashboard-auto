@@ -74,13 +74,148 @@ def _clean_title(t, limit=150):
     return t[:limit] + ('…' if len(t) > limit else '')
 
 
-def _daily_baseline(df, date_col, value_col, today_str, days=7):
-    """ממוצע יומי של מטריקה בשבוע האחרון - בסיס להשוואה עבור ה-AI."""
-    if df.empty or date_col not in df.columns or value_col not in df.columns:
+# --- הבסיס להשוואה ---
+#
+# הגרסה הקודמת סכמה את הצפיות המצטברות של כל מה שפורסם ב-7 הימים האחרונים
+# וחילקה ב-7, ואז השוותה לזה את הפוסטים של אתמול - בני ~20 שעות. פוסט
+# באינסטגרם מחזיק 74% מערך היום השביעי שלו כבר אחרי יממה, וסרטון יוטיוב רק
+# 36% (נמדד ב-2026-08-14 מול snapshot מ-26/07, אותם פוסטים בדיוק). כלומר
+# היום הנמדד הושווה לפוסטים שהספיקו להבשיל, והפלט הקבוע היה "יום חלש":
+# 0.60x ביוטיוב, 0.81x בפייסבוק, 0.77x באינסטגרם ו-0.27x בטיקטוק באותו בוקר.
+#
+# אי אפשר לשחזר את הבסיס הנכון מהגיליון בדיעבד - `views_delta` היא עמודה
+# אחת שנדרסת בכל ריצה, והיא 0 בלכידה הראשונה של פוסט. לכן הדוח רושם לעצמו:
+# הסכומים של אתמול נכנסים ל"בסיס יומי" כל בוקר, והממוצע נבנה מהימים שכבר
+# נרשמו שם - כל אחד מהם נמדד באותו גיל בדיוק כמו היום שנשפט מולו.
+BASELINE_SHEET = 'בסיס יומי'
+BASELINE_HEADER = ['date', 'yt_views', 'fb_reach', 'ig_views', 'tt_views', 'recorded_at']
+# (עמודה, פלטפורמה, יחידה, עמודת תאריך במקור, עמודת ערך במקור)
+BASELINE_METRICS = [
+    ('yt_views', 'YouTube', 'צפיות', 'published_at', 'views'),
+    ('fb_reach', 'Facebook', 'reach', 'date', 'reach'),
+    ('ig_views', 'Instagram', 'צפיות', 'date', 'views'),
+    ('tt_views', 'TikTok', 'צפיות', 'date', 'views'),
+]
+BASELINE_DAYS = 7
+# מתחת לזה אין ממוצע אמיתי, ועדיף לומר שאין מאשר להמציא אחד
+BASELINE_MIN_DAYS = 3
+
+
+def _num(x):
+    """מספר מתא בגיליון: '1,200' / '' / None."""
+    try:
+        return int(float(str(x).replace(',', '').strip() or 0))
+    except (TypeError, ValueError):
         return 0
-    cutoff = (datetime.strptime(today_str, '%Y-%m-%d') - timedelta(days=days)).strftime('%Y-%m-%d')
-    recent = df[(df[date_col].astype(str) >= cutoff) & (df[date_col].astype(str) < today_str)]
-    return int(recent[value_col].sum() / days) if not recent.empty else 0
+
+
+def _sum_for_day(df, date_col, value_col, day):
+    if df is None or df.empty or date_col not in df.columns or value_col not in df.columns:
+        return 0
+    mask = df[date_col].astype(str).str[:10] == day
+    return int(pd.to_numeric(df.loc[mask, value_col], errors='coerce').fillna(0).sum())
+
+
+def day_totals(youtube_df, facebook_df, instagram_df, tiktok_df, day):
+    """המספרים שהדוח שופט: סך התוכן שפורסם ביום הזה, כפי שהוא נמדד עכשיו."""
+    frames = [youtube_df, facebook_df, instagram_df, tiktok_df]
+    return {col: _sum_for_day(df, date_col, value_col, day)
+            for df, (col, _, _, date_col, value_col) in zip(frames, BASELINE_METRICS)}
+
+
+def baseline_from_history(rows, day, days=BASELINE_DAYS, min_days=BASELINE_MIN_DAYS):
+    """ממוצע הימים שנרשמו לפני `day` - לא כולל `day` עצמו.
+
+    מחזיר (ממוצעים, כמה ימים נספרו). ממוצעים=None כשאין עדיין מספיק ימים.
+    """
+    cols = [m[0] for m in BASELINE_METRICS]
+    cutoff = (datetime.strptime(day, '%Y-%m-%d') - timedelta(days=days)).strftime('%Y-%m-%d')
+    by_date = {}
+    for r in rows:
+        d = str(r.get('date') or '').strip()[:10]
+        if not (cutoff <= d < day):
+            continue
+        vals = {c: _num(r.get(c)) for c in cols}
+        # ריצה שנפלה כותבת שורה של אפסים בלבד; יום שקט באמת יש בו משהו
+        if not any(vals.values()):
+            continue
+        by_date[d] = vals  # שורה כפולה לאותו יום - המאוחרת גוברת
+    used = len(by_date)
+    if used < min_days:
+        return None, used
+    return {c: sum(v[c] for v in by_date.values()) // used for c in cols}, used
+
+
+def format_baseline_summary(means, used, totals):
+    """הטקסט שנכנס לפרומפט - שני האגפים באותן יחידות בדיוק."""
+    if means is None:
+        return (f"⚠️ אין עדיין בסיס להשוואה: נרשמו {used} ימים בלבד מתוך "
+                f"{BASELINE_MIN_DAYS} הדרושים. אל תקבע אם היום חזק או חלש ואל תשווה "
+                f"לממוצע כלשהו - דווח את המספרים של אתמול כפי שהם.")
+    lines = [f"מבוסס על {used} ימים שנרשמו, כל אחד נמדד בדיוק כמו אתמול: "
+             f"סך התוכן שפורסם באותו יום, כפי שנמדד בבוקר שאחריו."]
+    for col, platform, unit, _, _ in BASELINE_METRICS:
+        lines.append(f"{platform}: אתמול {totals.get(col, 0):,} {unit} | "
+                     f"ממוצע {means[col]:,} {unit}/יום")
+    return "\n".join(lines)
+
+
+def write_rows(ws, range_name, rows):
+    """gspread 6 הפך את סדר הארגומנטים ל-update(values, range_name).
+
+    הצורה הישנה, update('A1', [[...]]), לא נופלת בבדיקה כי היא רצה רק כשגיליון
+    נוצר מאפס - וזה קורה פעם אחת בחיים של כל גיליון.
+    """
+    return ws.update(rows, range_name)
+
+
+def find_baseline_row(rows, day):
+    """אינדקס השורה של היום הזה בהיסטוריה, או 1- אם עוד לא נרשם."""
+    for i in range(len(rows) - 1, -1, -1):
+        if str(rows[i].get('date') or '').strip()[:10] == day:
+            return i
+    return -1
+
+
+def get_baseline_history():
+    """קריאת גיליון הבסיס. גיליון חסר = היסטוריה ריקה, לא שגיאה."""
+    try:
+        gc = get_sheet_client()
+        sh = gc.open_by_url(SPREADSHEET_URL)
+        return sh.worksheet(BASELINE_SHEET).get_all_records()
+    except Exception as e:
+        print(f"   ⚠️ No baseline history yet: {e}")
+        return []
+
+
+def record_daily_baseline(rows, day, totals):
+    """רישום הסכומים של אתמול, כדי שיהיה מול מה להשוות מחר.
+
+    ריצה חוזרת מעדכנת את השורה הקיימת ולא מוסיפה עוד אחת - יום כפול היה
+    נספר פעמיים בממוצע.
+    """
+    try:
+        gc = get_sheet_client()
+        sh = gc.open_by_url(SPREADSHEET_URL)
+        try:
+            ws = sh.worksheet(BASELINE_SHEET)
+        except Exception:
+            print(f"   Creating '{BASELINE_SHEET}' worksheet...")
+            ws = sh.add_worksheet(title=BASELINE_SHEET, rows=400, cols=len(BASELINE_HEADER))
+            write_rows(ws, 'A1', [BASELINE_HEADER])
+        recorded_at = datetime.now(pytz.timezone('Asia/Jerusalem')).strftime('%Y-%m-%d %H:%M')
+        row = [day] + [totals.get(c, 0) for c in BASELINE_HEADER[1:-1]] + [recorded_at]
+        at = find_baseline_row(rows, day)
+        if at >= 0:
+            write_rows(ws, f'A{at + 2}', [row])  # +2: שורת הכותרת, ואינדקס מ-1
+            print(f"   ✅ Baseline for {day} updated")
+        else:
+            ws.append_row(row)
+            print(f"   ✅ Baseline for {day} recorded")
+        return True
+    except Exception as e:
+        print(f"   ⚠️ Failed to record baseline: {e}")
+        return False
 
 
 def get_youtube_data():
@@ -438,10 +573,15 @@ def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagr
 📊 עוקבים:
 {followers_summary}
 
-=== 📐 בסיס להשוואה - ממוצע יומי בשבוע האחרון ===
+=== 📐 בסיס להשוואה ===
 {baseline_summary}
+
 כשאתה שופט אם יום/פוסט "הצליח" - השווה למספרים האלה, לא לתחושת בטן.
-יום שעקף את הממוצע השבועי משמעותית = יום חזק; יום מתחתיו = חלש, וזה בסדר לומר.
+**אל תשווה את הסכומים של אתמול למספרים המצטברים של פוסטים ישנים יותר שמופיעים
+למעלה.** פוסט בן יממה הספיק לצבור חלק קטן ממה שיצבור, ולכן הוא תמיד ייראה נמוך
+מול פוסט מלפני חמישה ימים - זו אריתמטיקה, לא ביצועים.
+פער קטן מהממוצע הוא רעש: קרא ליום "חלש" או "חזק" רק בפער משמעותי (בערך 30%+),
+ואם הוא בתחום הרגיל - אמור שהיום היה רגיל ועבור לתובנות התוכן.
 
 === 📝 מבנה הדוח ===
 
@@ -620,7 +760,7 @@ def save_daily_insights_to_sheets(report_text, report_date):
             print("   Creating 'תובנות יומיות' worksheet...")
             worksheet = sh.add_worksheet(title="תובנות יומיות", rows=500, cols=3)
             # הוספת כותרות
-            worksheet.update('A1', [['date', 'insights', 'timestamp']])
+            write_rows(worksheet, 'A1', [['date', 'insights', 'timestamp']])
         
         # חילוץ התובנות
         insights = extract_cross_platform_insights(report_text)
@@ -715,13 +855,15 @@ def generate_unified_report():
     tiktok_summary = summarize_tiktok(tiktok_df, yesterday)
     followers_summary = get_followers_summary(followers_df)
 
-    today = now.strftime('%Y-%m-%d')
-    baseline_summary = (
-        f"YouTube: {_daily_baseline(youtube_df, 'published_at', 'views', today):,} צפיות/יום | "
-        f"Facebook: {_daily_baseline(facebook_df, 'date', 'reach', today):,} reach/יום | "
-        f"Instagram: {_daily_baseline(instagram_df, 'date', 'views', today):,} צפיות/יום | "
-        f"TikTok: {_daily_baseline(tiktok_df, 'date', 'views', today):,} צפיות/יום"
-    )
+    # הבסיס נבנה מהימים שנרשמו לפני אתמול, ואז אתמול נרשם בעצמו - בסדר הזה,
+    # כדי שיום לא ייכנס לממוצע שהוא נמדד מולו
+    print("\n📐 Building comparison baseline...")
+    totals = day_totals(youtube_df, facebook_df, instagram_df, tiktok_df, yesterday)
+    history = get_baseline_history()
+    means, used = baseline_from_history(history, yesterday)
+    baseline_summary = format_baseline_summary(means, used, totals)
+    print(f"   {used} recorded days available" + ("" if means else " - not enough to compare yet"))
+    record_daily_baseline(history, yesterday, totals)
 
     # ניתוח עם Gemini
     print("\n🤖 Analyzing with Gemini...")

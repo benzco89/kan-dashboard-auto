@@ -1,0 +1,43 @@
+name: Probe Instagram captions (read-only)
+
+# הכיתוב המלא של פוסטי אינסטגרם, בלי הקיטום ל-500 תווים שהקולקטור עושה.
+# חיפוש מילולי בגיליון לא אמין בלי זה: 28% מהפוסטים בחלון המונדיאל יושבים
+# בדיוק על 500 תווים, כלומר נקטעו.
+# קריאה בלבד: לא נוגע בגוגל שיטס ולא מבקש insights. ידני בלבד.
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: 'מתאריך (YYYY-MM-DD)'
+        required: true
+        default: '2026-06-08'
+      end:
+        description: 'עד תאריך (YYYY-MM-DD, כולל)'
+        required: true
+        default: '2026-08-11'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run the caption probe
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+        run: python instagram_caption_probe.py "${{ inputs.start }}" "${{ inputs.end }}"
+
+      - name: Upload the captions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ig-captions-${{ inputs.start }}-${{ inputs.end }}-${{ github.run_id }}
+          path: ig_captions/
+          if-no-files-found: warn

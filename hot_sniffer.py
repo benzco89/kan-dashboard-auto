@@ -8,10 +8,26 @@ Hot Sniffer - זיהוי תוך-יומי של פוסט שמתפוצץ עכשיו
 דלתות יומיות) - כותב רק לטאב ייעודי hot_alerts לצורך דה-דופ.
 
 ספים (פוסט צעיר מ-24ש שחוצה אחד מהם = חם):
-  תגובות: רצפת ה"חם" של comment_analyzer (אינסטגרם 600, פייסבוק 1000)
+  תגובות: רצפת ה"חם" של comment_analyzer (אינסטגרם 600, פייסבוק 1000,
+  טיקטוק 400).
   צפיות / לייקים / שיתופים: פי-1.5 מ-p90 של 7 הימים האחרונים (מחושב בזמן
   ריצה מהגיליון). הריצה הראשונה הראתה ש-p90 לבדו רועש - פוסט בן 20+ שעות
   נושק ל-p90 באופן טבעי; רק חצייה ברורה של מה שפוסט *בשל* משיג = מתפוצץ.
+
+**אימות דיוק, 2026-07-29 - אל תעלו את הספים בטענה של "יותר מדי התראות".**
+63 ההתראות של 17 הימים הראשונים הוצלבו לגיליון, ונבדק איפה כל פוסט נחת
+*בבגרותו* - לא מה היה בשעה שהתריע. חציון: אחוזון 97 בפלטפורמה שלו.
+44 מתוך 59 ב-p95 ומעלה, כולם ב-p90 ומעלה, **אפס** מתחת. כלומר אין כאן
+זינוקים מוקדמים שדעכו לבינוני, שזה בדיוק מה שהיה מופיע לו הרף היה נמוך מדי.
+
+ביום שבו כן הועלו הספים (פי-2, רצפות 1000/2000/800) ההשתקה הפילה 47 מ-63,
+בחציון אחוזון 97: הילד שנעדר ואותר בחיים, הצהרת יאיר גולן, המילואימניק
+שהותקף, התינוק שניצל בניתוח חירום. הקצב אינו הקריטריון - "האם זה באמת
+התפוצץ" הוא הקריטריון, והתשובה נמדדת מול ההתפלגות ולא מול תחושת עומס.
+
+הפער האמיתי הוא הפוך - פספוסים, לא עודף. נספרו רק פוסטים שפורסמו אחרי
+שהרחרחן עלה (13.7): 5 מתוך 561 באחוזון 98+ לא התריעו. שניים מהם היו פוסטי
+פייסבוק שהציר היחיד שלהם היה צפיות - הציר היחיד שלא נמדד; מתוקן ב-_fb_views.
 
 ההתראה כולה דטרמיניסטית - בלי AI. הכותרת היא הכיתוב המקורי של הפוסט
 (מנוקה מסימני bidi וקטוע נקי בגבול מילה): מי שמקבל את ההתראה מזהה את
@@ -64,7 +80,8 @@ STATE_HEADER = ['post_id', 'platform', 'alerted_at', 'triggers', 'permalink']
 
 IL_TZ = pytz.timezone('Asia/Jerusalem')
 
-# = 2x רצפת comment_analyzer לכל פלטפורמה (טיקטוק: רצפה 200, כויל 2026-07-21)
+# אל תעלו את הספים האלה בטענה של "יותר מדי התראות". נמדד 2026-07-29 - ראו
+# הדוקסטרינג למעלה: הקצב הוא לא הקריטריון, הדיוק הוא, והדיוק כאן מלא.
 HOT_COMMENTS = {'instagram': 600, 'facebook': 1000, 'tiktok': 400}
 BASELINE_MULT = float(os.environ.get('TEST_MULT') or 1.5)  # "חם" = פי-1.5 מ-p90
 BASELINE_DAYS = 7
@@ -178,11 +195,57 @@ def fetch_young_instagram():
     return posts
 
 
+def _fb_insight(obj_id, metric, endpoint='insights'):
+    """מדד insights בודד. 0 בכל כשל - ציר אחד שותק, לא ריצה שנופלת."""
+    params = {'access_token': ACCESS_TOKEN, 'metric': metric}
+    if endpoint == 'insights':
+        params['period'] = 'lifetime'
+    try:
+        res = http_get_json(f"{BASE}/{obj_id}/{endpoint}", params=params,
+                            timeout=15, max_retries=2)
+        if 'error' in res:
+            return 0
+        data = res.get('data', [])
+        vals = data[0].get('values', []) if data else []
+        v = vals[0].get('value') if vals else 0
+        # לפעמים דיקט (organic/paid) - סכום, כמו ב-_flatten_value של הקולקטור
+        return sum(v.values()) if isinstance(v, dict) else (v or 0)
+    except Exception:
+        return 0
+
+
+def _fb_views(post):
+    """צפיות של פוסט פייסבוק בודד, באותו מסלול שהקולקטור עובר.
+
+    post_media_view הוא המדד המאוחד, אבל **הוא מחזיר 0 לחלק מהרילסים** -
+    facebook_collector נופל שם ל-plays של אובייקט הווידאו, וכאן חייבת להיות
+    אותה נפילה: רילס הם שליש מהפוסטים ובדיוק הסוג עתיר-הצפיות, אז בלעדיה
+    הציר היקר ביותר נשאר עיוור דווקא היכן שהוא הכי נחוץ.
+    """
+    views = _fb_insight(post['id'], 'post_media_view')
+    if views:
+        return views
+    try:
+        vid = post['attachments']['data'][0]['target']['id']
+    except (KeyError, IndexError, TypeError):
+        return 0
+    return (_fb_insight(vid, 'blue_reels_play_count', endpoint='video_insights')
+            or _fb_insight(vid, 'total_video_views', endpoint='video_insights'))
+
+
 def fetch_young_facebook():
-    """ספירות ציבוריות בלבד (ריאקציות/תגובות/שיתופים) - בלי insights, קריאה אחת."""
+    """ספירות ציבוריות בקריאה אחת, ועוד קריאת insights לצפיות לכל פוסט צעיר.
+
+    הצפיות היו 0 קבוע עד 2026-07-29, כדי לחסוך קריאה לפוסט. זה עלה בפספוסים:
+    "איפה היית חמודי?" (25/07) עשה 1,025,485 צפיות - אחוזון 99, פי 2.1 מהרף -
+    בזמן שהלייקים עמדו על 0.79 מהרף והשיתופים על 0.36. הצפיות היו הציר היחיד
+    שחצה, והוא היה בדיוק הציר שלא נמדד. ~20 קריאות לריצה, כמו באינסטגרם.
+    """
     res = http_get_json(f"{BASE}/{PAGE_ID}/published_posts", params={
         'access_token': ACCESS_TOKEN,
         'fields': 'id,message,created_time,permalink_url,shares,'
+                  'attachments,'  # מזהה אובייקט הווידאו, לנפילה ב-_fb_views.
+                                  # בדיוק כמו בקולקטור: attachments{target} מוחזר ריק.
                   'comments.summary(true).limit(0),reactions.summary(true).limit(0)',
         'limit': 25,
     })
@@ -199,7 +262,7 @@ def fetch_young_facebook():
             'id': p['id'], 'platform': 'facebook',
             'title': (p.get('message') or '').replace('\n', ' ')[:200],
             'posted': posted, 'permalink': p.get('permalink_url', ''),
-            'views': 0,  # צפיות FB דורשות insights; הריאקציות/תגובות מספיקות לזיהוי
+            'views': _fb_views(p),
             'likes': p.get('reactions', {}).get('summary', {}).get('total_count', 0),
             'comments': p.get('comments', {}).get('summary', {}).get('total_count', 0),
             'shares': (p.get('shares') or {}).get('count', 0),

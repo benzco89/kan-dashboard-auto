@@ -1,0 +1,33 @@
+name: Probe Gemini models and thinking cost (read-only)
+
+# Which flash ids this key is actually served, and what thinking really costs
+# on the archive's own classify prompt. Read-only: writes no sheet, uploads
+# nothing. Manual button only.
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: 'Comma-separated model ids to test (blank = every served flash)'
+        required: false
+        default: ''
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run model probe
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PROBE_MODELS: ${{ inputs.models }}
+        run: python gemini_model_probe.py
