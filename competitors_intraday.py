@@ -46,7 +46,7 @@ WRITTEN_TABS = (CANDIDATES_SHEET, CC.POSTS_SHEET, HISTORY_SHEET)
 OUR_TABS = {"instagram": "נתוני אינסטגרם", "facebook": "נתוני פייסבוק",
             "youtube": "נתוני יוטיוב", "twitter": "נתוני טוויטר", "tiktok": "נתוני טיקטוק"}
 SOURCES_CHECKED = "ig:live,fb:live,yt:sheet,x:sheet,tt:sheet"
-PAGE_ID = os.environ.get("FACEBOOK_PAGE_ID", "220634478361516")
+PAGE_ID = os.environ.get("FACEBOOK_PAGE_ID") or "220634478361516"   # or, not a default: the secret is EMPTY and the workflow sets it anyway
 DRY_RUN = os.environ.get("DRY_RUN", "").strip() not in ("", "0")
 
 

@@ -119,6 +119,16 @@ check("save_posts is never called when the candidates append_log raises",
       "save_posts" in calls2, False)
 check("main() propagates the failure instead of swallowing it", raised2 is not None, True)
 
+print("
+environment
+" + "-" * 62)
+# the FACEBOOK_PAGE_ID secret exists but is empty; the workflow still sets the
+# variable, and a get() default never fires for "" (first live dry run, 27.9)
+import importlib
+import os
+os.environ["FACEBOOK_PAGE_ID"] = ""
+check("an empty FACEBOOK_PAGE_ID falls back to Kan's page", importlib.reload(CI).PAGE_ID, "220634478361516")
+
 print("-" * 62)
 print(f"{PASS}/{PASS + FAIL} passed")
 sys.exit(1 if FAIL else 0)
