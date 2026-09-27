@@ -322,13 +322,21 @@ def candidate_rows(items, run_at, sources_checked):
     return rows
 
 
-def gaps_from_log(rows, today):
-    """הריצה התוך־יומית האחרונה של היום, באותה צורה של coverage_gaps. None אם
-    אין ריצה היום — אז העמוד מחשב מנתוני הבוקר, שבהם המתחרים וכאן נכונים
-    לאותה שעה. בלי זה, ספירות מתחרים של 14:00 מול פוסטים שלנו מהבוקר היו
-    מסמנות כפער כל סיפור שפרסמנו מאז הבוקר."""
+def gaps_from_log(rows, after, now):
+    """הריצה התוך־יומית האחרונה, באותה צורה של coverage_gaps. None אם אין
+    ריצה כזו — אז העמוד מחשב מנתוני הבוקר, שבהם המתחרים וכאן נכונים לאותה
+    שעה. בלי זה, ספירות מתחרים של 14:00 מול פוסטים שלנו מהבוקר היו מסמנות
+    כפער כל סיפור שפרסמנו מאז הבוקר.
+
+    "היום" לפי תאריך קלנדרי אינו מספיק: אחרי חצות, ריצת 23:05 שייכת ל"אתמול"
+    ונשמטת, והעמוד היה נופל בחזרה ל-coverage_gaps וזוגג פוסטי מתחרים מ-23:05
+    מול לשוניות כאן מ-08:30 הקודם. לכן הקריטריון הוא עדכניות: הריצה חייבת
+    להיות אחרי המשיכה של הבוקר (`after`, מ-freshness) וגם בתוך 24 השעות
+    האחרונות (`now`), לא לפי "אותו תאריך קלנדרי"."""
+    cutoff = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M")
     runs = [str(r.get("run_at", "")) for r in rows
-            if r.get("kind") == RUN_MARKER and str(r.get("run_at", ""))[:10] == str(today)]
+            if r.get("kind") == RUN_MARKER and str(r.get("run_at", "")) > str(after)
+            and str(r.get("run_at", "")) >= cutoff]
     if not runs:
         return None
     last = max(runs)
@@ -354,6 +362,8 @@ def gaps_from_log(rows, today):
         (missed if item["kind"] == "missed" else exclusive).append(item)
     for lst in (missed, exclusive):
         lst.sort(key=lambda g: -g["lead"]["eng"])
+    # כאן checked סופר סיפורים (אשכולות), בעוד ב-coverage_gaps הוא סופר פוסטי
+    # מועמדים לפני האיחוד לאשכולות — שני דברים שונים באותו שם שדה.
     return {"status": "ok", "failed": [], "stale": [], "source": "intraday", "run_at": last,
             "checked": len(missed) + len(exclusive),
             "missed": missed[:GAPS_TOP], "exclusive": exclusive[:GAPS_TOP]}
@@ -444,17 +454,19 @@ def build(data, days, today=None, now=None):
 
     rows.sort(key=lambda c: -c["followers"])
     kan_rank = next(i + 1 for i, c in enumerate(rows) if c["is_kan"])
+    fresh = freshness(by_user, comp_posts)
+    after = (fresh or {}).get("pulled_at", "")
     return {
         "range": days,
         "last_date": A._last_data_date(data),
         "window": {k: _iso(v) for k, v in win.items()} if win else None,
         "feed": {k: _iso(v) for k, v in fw.items()} if fw else None,
-        "freshness": freshness(by_user, comp_posts),
+        "freshness": fresh,
         "sources": sources,
         "summary": {"kan_rank": kan_rank, "ranked": len(rows),
                     "kan_growth": rows[kan_rank - 1]["growth"]},
         "arena": arena(comp_posts, ig, names, today),
-        "gaps": (gaps_from_log(data.get("gap_candidates", []) or [], today)
+        "gaps": (gaps_from_log(data.get("gap_candidates", []) or [], after, now)
                  or coverage_gaps(data, now, sources)),
         "competitors": rows,
     }

@@ -227,7 +227,7 @@ check("the closest Kan post is measured",
 rows = C.candidate_rows(items, "2026-09-27 11:00", "ig:live,fb:live")
 check("one run marker plus one row per story", ([r["kind"] for r in rows][:1], len(rows)), (["run"], 4))
 as_read = [{k: str(v) for k, v in r.items()} for r in rows]     # the sheet hands back strings
-back = C.gaps_from_log(as_read, TODAY)
+back = C.gaps_from_log(as_read, "2026-09-27 08:40", NOW)
 live = C.coverage_gaps(GAP_DATA, NOW)
 shape = lambda g: {k: g[k] for k in ("caption", "date", "time", "n_outlets", "total_eng", "lead", "posts")}
 check("the log reads back as what the page would have computed",
@@ -236,10 +236,20 @@ check("the log reads back as what the page would have computed",
 check("the log is marked intraday, with its run time", (back["source"], back["run_at"]),
       ("intraday", "2026-09-27 11:00"))
 empty = [{k: str(v) for k, v in r.items()} for r in C.candidate_rows([], "2026-09-27 14:00", "x")]
-check("a run with no stories still counts as a run", C.gaps_from_log(empty, TODAY)["missed"], [])
-check("yesterday's run is not today's", C.gaps_from_log(as_read, TODAY + timedelta(days=1)), None)
+check("a run with no stories still counts as a run",
+      C.gaps_from_log(empty, "2026-09-27 08:40", NOW)["missed"], [])
+check("a run from before the morning pull is ignored",
+      C.gaps_from_log(as_read, "2026-09-27 12:00", NOW), None)
+late = [{k: str(v) for k, v in r.items()}
+        for r in C.candidate_rows(items, "2026-09-27 23:05", "x")]
+check("after midnight the late-evening run still counts",
+      (C.gaps_from_log(late, "2026-09-27 08:40", datetime(2026, 9, 28, 1, 0))["source"],
+       C.gaps_from_log(late, "2026-09-27 08:40", datetime(2026, 9, 28, 1, 0))["run_at"]),
+      ("intraday", "2026-09-27 23:05"))
+check("a run older than 24h is ignored",
+      C.gaps_from_log(late, "2026-09-27 08:40", datetime(2026, 9, 29, 0, 0)), None)
 later = C.candidate_rows(items[:1], "2026-09-27 14:00", "x")
-check("the latest run of the day wins", len(C.gaps_from_log(rows + later, TODAY)["exclusive"]), 0)
+check("the latest run wins", len(C.gaps_from_log(rows + later, "2026-09-27 08:40", NOW)["exclusive"]), 0)
 
 b_log = C.build(dict(DATA, gap_candidates=rows), 7, today=TODAY, now=NOW)
 check("the page serves the intraday log when there is one", b_log["gaps"]["source"], "intraday")
