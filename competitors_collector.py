@@ -7,8 +7,8 @@ Competitors Collector - צילום מצב יומי של חשבונות אינס�
 קצב פרסום ומעורבות. כל הרצה כותבת שורה-לכל-חשבון לגיליון "מתחרים"
 (idempotent - הרצה חוזרת באותו יום מחליפה את שורות היום).
 
-הרשימה אומתה חיה מול ה-API ב-2026-07-13. רשת ב (kan_reshetb) בכוונה לא כאן -
-בהמתנה להרשאות אדמין שיאפשרו גישה מלאה דרך הפייפליין הרגיל.
+הרשימה אומתה חיה מול ה-API ב-2026-07-13; ארבעה חשבונות נוספו ב-2026-09-27.
+רשת ב (kan_reshetb) בכוונה לא כאן - בהמתנה להרשאות אדמין שיאפשרו גישה מלאה דרך הפייפליין הרגיל.
 
 Env: FACEBOOK_TOKEN, GCP_SERVICE_ACCOUNT.
 """
@@ -52,6 +52,8 @@ COMPETITORS = [
     'n12news', 'ynetgram', '13newsil', 'yedioth', 'israelhayom',
     'haaretz', 'wallanews', 'maarivonline', 'globesnews',
     'm_laradar', 'yomi_news',
+    # נוספו 2026-09-27, אומתו ב־probe_discovery (ריצות 36320748795, 36320788572, 36321068432)
+    'i24news_he', 'now14israel', 'hamal_news', 'kikarhashabat',
 ]
 
 RECENT_FOR_AVG = 10   # ממוצע מעורבות על הפוסטים האחרונים

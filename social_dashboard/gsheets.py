@@ -52,6 +52,11 @@ _lock = threading.Lock()
 # refetched all 14 tabs the moment the oldest one expired.
 _cache = {}
 
+# outcome of the last read per tab: "ok" | "stale" (read failed, previous rows
+# served) | "unavailable" (read failed, nothing to serve). A failed read used to
+# look exactly like an empty sheet, and the competitors page said "no gaps".
+_status = {}
+
 
 def _credentials():
     """Service-account creds from env var (prod) or local file (dev)."""
@@ -135,8 +140,29 @@ def _fetch(keys):
                  .get(spreadsheetId=SPREADSHEET_ID, range=ALL_SHEETS[k]).execute())
             out[k] = _parse(k, r.get("values", []))
         except Exception:
-            out[k] = []
+            out[k] = None       # failed — not "empty"; _store decides what to serve
     return out
+
+
+def _store(key, rows, stamp):
+    """Caller holds _lock. rows=None means the read failed."""
+    if rows is None:
+        if key in _cache and _cache[key][0]:
+            # keep the rows, but bump the stamp so it retries in ~60s, not on
+            # every single request while the failure persists
+            _cache[key] = (_cache[key][0], time.time() - _CACHE_TTL + 60)
+            _status[key] = "stale"
+        else:
+            _cache[key] = ([], time.time() - _CACHE_TTL + 60)  # retried after ~60s
+            _status[key] = "unavailable"
+        return
+    _cache[key] = (rows, stamp)
+    _status[key] = "ok"
+
+
+def source_status(keys):
+    with _lock:
+        return {k: _status.get(k, "ok") for k in keys}
 
 
 def _fresh(key, now):
@@ -154,7 +180,7 @@ def _load(keys, force=False):
         stamp = time.time()
         with _lock:
             for k, rows in fetched.items():
-                _cache[k] = (rows, stamp)
+                _store(k, rows, stamp)
     _start_warmer()
     with _lock:
         return {k: _cache[k][0] for k in keys if k in _cache}
@@ -185,10 +211,12 @@ def _warm_once():
     stamp = time.time()
     with _lock:
         for k, rows in fetched.items():
-            # a failed read returns [] for that tab; keeping the previous rows is
-            # better than serving an empty dashboard because Sheets hiccuped
-            if rows or not _cache.get(k, ([], 0))[0]:
-                _cache[k] = (rows, stamp)
+            # a failed read returns None (or [] from an older fake); keeping the
+            # previous rows is better than serving an empty dashboard
+            if rows is None:
+                _store(k, None, stamp)
+            elif rows or not _cache.get(k, ([], 0))[0]:
+                _store(k, rows, stamp)
 
 
 def _warm_loop(interval):
@@ -235,6 +263,11 @@ class SheetData(dict):
         if key not in self and key in ALL_SHEETS:
             self.update(_load([key]))
         return super().__getitem__(key)
+
+    def source_status(self):
+        """Whether each tab in here came from a good read. Pages that must not
+        mistake a failure for "nothing found" ask; the rest ignore it."""
+        return source_status(list(self.keys()))
 
 
 def get_data(force=False, keys=None):

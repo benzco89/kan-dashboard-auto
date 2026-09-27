@@ -22,6 +22,8 @@ os.environ["CACHE_WARM"] = "0"          # no real thread in the test process
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gsheets  # noqa: E402
 
+_real_fetch = gsheets._fetch
+
 PASS = FAIL = 0
 
 
@@ -84,6 +86,79 @@ check("an empty cache asks for nothing", called["n"], 0)
 interval = max(30, gsheets._CACHE_TTL - gsheets._WARM_MARGIN)
 check("refreshes before the TTL runs out", interval < gsheets._CACHE_TTL, True)
 check("and not absurdly often", interval >= 30, True)
+
+# --- a failed read is marked, never passed off as an empty sheet ---
+# The competitors page used to read a failed tab as "no gaps — everything was
+# covered". _fetch now says None for a failure, and the cache says what it served.
+gsheets._cache.clear()
+gsheets._status.clear()
+gsheets._cache["instagram"] = ([{"row": "good"}], time.time() - 1000)
+gsheets._fetch = lambda keys: {k: None for k in keys}
+got = gsheets._load(["instagram", "competitor_posts"])
+check("a failed read keeps the previous rows", got["instagram"], [{"row": "good"}])
+check("and marks them stale", gsheets.source_status(["instagram"]), {"instagram": "stale"})
+check("a failed read with nothing cached serves []", got["competitor_posts"], [])
+check("and marks it unavailable", gsheets.source_status(["competitor_posts"]),
+      {"competitor_posts": "unavailable"})
+check("an unavailable tab is not retried on every request",
+      gsheets._fresh("competitor_posts", time.time()), True)
+check("but is retried on the next request 61s later",
+      gsheets._fresh("competitor_posts", time.time() + 61), False)
+
+gsheets._fetch = lambda keys: {k: [] for k in keys}
+# the retry stamp holds it "fresh" for ~60s (checked above) — move the clock
+# past that before expecting _load to actually retry it
+stamp = gsheets._cache["competitor_posts"][1]
+gsheets._cache["competitor_posts"] = (gsheets._cache["competitor_posts"][0], stamp - 61)
+gsheets._load(["competitor_posts"])
+check("a sheet that is really empty is ok", gsheets.source_status(["competitor_posts"]),
+      {"competitor_posts": "ok"})
+
+# the warmer marks a failure the same way
+gsheets._cache["facebook"] = ([{"row": "good"}], time.time() - 1000)
+gsheets._fetch = lambda keys: {k: None for k in keys}
+gsheets._warm_once()
+check("warmer: a failed read keeps the rows", gsheets._cache["facebook"][0], [{"row": "good"}])
+check("warmer: and marks them stale", gsheets.source_status(["facebook"]), {"facebook": "stale"})
+
+# the real _fetch turns one failing tab into None and keeps the others
+class _Req:
+    def __init__(self, fn):
+        self.fn = fn
+
+    def execute(self):
+        return self.fn()
+
+
+class _Vals:
+    def batchGet(self, **kw):
+        def boom():
+            raise RuntimeError("400: one range is missing")
+        return _Req(boom)
+
+    def get(self, spreadsheetId, range):
+        def run():
+            if range == gsheets.ALL_SHEETS["competitor_posts"]:
+                raise RuntimeError("boom")
+            return {"values": [["a"], ["1"]]}
+        return _Req(run)
+
+
+class _Svc:
+    def spreadsheets(self):
+        return self
+
+    def values(self):
+        return _Vals()
+
+
+gsheets._service = lambda: _Svc()
+out = _real_fetch(["competitors", "competitor_posts"])
+check("_fetch: the failing tab is None", out["competitor_posts"], None)
+check("_fetch: the other tab still arrives", out["competitors"], [{"a": "1"}])
+
+check("SheetData reports its tabs", gsheets.SheetData({"instagram": []}).source_status(),
+      {"instagram": "stale"})
 
 print("-" * 62)
 print(f"{PASS}/{PASS + FAIL} passed")
