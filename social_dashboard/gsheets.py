@@ -38,6 +38,7 @@ LAZY_SHEETS = {
     "hot_alerts": "hot_alerts",
     "competitors": "מתחרים",
     "competitor_posts": "פוסטים מתחרים",
+    "gap_candidates": "מועמדי פערים",
     "demographics": "דמוגרפיה",
 }
 

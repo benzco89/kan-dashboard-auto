@@ -38,7 +38,12 @@
       parts.push("עודכן " + KS.fmtDate(f.date) + (f.pulled_at ? " " + KS.esc(f.pulled_at.slice(11, 16)) : ""));
       parts.push(f.updated + "/" + f.known + " חשבונות");
     }
-    parts.push("בדיקת הסיקור: IG, FB, YouTube, X, TikTok — נכון לאיסוף הבוקר");
+    if (f && f.posts_pulled_at && f.posts_pulled_at > f.pulled_at) {
+      parts.push("ספירות הפוסטים: " + KS.esc(f.posts_pulled_at.slice(11, 16)));
+    }
+    parts.push(g.source === "intraday"
+      ? "בדיקת הסיקור: IG ו־FB נכון ל־" + KS.esc(String(g.run_at).slice(11, 16)) + ", YouTube/X/TikTok נכון לבוקר"
+      : "בדיקת הסיקור: IG, FB, YouTube, X, TikTok — נכון לאיסוף הבוקר");
     var warn = "";
     if (f && f.missing.length) warn += '<div class="comp-warn">לא עודכנו באיסוף האחרון: ' + f.missing.map(KS.esc).join(", ") + '</div>';
     if (g.stale && g.stale.length) warn += '<div class="comp-warn">לא נטענו עכשיו, מוצגים מהטעינה הקודמת: ' + g.stale.map(KS.esc).join(", ") + '</div>';
