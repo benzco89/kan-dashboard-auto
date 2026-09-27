@@ -1,0 +1,9 @@
+[Unit]
+Description=Trigger the Competitors Intraday GitHub workflow (rival posts + gap candidates)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/kan-dispatch.env
+ExecStart=/usr/local/bin/kan-competitors-intraday
