@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import aggregate
+import competitors_page
 import gsheets
 
 BASE_DIR = os.path.dirname(__file__)
@@ -36,7 +37,7 @@ async def revalidate_assets(request, call_next):
     """
     response = await call_next(request)
     path = request.url.path
-    if path.startswith("/static/") or path in ("/", "/youtube", "/facebook", "/instagram", "/twitter", "/tiktok", "/alerts", "/glossary"):
+    if path.startswith("/static/") or path in ("/", "/youtube", "/facebook", "/instagram", "/twitter", "/tiktok", "/alerts", "/glossary", "/competitors", "/viral"):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -57,7 +58,7 @@ _PAGE_SHEETS = {
     "twitter": ("twitter", "followers"),
     "tiktok": ("tiktok", "followers", "comment_analysis"),
     "viral": ("facebook", "instagram", "youtube", "twitter", "tiktok", "followers", "comment_analysis"),
-    "competitors": ("competitors", "competitor_posts", "facebook", "instagram", "youtube", "twitter", "followers"),
+    "competitors": ("competitors", "competitor_posts", "facebook", "instagram", "youtube", "twitter", "tiktok", "followers"),
     "alerts": ("facebook", "instagram", "youtube", "twitter", "tiktok", "followers", "hot_alerts"),
 }
 
@@ -69,7 +70,7 @@ _BUILDERS = {
     "twitter": aggregate.build_twitter,
     "tiktok": aggregate.build_tiktok,
     "viral": aggregate.build_viral,
-    "competitors": aggregate.build_competitors,
+    "competitors": competitors_page.build,
     "alerts": aggregate.build_alerts,
 }
 
