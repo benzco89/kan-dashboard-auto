@@ -2416,7 +2416,7 @@ def gemini_polish_content(content):
               "החזר JSON: רשימה של {i, title, sentence}.\n\n"
               + json.dumps(seeds, ensure_ascii=False))
     text = None
-    for model in ["gemini-3.5-flash", "gemini-2.5-pro"]:
+    for model in ["gemini-3.8-flash", "gemini-3.7-flash"]:
         try:
             r = client.models.generate_content(model=model, contents=prompt)
             text = (r.text or "").strip()

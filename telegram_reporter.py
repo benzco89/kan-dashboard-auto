@@ -687,9 +687,9 @@ def analyze_all_platforms_with_gemini(youtube_summary, facebook_summary, instagr
         ),
     ]
     
-    # ה-preview ראשון כל עוד הוא חי (איכות), אבל מודלי preview נכבים בלי
-    # אזהרה (3-pro-preview מת במרץ) - לכן שני GA כרשת ביטחון אחריו
-    models_to_try = ["gemini-3.1-pro-preview", "gemini-3.5-flash", "gemini-2.5-pro"]
+    # 3.8-flash ואחריו 3.7-flash - שניהם מוגשים למפתח (gemini_model_probe,
+    # 2026-09-29). ה-pro שהיו כאן יצאו: יקרים, ומודלי preview נכבים בלי אזהרה
+    models_to_try = ["gemini-3.8-flash", "gemini-3.7-flash"]
     
     for model_name in models_to_try:
         try:
