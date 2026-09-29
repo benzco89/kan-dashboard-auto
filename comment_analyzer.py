@@ -115,9 +115,9 @@ WINDOW_DAYS = 7          # לא חוזרים אחורה מעבר לחלון הא
 MAX_COMMENTS_PULLED = 600     # תקרת עמודי Graph API לפוסט
 MAX_COMMENTS_TO_GEMINI = 300  # הכי מלויקקות; מעבר לזה רק מנפח את הפרומפט
 
-# flash הוא GA (בניגוד ל-preview שנכבים בלי אזהרה - 3-pro-preview מת במרץ)
-# והמשימה לא דורשת הסקה כבדה; 2.5-pro נשאר כפולבק יציב.
-GEMINI_MODELS = ["gemini-3.5-flash", "gemini-2.5-pro"]
+# flash מספיק - המשימה לא דורשת הסקה כבדה. 3.8 ואחריו 3.7, שניהם מוגשים
+# למפתח (gemini_model_probe, 2026-09-29).
+GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash"]
 
 TARGET_HEADER = ['media_id', 'platform', 'post_date', 'analyzed_at', 'type', 'caption',
                  'comments_in_sheet', 'comments_pulled',
