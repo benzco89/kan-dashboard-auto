@@ -282,13 +282,18 @@ check("observations are grouped per post, in pull order", [o[1] for o in H["a0"]
 young = C.history_by_post([r for r in HIST if r["pulled_at"] == LAST])
 b = C.now_at_rivals(young, [], {}, NOW)
 check("a week of history comes first", (b["status"], b["ready_on"]), ("building", "2026-10-04"))
-check("with a week of history but before calibration, nothing is scored",
-      C.now_at_rivals(H, [], {}, NOW)["status"], "calibrating")
+CALIBRATED = C.NOW_CALIBRATED
+C.NOW_CALIBRATED = False
+try:
+    pre = C.now_at_rivals(H, [], {}, NOW)["status"]
+finally:
+    C.NOW_CALIBRATED = CALIBRATED
+check("with a week of history but before calibration, nothing is scored", pre, "calibrating")
 C.NOW_CALIBRATED = True
 try:
     n = C.now_at_rivals(H, [{"post_id": "hot", "caption": "כותרת", "permalink": "u"}], {"aaa": "AAA"}, NOW)
 finally:
-    C.NOW_CALIBRATED = False
+    C.NOW_CALIBRATED = CALIBRATED
 check("only a young post running well ahead of its own account at that age",
       [i["post_id"] for i in n["items"]], ["hot"])
 check("measured against the account's other posts at the same age",
@@ -300,14 +305,31 @@ check("each item says how old the post is now, not at the last pull (5.5h + 55mi
 check("the section says when it was measured", n["run_at"], LAST)
 check("the thresholds travel with the payload",
       n["thresholds"], {"min_ratio": C.NOW_MIN_RATIO, "age_tol_h": C.NOW_AGE_TOL_H,
-                        "min_base": C.NOW_MIN_BASE, "max_age_h": C.NOW_MAX_AGE_H})
+                        "min_base": C.NOW_MIN_BASE, "max_age_h": C.NOW_MAX_AGE_H,
+                        "small_followers": C.NOW_SMALL_FOLLOWERS,
+                        "cap_small": C.NOW_CAP_SMALL, "cap_large": C.NOW_CAP_LARGE})
+
+# four hot posts from one account: a small account gets one slot, a large one three
+HOT4 = C.history_by_post(HIST + [hrow(f"hot{k}", "aaa", LAST, 5, 400 + 100 * k) for k in range(3)])
+C.NOW_CALIBRATED = True
+try:
+    small = C.now_at_rivals(HOT4, [], {}, NOW, {"aaa": C.NOW_SMALL_FOLLOWERS - 1})
+    large = C.now_at_rivals(HOT4, [], {}, NOW, {"aaa": C.NOW_SMALL_FOLLOWERS})
+    unknown = C.now_at_rivals(HOT4, [], {}, NOW)
+finally:
+    C.NOW_CALIBRATED = CALIBRATED
+check("a small account takes one slot - its hottest post",
+      [i["post_id"] for i in small["items"]], ["hot2"])
+check("a large account takes up to three, hottest first",
+      [i["post_id"] for i in large["items"]], ["hot2", "hot1", "hot0"])
+check("unknown followers count as small", len(unknown["items"]), C.NOW_CAP_SMALL)
 STALE_H = C.history_by_post([dict(r, pulled_at=r["pulled_at"].replace(LAST, "2026-09-27 01:05"))
                              for r in HIST if r["post_id"] != "stale"])
 C.NOW_CALIBRATED = True
 try:
     st = C.now_at_rivals(STALE_H, [], {}, NOW)
 finally:
-    C.NOW_CALIBRATED = False
+    C.NOW_CALIBRATED = CALIBRATED
 check("a last run older than NOW_STALE_H is not 'now'", (st["status"], st["run_at"], st["items"]),
       ("stale", "2026-09-27 01:05", []))
 
@@ -347,7 +369,8 @@ check("and the payload says so", b_down["history_unavailable"], True)
 check("engagement falls back to the estimate",
       {c["eng_basis"] for c in b_down["competitors"]}, {"estimate"})
 check("the gaps are unaffected", b_down["gaps"]["status"], "ok")
-check("the page reports the now-section state", b3["now"]["status"], "calibrating")
+check("the page reports the now-section state", b3["now"]["status"],
+      "ok" if CALIBRATED else "calibrating")
 
 print("-" * 62)
 print(f"{PASS}/{PASS + FAIL} passed")

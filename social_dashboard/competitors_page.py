@@ -50,16 +50,24 @@ CANDIDATE_COLUMNS = ["run_at", "kind", "cluster_key", "n_outlets", "posted_at", 
                      "sources_checked"]
 
 # ---------- שלב 3: היסטוריית הספירות ----------
-# הספים של "עכשיו אצל המתחרים" לקוחים מהמפרט (3.2) ועוד לא כוילו. NOW_CALIBRATED
-# נשאר False עד שמריצים analyze_now_thresholds.py על שבוע של היסטוריה ומוודאים
-# שמה שנדלק צעיר אכן נוחת גבוה בבגרותו - אחרת החלק היה נדלק מעצמו על ניחוש.
+# "עכשיו אצל המתחרים" כויל ב-2026-10-07 (analyze_now_thresholds.py, שבוע היסטוריה,
+# 528 פוסטים עם אמת בגיל 33 שעות). בסף 2.0 נדלקים ~28 פוסטים בכל ריצה, כך שמה
+# שמוצג הוא בפועל 10 היחסים הגבוהים; מתוכם 74% נחתו בעשירון העליון של החשבון
+# ו-1% מתחת לחציון. 3.0 לא משנה את העשירייה בריצות עמוסות, ובריצות שקטות מוריד
+# את הפוסטים שבין 2 ל-3, שרק 27%-40% מהם נוחתים בעשירון העליון.
 NOW_MAX_AGE_H = 24        # "עכשיו": פוסט בן פחות מיממה בריצה האחרונה
 NOW_AGE_TOL_H = 2         # בסיס: שאר הפוסטים של החשבון, בגיל ±2 שעות
 NOW_MIN_BASE = 8          # פחות נקודות בסיס = אין ציון
-NOW_MIN_RATIO = 2.0
+NOW_MIN_RATIO = 3.0
 NOW_TOP = 10
+# תקרה לחשבון: לחשבון קטן החציון נמוך, ופוסט קצת מעל הרגיל כבר יוצא "פי 5" ודוחק
+# את כולם (כיכר השבת תפסה 4 מ-10 ב-6/10). קטן - פוסט אחד; גדול - עד 3, כדי
+# שגם ynet, שמפרסם הרבה, לא ימלא את הרשימה לבד.
+NOW_SMALL_FOLLOWERS = 100_000
+NOW_CAP_SMALL = 1
+NOW_CAP_LARGE = 3
 NOW_HISTORY_DAYS = 7
-NOW_CALIBRATED = False
+NOW_CALIBRATED = True
 NOW_STALE_H = 6           # ריצה אחרונה ישנה מזה: "עכשיו" כבר אינו עכשיו
 ENG24_MIN_H, ENG24_MAX_H = 20, 30
 ENG24_MIN_POSTS = 5
@@ -430,10 +438,17 @@ def baseline_at(by_user, user, pid, age):
 def now_thresholds():
     """הספים כפי שהעמוד מציג אותם - מכאן, לא מספרים קשיחים בתבנית."""
     return {"min_ratio": NOW_MIN_RATIO, "age_tol_h": NOW_AGE_TOL_H,
-            "min_base": NOW_MIN_BASE, "max_age_h": NOW_MAX_AGE_H}
+            "min_base": NOW_MIN_BASE, "max_age_h": NOW_MAX_AGE_H,
+            "small_followers": NOW_SMALL_FOLLOWERS, "cap_small": NOW_CAP_SMALL,
+            "cap_large": NOW_CAP_LARGE}
 
 
-def now_at_rivals(hist, comp_posts, names, now):
+def account_cap(followers):
+    """כמה פוסטים חשבון אחד יכול לתפוס ברשימה. מספר עוקבים לא ידוע נחשב קטן."""
+    return NOW_CAP_LARGE if (followers or 0) >= NOW_SMALL_FOLLOWERS else NOW_CAP_SMALL
+
+
+def now_at_rivals(hist, comp_posts, names, now, followers=None):
     """פוסטים של מתחרים, בני פחות מיממה בריצה האחרונה, שרצים מהר מהרגיל של
     החשבון שלהם באותו גיל. ההשוואה היא לאותו חשבון ולאותו גיל: פוסט בן 3 שעות
     אינו בר השוואה לפוסט בן יום, ווואלה אינה N12."""
@@ -471,7 +486,14 @@ def now_at_rivals(hist, comp_posts, names, now):
                       "age_now_h": round(age + since_run_h, 1), "eng": eng,
                       "baseline": med, "ratio": round(eng / med, 1), "n_base": len(b)})
     items.sort(key=lambda x: -x["ratio"])
-    return dict(base, status="ok", run_at=latest, items=items[:NOW_TOP])
+    shown, per_user = [], {}
+    for it in items:
+        u = it["username"]
+        if per_user.get(u, 0) >= account_cap((followers or {}).get(u)):
+            continue
+        per_user[u] = per_user.get(u, 0) + 1
+        shown.append(it)
+    return dict(base, status="ok", run_at=latest, items=shown[:NOW_TOP])
 
 
 def eng_at_24h(posts):
@@ -597,7 +619,9 @@ def build(data, days, today=None, now=None):
     after = (fresh or {}).get("pulled_at", "")
     now_part = ({"status": "unavailable", "since": None, "ready_on": None, "items": [],
                  "thresholds": now_thresholds()}
-                if history_unavailable else now_at_rivals(hist, comp_posts, names, now))
+                if history_unavailable else
+                now_at_rivals(hist, comp_posts, names, now,
+                              {c["username"]: c["followers"] for c in rows}))
     return {
         "range": days,
         "last_date": A._last_data_date(data),

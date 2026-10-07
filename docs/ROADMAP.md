@@ -34,17 +34,23 @@ arena window, gaps split into missed (2+ rivals) and exclusive, and a failed
 sheet read shown as unavailable instead of "no gaps". Still open, in order —
 spec `docs/superpowers/specs/2026-09-27-competitors-design.md`:
 - **2** — intraday run built (`competitors_intraday.py`, `competitors_intraday.yml`,
-  VPS timer `kan-competitors-intraday` at 11/14/17/20/23:05). Writes only the
+  VPS timer `kan-competitors-intraday` at 08/11/14/17/20/23:05). Writes only the
   posts tab and two new tabs (post history, gap candidates). The daily run is
   untouched. Exit: 3 days of clean runs + `verify_collector check competitor_posts`.
-- **3** — built: "now at rivals" (pace vs the account's own posts at the same
-  age), engagement/1K from posts at ~24h (Kan included: the intraday run logs
-  Kan's IG counts to the history), count trends in the account modal. The "now"
-  section is **off** (`NOW_CALIBRATED = False`) until
-  `social_dashboard/analyze_now_thresholds.py` is run on a week of history
-  (from 2026-10-04) and the threshold is set by precision at a fixed age (where
-  the post stood at 33h, ranked against the account's other posts), by age of
-  first firing — not by firing rate.
+- **3** — built and calibrated 2026-10-07: "now at rivals" (pace vs the
+  account's own posts at the same age), engagement/1K from posts at ~24h (Kan
+  included: the intraday run logs Kan's IG counts to the history), count
+  trends in the account modal. Calibration (`analyze_now_thresholds.py`, 39
+  runs 29/9-6/10, 528 posts with a 33h truth): at 2.0 a median of 28 posts
+  qualify per run, so the shown list is really "top 10 by ratio" — and of
+  those, 74% landed in their account's top decile, 1% below median.
+  `NOW_MIN_RATIO = 3.0` keeps the same top 10 on busy runs and drops the 2-3x
+  posts (27-40% top decile) on quiet ones. Per-account cap: 1 slot under 100K
+  followers, 3 above (uncapped, Kikar HaShabbat took 4/10; ynet would take 4/10
+  under "cap small only"). Shown with a "בהרצה" badge and a caveat. An 08:05
+  intraday run was added: the daily run writes no history, so the section was
+  stale 05:05-11:05. Open: re-run the calibration after a month; ynet can show
+  the same story twice (needs story clustering).
 - **4** — Telegram for missed stories, only after 2–3 weeks of logged
   candidates and a precision check (≥30 marked by Ben).
 
