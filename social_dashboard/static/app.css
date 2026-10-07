@@ -338,6 +338,15 @@ a.hot-row:hover{ border-color:var(--line2); }
 /* the table has its own % column; the card keeps the inline % */
 .table-scroll .comp-pct-inline{ display:none; }
 .comp-about{ font-size:12.5px; color:var(--muted); line-height:1.7; padding-inline-start:18px; margin:6px 0 0; }
+.comp-top{ display:grid; grid-template-columns:7fr 5fr; gap:16px; align-items:start; }
+.comp-top > div{ min-width:0; }
+.comp-beta{ display:inline-block; flex:none; font-size:11px; font-weight:600; line-height:1.5; padding:1px 8px; border-radius:999px; margin-inline-start:6px; border:1px solid currentColor; color:var(--muted); vertical-align:middle; }
+.comp-beta-note{ font-size:12.5px; color:var(--muted); line-height:1.6; padding:6px 10px; margin-bottom:10px; border-inline-start:3px solid var(--line2); }
+.comp-now-kan{ margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+.comp-now-kan-title{ font-size:13px; font-weight:700; margin-bottom:8px; }
+.comp-now-kan-foot{ font-size:12px; margin-top:8px; }
+.comp-trend{ display:inline-block; width:90px; vertical-align:middle; margin-inline-start:8px; }
+@media (max-width:1000px){ .comp-top{ grid-template-columns:1fr; } }
 @media (max-width:640px){
   .comp-grid{ grid-template-columns:22px minmax(0,1fr) 64px 88px; gap:6px; }
   .comp-grid .t-title, .comp-grid .t-date{ display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

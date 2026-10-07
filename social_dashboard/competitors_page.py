@@ -15,7 +15,7 @@
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import aggregate as A
 
@@ -48,6 +48,30 @@ CANDIDATE_COLUMNS = ["run_at", "kind", "cluster_key", "n_outlets", "posted_at", 
                      "lead_username", "lead_eng", "lead_median", "lead_threshold",
                      "total_eng", "outlets", "best_kan_shared", "best_kan_containment",
                      "sources_checked"]
+
+# ---------- שלב 3: היסטוריית הספירות ----------
+# "עכשיו אצל המתחרים" כויל ב-2026-10-07 (analyze_now_thresholds.py, שבוע היסטוריה,
+# 528 פוסטים עם אמת בגיל 33 שעות). בסף 2.0 נדלקים ~28 פוסטים בכל ריצה, כך שמה
+# שמוצג הוא בפועל 10 היחסים הגבוהים; מתוכם 74% נחתו בעשירון העליון של החשבון
+# ו-1% מתחת לחציון. 3.0 לא משנה את העשירייה בריצות עמוסות, ובריצות שקטות מוריד
+# את הפוסטים שבין 2 ל-3, שרק 27%-40% מהם נוחתים בעשירון העליון.
+NOW_MAX_AGE_H = 24        # "עכשיו": פוסט בן פחות מיממה בריצה האחרונה
+NOW_AGE_TOL_H = 2         # בסיס: שאר הפוסטים של החשבון, בגיל ±2 שעות
+NOW_MIN_BASE = 8          # פחות נקודות בסיס = אין ציון
+NOW_MIN_RATIO = 3.0
+NOW_TOP = 10
+# תקרה לחשבון: לחשבון קטן החציון נמוך, ופוסט קצת מעל הרגיל כבר יוצא "פי 5" ודוחק
+# את כולם (כיכר השבת תפסה 4 מ-10 ב-6/10). קטן - פוסט אחד; גדול - עד 3, כדי
+# שגם ynet, שמפרסם הרבה, לא ימלא את הרשימה לבד.
+NOW_SMALL_FOLLOWERS = 100_000
+NOW_CAP_SMALL = 1
+NOW_CAP_LARGE = 3
+NOW_KAN_TOP = 3           # "ואצלנו?": אותו כלל בדיוק על הפוסטים של כאן באינסטגרם
+NOW_HISTORY_DAYS = 7
+NOW_CALIBRATED = True
+NOW_STALE_H = 6           # ריצה אחרונה ישנה מזה: "עכשיו" כבר אינו עכשיו
+ENG24_MIN_H, ENG24_MAX_H = 20, 30
+ENG24_MIN_POSTS = 5
 
 # ---------- השוואה לאורך זמן ----------
 
@@ -120,6 +144,7 @@ def post_view(p, cap_col, username, name, is_kan):
             "type": p.get("type", ""),
             "caption": A._clean_caption(p.get(cap_col, ""))[:200],
             "likes": likes, "comments": comments, "eng": likes + comments,
+            "post_id": str(p.get("post_id") or p.get("media_id") or ""),
             "url": p.get("permalink", "")}
 
 
@@ -369,6 +394,162 @@ def gaps_from_log(rows, after, now):
             "missed": missed[:GAPS_TOP], "exclusive": exclusive[:GAPS_TOP]}
 
 
+# ---------- היסטוריה ----------
+
+def history_by_post(rows):
+    """{post_id: [(pulled_at, age_h, eng, username), ...]}, לפי זמן המשיכה.
+
+    pulled_at ו-age_h הם בשעון ישראל נאיבי: גיל שנמדד מעבר למעבר שעון
+    קיץ/חורף שגוי בשעה אחת, וזה נבלע בחלונות (±2 שעות, 20-30 שעות)."""
+    out = {}
+    for r in rows:
+        pid, pulled = str(r.get("post_id", "")).strip(), str(r.get("pulled_at", "")).strip()
+        if pid and pulled:
+            out.setdefault(pid, []).append(
+                (pulled, A._num(r.get("age_h")), _eng(r), str(r.get("username", "")).strip()))
+    for obs in out.values():
+        obs.sort()
+    return out
+
+
+def posts_by_account(hist):
+    by = {}
+    for pid, obs in hist.items():
+        by.setdefault(obs[-1][3], []).append((pid, obs))
+    return by
+
+
+def _closest(obs, age, tol):
+    best = min(obs, key=lambda o: abs(o[1] - age), default=None)
+    return best if best is not None and abs(best[1] - age) <= tol else None
+
+
+def baseline_at(by_user, user, pid, age):
+    """הספירות של שאר הפוסטים של החשבון כשהיו בני age שעות (±NOW_AGE_TOL_H),
+    תצפית אחת לפוסט - הקרובה ביותר לגיל."""
+    base = []
+    for other, obs in by_user.get(user, []):
+        if other != pid:
+            c = _closest(obs, age, NOW_AGE_TOL_H)
+            if c:
+                base.append(c[2])
+    return base
+
+
+def now_thresholds():
+    """הספים כפי שהעמוד מציג אותם - מכאן, לא מספרים קשיחים בתבנית."""
+    return {"min_ratio": NOW_MIN_RATIO, "age_tol_h": NOW_AGE_TOL_H,
+            "min_base": NOW_MIN_BASE, "max_age_h": NOW_MAX_AGE_H,
+            "small_followers": NOW_SMALL_FOLLOWERS, "cap_small": NOW_CAP_SMALL,
+            "cap_large": NOW_CAP_LARGE}
+
+
+def kan_post_meta(rows, ig_rows=()):
+    """{post_id: (caption, permalink)} לפוסטים של כאן. קודם מהגיליון שלנו, ומעליו
+    מההיסטוריה - פוסט מהיום מגיע לגיליון רק במשיכה של מחר בבוקר."""
+    out = {}
+    for p in ig_rows:
+        pid = str(p.get("media_id") or p.get("post_id") or "").strip()
+        if pid:
+            out[pid] = (A._clean_caption(p.get("caption", ""))[:200], p.get("permalink", ""))
+    for r in rows:
+        pid = str(r.get("post_id", "")).strip()
+        if pid and str(r.get("username", "")).strip() == "kan_news" and (r.get("caption") or r.get("permalink")):
+            out[pid] = (A._clean_caption(r.get("caption", ""))[:200], r.get("permalink", ""))
+    return out
+
+
+def _now_item(pid, user, name, age, eng, med, n_base, since_run_h, caption, url):
+    return {"username": user, "name": name, "post_id": pid, "caption": caption, "url": url,
+            "age_h": age, "age_now_h": round(age + since_run_h, 1), "eng": eng,
+            "baseline": med, "ratio": round(eng / med, 1), "n_base": n_base}
+
+
+def now_at_kan(scored, ever_seen, since_run_h, kan_meta):
+    """"ואצלנו?" - אותו כלל על הפוסטים של כאן. building: הספירות של כאן עוד לא
+    מספיקות לבסיס; missing: כאן לא נמדדה בריצה האחרונה."""
+    mine = [x for x in scored if x[1] == "kan_news"]
+    if not mine:
+        return {"status": "missing" if ever_seen else "building", "items": []}
+    ready = [x for x in mine if len(x[4]) >= NOW_MIN_BASE]
+    if not ready:
+        return {"status": "building", "items": []}
+    items = []
+    for pid, user, age, eng, b in ready:
+        med = A._median(b)
+        if med and eng / med >= NOW_MIN_RATIO:
+            cap, url = kan_meta.get(pid, ("", ""))
+            items.append(_now_item(pid, user, "כאן חדשות", age, eng, med, len(b), since_run_h, cap, url))
+    items.sort(key=lambda x: -x["ratio"])
+    return {"status": "ok", "items": items[:NOW_KAN_TOP]}
+
+
+def account_cap(followers):
+    """כמה פוסטים חשבון אחד יכול לתפוס ברשימה. מספר עוקבים לא ידוע נחשב קטן."""
+    return NOW_CAP_LARGE if (followers or 0) >= NOW_SMALL_FOLLOWERS else NOW_CAP_SMALL
+
+
+def now_at_rivals(hist, comp_posts, names, now, followers=None, kan_meta=None):
+    """פוסטים של מתחרים, בני פחות מיממה בריצה האחרונה, שרצים מהר מהרגיל של
+    החשבון שלהם באותו גיל. ההשוואה היא לאותו חשבון ולאותו גיל: פוסט בן 3 שעות
+    אינו בר השוואה לפוסט בן יום, ווואלה אינה N12."""
+    if not hist:
+        return {"status": "building", "since": None, "ready_on": None, "items": [],
+                "thresholds": now_thresholds()}
+    since = min(obs[0][0] for obs in hist.values())[:10]
+    ready_on = str(date.fromisoformat(since) + timedelta(days=NOW_HISTORY_DAYS))
+    base = {"since": since, "ready_on": ready_on, "items": [], "thresholds": now_thresholds()}
+    if str(now.date()) < ready_on:
+        return dict(base, status="building")
+    if not NOW_CALIBRATED:
+        return dict(base, status="calibrating")
+
+    latest = max(obs[-1][0] for obs in hist.values())
+    latest_dt = _ts(latest[:10], latest[11:16])
+    if latest_dt is None or latest_dt < now - timedelta(hours=NOW_STALE_H):
+        return dict(base, status="stale", run_at=latest)
+    since_run_h = (now - latest_dt).total_seconds() / 3600
+    by_user = posts_by_account(hist)
+    meta = {str(p.get("post_id", "")): p for p in comp_posts}
+    # (post_id, user, age, eng, baseline) לכל פוסט צעיר בריצה האחרונה - כאן ומתחרים
+    scored = []
+    for pid, obs in hist.items():
+        pulled, age, eng, user = obs[-1]
+        if pulled == latest and age < NOW_MAX_AGE_H:
+            scored.append((pid, user, age, eng, baseline_at(by_user, user, pid, age)))
+    items = []
+    for pid, user, age, eng, b in scored:
+        if user == "kan_news":
+            continue
+        med = A._median(b) if len(b) >= NOW_MIN_BASE else 0
+        if not med or eng / med < NOW_MIN_RATIO:
+            continue
+        p = meta.get(pid, {})
+        items.append(_now_item(pid, user, names.get(user, user), age, eng, med, len(b), since_run_h,
+                               A._clean_caption(p.get("caption", ""))[:200], p.get("permalink", "")))
+    items.sort(key=lambda x: -x["ratio"])
+    shown, per_user = [], {}
+    for it in items:
+        u = it["username"]
+        if per_user.get(u, 0) >= account_cap((followers or {}).get(u)):
+            continue
+        per_user[u] = per_user.get(u, 0) + 1
+        shown.append(it)
+    kan = now_at_kan(scored, "kan_news" in by_user, since_run_h, kan_meta or {})
+    return dict(base, status="ok", run_at=latest, items=shown[:NOW_TOP], kan=kan)
+
+
+def eng_at_24h(posts):
+    """חציון הספירה בגיל ~24 שעות ומספר הפוסטים שנמדדו. תצפית אחת לפוסט,
+    בגיל 20-30 שעות, הקרובה ביותר ל-24."""
+    vals = []
+    for _pid, obs in posts:
+        near = [o for o in obs if ENG24_MIN_H <= o[1] <= ENG24_MAX_H]
+        if near:
+            vals.append(min(near, key=lambda o: abs(o[1] - 24))[2])
+    return (A._median(vals) if vals else 0), len(vals)
+
+
 # ---------- העמוד ----------
 
 def freshness(by_user, comp_posts=()):
@@ -396,11 +577,13 @@ def build(data, days, today=None, now=None):
     if now is None:
         now = datetime.now(A._TZ).replace(tzinfo=None) if A._TZ else datetime.now()
     if hasattr(data, "source_status"):
-        for k in GAP_SOURCES:
+        for k in GAP_SOURCES + ("competitor_history",):
             data.get(k)
         sources = data.source_status()
     else:
         sources = {}
+    # היסטוריה שלא נטענה אינה "עוד נאסף": בלעדיה אין "עכשיו" ואין מעורבות בגיל 24
+    history_unavailable = sources.get("competitor_history") == "unavailable"
 
     by_user = snapshots_by_user(data.get("competitors", []) or [])
     comp_posts = data.get("competitor_posts", []) or []
@@ -408,6 +591,21 @@ def build(data, days, today=None, now=None):
     followers = data.get("followers", []) or []
     win = comparison_window(by_user, days)
     fw = feed_window(comp_posts, days, today)
+
+    hist = history_by_post(data.get("competitor_history", []) or [])
+    hist_users = posts_by_account(hist)
+
+    def eng_fields(user, followers_now, fallback):
+        med, n = eng_at_24h(hist_users.get(user, []))
+        if n >= ENG24_MIN_POSTS and followers_now:
+            return round(med / followers_now * 1000, 2), "24h"
+        return fallback, "estimate"
+
+    def with_trend(v):
+        obs = hist.get(v["post_id"], [])
+        if len(obs) < 2:
+            return dict(v, trend=[], trend_ages=[])
+        return dict(v, trend=[o[2] for o in obs], trend_ages=[o[1] for o in obs])
 
     posts_by_user = {}
     for p in comp_posts:
@@ -418,6 +616,8 @@ def build(data, days, today=None, now=None):
         latest = entries[-1][1]
         names[u] = latest.get("name") or u
         own = posts_by_user.get(u, [])
+        eng, basis = eng_fields(u, A._int(latest.get("followers")),
+                                round(A._num(latest.get("eng_per_1k")), 2))
         rows.append({
             "username": u, "name": names[u], "is_kan": False,
             "followers": A._int(latest.get("followers")),
@@ -425,10 +625,11 @@ def build(data, days, today=None, now=None):
             "change_1d": A._int(latest.get("followers_change")),
             "growth": growth(entries, win),
             "posts_per_day": posts_per_day(own, fw),
-            "eng_per_1k": round(A._num(latest.get("eng_per_1k")), 2),
+            "eng_per_1k": eng, "eng_basis": basis,
             "spark": [A._int(r.get("followers")) for d, r in entries if win and d >= win["base"]],
-            "posts": sorted((post_view(p, "caption", u, names[u], False) for p in own),
-                            key=lambda x: -x["eng"])[:POSTS_PER_ACCOUNT],
+            "posts": [with_trend(v) for v in sorted(
+                (post_view(p, "caption", u, names[u], False) for p in own),
+                key=lambda x: -x["eng"])[:POSTS_PER_ACCOUNT]],
         })
 
     # כאן — מהנתונים המלאים שלנו, באותם תאריכים בדיוק
@@ -438,6 +639,8 @@ def build(data, days, today=None, now=None):
                     key=lambda p: (str(p.get("date")), str(p.get("time", ""))), reverse=True)[:10]
     avg = sum(_eng(p) for p in recent) / len(recent) if recent else 0
     keep_from = today - timedelta(days=FEED_KEEP_DAYS)
+    kan_eng, kan_basis = eng_fields("kan_news", kan_followers,
+                                    round(avg / kan_followers * 1000, 2) if kan_followers else 0)
     rows.append({
         "username": "kan_news", "name": "כאן חדשות", "is_kan": True,
         "followers": kan_followers,
@@ -445,17 +648,24 @@ def build(data, days, today=None, now=None):
         "change_1d": A._int(followers[-1].get("ig_followers_change")) if followers else 0,
         "growth": growth(kan, win),
         "posts_per_day": posts_per_day(ig, fw),
-        "eng_per_1k": round(avg / kan_followers * 1000, 2) if kan_followers else 0,
+        "eng_per_1k": kan_eng, "eng_basis": kan_basis,
         "spark": [r["followers"] for d, r in kan if win and d >= win["base"]],
-        "posts": sorted((post_view(p, "caption", "kan_news", "כאן חדשות", True) for p in ig
-                         if (A._parse_date(p.get("date")) or keep_from) > keep_from),
-                        key=lambda x: -x["eng"])[:POSTS_PER_ACCOUNT],
+        "posts": [with_trend(v) for v in sorted(
+            (post_view(p, "caption", "kan_news", "כאן חדשות", True) for p in ig
+             if (A._parse_date(p.get("date")) or keep_from) > keep_from),
+            key=lambda x: -x["eng"])[:POSTS_PER_ACCOUNT]],
     })
 
     rows.sort(key=lambda c: -c["followers"])
     kan_rank = next(i + 1 for i, c in enumerate(rows) if c["is_kan"])
     fresh = freshness(by_user, comp_posts)
     after = (fresh or {}).get("pulled_at", "")
+    now_part = ({"status": "unavailable", "since": None, "ready_on": None, "items": [],
+                 "thresholds": now_thresholds()}
+                if history_unavailable else
+                now_at_rivals(hist, comp_posts, names, now,
+                              {c["username"]: c["followers"] for c in rows},
+                              kan_post_meta(data.get("competitor_history", []) or [], ig)))
     return {
         "range": days,
         "last_date": A._last_data_date(data),
@@ -466,6 +676,8 @@ def build(data, days, today=None, now=None):
         "summary": {"kan_rank": kan_rank, "ranked": len(rows),
                     "kan_growth": rows[kan_rank - 1]["growth"]},
         "arena": arena(comp_posts, ig, names, today),
+        "now": now_part,
+        "history_unavailable": history_unavailable,
         "gaps": (gaps_from_log(data.get("gap_candidates", []) or [], after, now)
                  or coverage_gaps(data, now, sources)),
         "competitors": rows,

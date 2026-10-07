@@ -1,9 +1,11 @@
 [Unit]
-Description=Refresh competitor posts every 3h during the day (morning is the 08:30 daily run)
+Description=Refresh competitor posts and their count history every 3h, 08:05-23:05
 
 [Timer]
-# five minutes after the sniffer, so the two do not hit the Graph API in the same second
-OnCalendar=*-*-* 11,14,17,20,23:05:00 Asia/Jerusalem
+# five minutes after the sniffer, so the two do not hit the Graph API in the same second.
+# 08:05: the 08:30 daily run does not write the count history, so without it "now at
+# rivals" sat on the 23:05 run until 11:05 - stale through the whole morning.
+OnCalendar=*-*-* 08,11,14,17,20,23:05:00 Asia/Jerusalem
 Persistent=true
 AccuracySec=5min
 

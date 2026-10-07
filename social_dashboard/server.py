@@ -58,7 +58,7 @@ _PAGE_SHEETS = {
     "twitter": ("twitter", "followers"),
     "tiktok": ("tiktok", "followers", "comment_analysis"),
     "viral": ("facebook", "instagram", "youtube", "twitter", "tiktok", "followers", "comment_analysis"),
-    "competitors": ("competitors", "competitor_posts", "gap_candidates", "facebook", "instagram", "youtube", "twitter", "tiktok", "followers"),
+    "competitors": ("competitors", "competitor_posts", "gap_candidates", "facebook", "instagram", "youtube", "twitter", "tiktok", "followers", "competitor_history"),
     "alerts": ("facebook", "instagram", "youtube", "twitter", "tiktok", "followers", "hot_alerts"),
 }
 

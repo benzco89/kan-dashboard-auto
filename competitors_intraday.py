@@ -1,14 +1,15 @@
 """
 Competitors intraday - רענון תוך-יומי של פיד המתחרים ובדיקת "סיפורים שאין לנו".
 
-רץ ב-11/14/17/20/23 (טיימר ב-VPS -> workflow_dispatch, כמו הסניפר). הריצה היומית
+רץ ב-08/11/14/17/20/23 (טיימר ב-VPS -> workflow_dispatch, כמו הסניפר). הריצה היומית
 של 08:30 לא משתנה, והיא לבדה כותבת את "מתחרים" (צילום העוקבים: אחד ביום, כי
 השינוי היומי מחושב מול השורה הקודמת). כאן נכתבות רק:
   * "מועמדי פערים" - שורת סימון לכל ריצה ושורה לכל סיפור, 30 יום, כדי למדוד
     דיוק לפני שמדליקים טלגרם;
   * "פוסטים מתחרים" - אותו מיזוג לפי post_id של save_posts. ספירות טריות כל
     3 שעות: כשהפיד נמשך פעם ביום, 68% מהפוסטים של ynet קפאו לפני גיל 24 שעות;
-  * "היסטוריית פוסטים מתחרים" - שורה לכל פוסט בכל ריצה, 7 ימים, לשלב 3.
+  * "היסטוריית פוסטים מתחרים" - שורה לכל פוסט בכל ריצה (גם 50 האחרונים של כאן
+    באינסטגרם, username kan_news), 7 ימים, לשלב 3.
 לשוניות של כאן לא נכתבות לעולם: שדות ה-_delta שם הם הפרש מול המשיכה היומית.
 
 בדיקת "אין לנו": הגיליון של כאן מעודכן רק עד הבוקר, אז פוסטי אינסטגרם ופייסבוק
@@ -39,7 +40,11 @@ HISTORY_SHEET = "היסטוריית פוסטים מתחרים"
 CANDIDATES_SHEET = "מועמדי פערים"
 HISTORY_KEEP_DAYS = 7
 CANDIDATES_KEEP_DAYS = 30
-HISTORY_COLUMNS = ["post_id", "username", "posted_at", "pulled_at", "age_h", "likes", "comments"]
+# caption/permalink בסוף ומלאים רק בשורות של כאן: לפוסט מתחרה הטקסט כבר ב"פוסטים
+# מתחרים", ופוסט של כאן מהיום עוד לא הגיע לגיליון שלנו (נמשך פעם ביום ב-08:30).
+HISTORY_COLUMNS = ["post_id", "username", "posted_at", "pulled_at", "age_h", "likes", "comments",
+                   "caption", "permalink"]
+KAN_CAPTION_CHARS = 200
 # הלשוניות היחידות שהריצה רשאית לכתוב
 WRITTEN_TABS = (CANDIDATES_SHEET, CC.POSTS_SHEET, HISTORY_SHEET)
 # לשוניות של כאן - קריאה בלבד, לבדיקת הכיסוי
@@ -50,6 +55,8 @@ PAGE_ID = os.environ.get("FACEBOOK_PAGE_ID") or "220634478361516"   # or, not a 
 DRY_RUN = os.environ.get("DRY_RUN", "").strip() not in ("", "0")
 
 
+# הזמנים כאן נאיביים בשעון ישראל. גיל שנמדד מעבר למעבר שעון קיץ/חורף שגוי
+# בשעה אחת; זה נבלע בחלונות של הדשבורד (±2 שעות ל"עכשיו", 20-30 שעות למעורבות).
 def history_rows(post_rows, pulled_at):
     """שורה לכל פוסט שנמשך: הספירה וגיל הפוסט ברגע המשיכה."""
     pulled = datetime.strptime(pulled_at, "%Y-%m-%d %H:%M")
@@ -64,12 +71,17 @@ def history_rows(post_rows, pulled_at):
     return out
 
 
-def _il_date(ts):
+def _il_dt(ts):
+    """חותמת ה-API -> "YYYY-MM-DD HH:MM" בשעון ישראל; "" אם אינה קריאה."""
     try:
         return (datetime.fromisoformat(str(ts).replace("Z", "+00:00").replace("+0000", "+00:00"))
-                .astimezone(CC.IL_TZ).strftime("%Y-%m-%d"))
+                .astimezone(CC.IL_TZ).strftime("%Y-%m-%d %H:%M"))
     except ValueError:
         return ""
+
+
+def _il_date(ts):
+    return _il_dt(ts)[:10]
 
 
 def kan_fresh_rows(ig_media, fb_posts):
@@ -82,11 +94,31 @@ def kan_fresh_rows(ig_media, fb_posts):
     }
 
 
+def kan_history_rows(ig_media, pulled_at):
+    """ספירות האינסטגרם של כאן לאותה היסטוריה (username kan_news), כדי שמעורבות/1K
+    של כאן תימדד כמו של המתחרים - בגיל ~24 שעות. הגיליון של כאן נמשך פעם ביום
+    ושומר רק את הספירה האחרונה, אז אי אפשר לקחת אותה משם."""
+    pulled = datetime.strptime(pulled_at, "%Y-%m-%d %H:%M")
+    out = []
+    for m in ig_media:
+        posted_at = _il_dt(m.get("timestamp"))
+        if not posted_at or not m.get("id"):
+            continue
+        age = (pulled - datetime.strptime(posted_at, "%Y-%m-%d %H:%M")).total_seconds() / 3600
+        out.append({"post_id": str(m["id"]), "username": "kan_news", "posted_at": posted_at,
+                    "pulled_at": pulled_at, "age_h": round(age, 1),
+                    "likes": int(m.get("like_count") or 0),
+                    "comments": int(m.get("comments_count") or 0),
+                    "caption": str(m.get("caption") or "")[:KAN_CAPTION_CHARS],
+                    "permalink": str(m.get("permalink") or "")})
+    return out
+
+
 def fetch_kan_posts(own_ig):
-    """50 האחרונים של כאן באינסטגרם ובפייסבוק: טקסט ותאריך, קריאה אחת לכל פלטפורמה.
-    25 לא הספיקו: יום חדשות כבד עובר 25 פוסטי פייסבוק בין 08:30 ל-23:05."""
+    """50 האחרונים של כאן באינסטגרם ובפייסבוק: טקסט, תאריך, ובאינסטגרם גם ספירות להיסטוריה.
+    קריאה אחת לכל פלטפורמה. 25 לא הספיקו: יום חדשות כבד עובר 25 פוסטי פייסבוק בין 08:30 ל-23:05."""
     ig = http_get_json(f"{CC.BASE}/{own_ig}/media", params={
-        "access_token": CC.ACCESS_TOKEN, "fields": "caption,timestamp", "limit": 50})
+        "access_token": CC.ACCESS_TOKEN, "fields": "id,caption,permalink,timestamp,like_count,comments_count", "limit": 50})
     fb = http_get_json(f"{CC.BASE}/{PAGE_ID}/published_posts", params={
         "access_token": CC.ACCESS_TOKEN, "fields": "message,created_time", "limit": 50})
     for name, res in (("instagram", ig), ("facebook", fb)):
@@ -121,6 +153,14 @@ def append_log(sh, name, new_rows, columns, date_col, keep_days, now):
         ws.update([columns])
 
     header = ws.row_values(1)
+    missing = [c for c in columns if c not in header]
+    if missing:
+        # עמודה חדשה נוספת רק בסוף: השורות הקיימות נכתבו לפי מיקום, ועמודה שנדחפת
+        # באמצע הייתה מזיזה את כל מה שאחריה (התקרית של 26.7).
+        if ws.col_count < len(header) + len(missing):
+            ws.add_cols(len(header) + len(missing) - ws.col_count)
+        ws.update(values=[missing], range_name=gspread.utils.rowcol_to_a1(1, len(header) + 1))
+        header = header + missing
     values = [[r.get(h, "") for h in header] for r in new_rows]
     if values:
         ws.append_rows(values, value_input_option="RAW", insert_data_option="INSERT_ROWS")
@@ -191,7 +231,7 @@ def main():
     # 2. פוסטים - אותו מיזוג בדיוק כמו בריצה היומית
     CC.save_posts(sh, pd.DataFrame(post_rows))
     # 3. היסטוריה
-    hist = history_rows(post_rows, run_at)
+    hist = history_rows(post_rows, run_at) + kan_history_rows(ig_media, run_at)
     append_log(sh, HISTORY_SHEET, hist, HISTORY_COLUMNS, "pulled_at", HISTORY_KEEP_DAYS, now)
     print(f"✅ {HISTORY_SHEET}: +{len(hist)} rows")
 

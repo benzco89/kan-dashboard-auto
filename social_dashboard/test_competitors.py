@@ -256,6 +256,153 @@ check("the page serves the intraday log when there is one", b_log["gaps"]["sourc
 check("and the morning computation otherwise", b7["gaps"]["source"], "morning")
 check("freshness says when the posts were last pulled", b7["freshness"]["posts_pulled_at"], "2026-09-27 23:00")
 
+print("\nhistory: now at rivals, engagement at 24h, trends\n" + "-" * 62)
+
+
+def hrow(pid, user, pulled, age, likes):
+    return {"post_id": pid, "username": user, "pulled_at": pulled, "age_h": str(age),
+            "likes": str(likes), "comments": "0"}
+
+
+# ten older posts of aaa, each seen at 5h (100) and at 24h (400)
+HIST = []
+for i in range(10):
+    t0 = datetime(2026, 9, 19, 10) + timedelta(days=i % 7, hours=i)
+    HIST.append(hrow(f"a{i}", "aaa", (t0 + timedelta(hours=5)).strftime("%Y-%m-%d %H:%M"), 5, 100))
+    HIST.append(hrow(f"a{i}", "aaa", (t0 + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M"), 24, 400))
+LAST = "2026-09-27 11:05"
+HIST += [hrow("hot", "aaa", LAST, 5.5, 350),                   # 3.5x its account at that age
+         hrow("calm", "aaa", LAST, 4.5, 120),                  # 1.2x
+         hrow("old", "aaa", LAST, 30, 5000),                   # past 24h
+         hrow("stale", "aaa", "2026-09-27 08:05", 5, 900),     # not in the latest run
+         hrow("k1", "kan_news", LAST, 5, 5000)]                # Kan is never "at rivals"
+H = C.history_by_post(HIST)
+
+check("observations are grouped per post, in pull order", [o[1] for o in H["a0"]], [5.0, 24.0])
+young = C.history_by_post([r for r in HIST if r["pulled_at"] == LAST])
+b = C.now_at_rivals(young, [], {}, NOW)
+check("a week of history comes first", (b["status"], b["ready_on"]), ("building", "2026-10-04"))
+CALIBRATED = C.NOW_CALIBRATED
+C.NOW_CALIBRATED = False
+try:
+    pre = C.now_at_rivals(H, [], {}, NOW)["status"]
+finally:
+    C.NOW_CALIBRATED = CALIBRATED
+check("with a week of history but before calibration, nothing is scored", pre, "calibrating")
+C.NOW_CALIBRATED = True
+try:
+    n = C.now_at_rivals(H, [{"post_id": "hot", "caption": "כותרת", "permalink": "u"}], {"aaa": "AAA"}, NOW)
+finally:
+    C.NOW_CALIBRATED = CALIBRATED
+check("only a young post running well ahead of its own account at that age",
+      [i["post_id"] for i in n["items"]], ["hot"])
+check("measured against the account's other posts at the same age",
+      (n["items"][0]["ratio"], n["items"][0]["baseline"], n["items"][0]["n_base"]), (3.5, 100, 12))
+check("with its caption, link and account name",
+      (n["items"][0]["caption"], n["items"][0]["url"], n["items"][0]["name"]), ("כותרת", "u", "AAA"))
+check("each item says how old the post is now, not at the last pull (5.5h + 55min)",
+      n["items"][0]["age_now_h"], 6.4)
+check("the section says when it was measured", n["run_at"], LAST)
+check("the thresholds travel with the payload",
+      n["thresholds"], {"min_ratio": C.NOW_MIN_RATIO, "age_tol_h": C.NOW_AGE_TOL_H,
+                        "min_base": C.NOW_MIN_BASE, "max_age_h": C.NOW_MAX_AGE_H,
+                        "small_followers": C.NOW_SMALL_FOLLOWERS,
+                        "cap_small": C.NOW_CAP_SMALL, "cap_large": C.NOW_CAP_LARGE})
+
+# four hot posts from one account: a small account gets one slot, a large one three
+HOT4 = C.history_by_post(HIST + [hrow(f"hot{k}", "aaa", LAST, 5, 400 + 100 * k) for k in range(3)])
+C.NOW_CALIBRATED = True
+try:
+    small = C.now_at_rivals(HOT4, [], {}, NOW, {"aaa": C.NOW_SMALL_FOLLOWERS - 1})
+    large = C.now_at_rivals(HOT4, [], {}, NOW, {"aaa": C.NOW_SMALL_FOLLOWERS})
+    unknown = C.now_at_rivals(HOT4, [], {}, NOW)
+finally:
+    C.NOW_CALIBRATED = CALIBRATED
+check("a small account takes one slot - its hottest post",
+      [i["post_id"] for i in small["items"]], ["hot2"])
+check("a large account takes up to three, hottest first",
+      [i["post_id"] for i in large["items"]], ["hot2", "hot1", "hot0"])
+check("unknown followers count as small", len(unknown["items"]), C.NOW_CAP_SMALL)
+
+# "ואצלנו?" - the same rule on Kan's own posts
+KAN_OLD = []
+for i in range(10):
+    t0 = datetime(2026, 9, 19, 10) + timedelta(days=i % 7, hours=i)
+    KAN_OLD.append(hrow(f"ko{i}", "kan_news", (t0 + timedelta(hours=5)).strftime("%Y-%m-%d %H:%M"), 5, 200))
+C.NOW_CALIBRATED = True
+try:
+    k_building = C.now_at_rivals(H, [], {}, NOW)["kan"]
+    k_rows = HIST + KAN_OLD + [dict(hrow("k2", "kan_news", LAST, 4.8, 250), caption="רגיל", permalink="u2")]
+    k_meta = C.kan_post_meta([dict(r, caption="כותרת שלנו", permalink="u1") if r["post_id"] == "k1" else r
+                              for r in k_rows])
+    k_ok = C.now_at_rivals(C.history_by_post(k_rows), [], {}, NOW, None, k_meta)["kan"]
+    k_quiet = C.now_at_rivals(C.history_by_post([r for r in k_rows if r["post_id"] != "k1"]),
+                              [], {}, NOW)["kan"]
+    k_missing = C.now_at_rivals(C.history_by_post(
+        [r for r in HIST if r["username"] != "kan_news"] + KAN_OLD), [], {}, NOW)["kan"]
+finally:
+    C.NOW_CALIBRATED = CALIBRATED
+check("Kan without enough of its own history is still collecting", k_building["status"], "building")
+check("a Kan post far ahead of Kan's own normal at that age shows up, with its text and link",
+      [(i["post_id"], i["ratio"], i["caption"], i["url"], i["name"]) for i in k_ok["items"]],
+      [("k1", 25.0, "כותרת שלנו", "u1", "כאן חדשות")])
+check("a normal Kan post does not", k_quiet["status"], "ok")
+check("and a quiet run is an empty list, not 'collecting'", k_quiet["items"], [])
+check("Kan missing from the latest run is said, not hidden", k_missing["status"], "missing")
+check("the history's text wins over the sheet - today's post is not in the sheet yet",
+      C.kan_post_meta([{"post_id": "x", "username": "kan_news", "caption": "חדש", "permalink": "h"}],
+                      [{"media_id": "x", "caption": "ישן", "permalink": "s"}])["x"], ("חדש", "h"))
+check("a rival's history row never becomes Kan's text",
+      C.kan_post_meta([{"post_id": "y", "username": "aaa", "caption": "של מתחרה"}]), {})
+STALE_H = C.history_by_post([dict(r, pulled_at=r["pulled_at"].replace(LAST, "2026-09-27 01:05"))
+                             for r in HIST if r["post_id"] != "stale"])
+C.NOW_CALIBRATED = True
+try:
+    st = C.now_at_rivals(STALE_H, [], {}, NOW)
+finally:
+    C.NOW_CALIBRATED = CALIBRATED
+check("a last run older than NOW_STALE_H is not 'now'", (st["status"], st["run_at"], st["items"]),
+      ("stale", "2026-09-27 01:05", []))
+
+check("engagement at ~24h: one observation per post, within 20-30h",
+      C.eng_at_24h(C.posts_by_account(H)["aaa"]), (400, 11))
+
+DATA3 = dict(DATA, competitor_history=HIST, competitor_posts=DATA["competitor_posts"] + [
+    {"post_id": "a0", "username": "aaa", "date": "2026-09-26", "time": "10:00", "likes": "99999",
+     "comments": "0", "caption": "x", "permalink": "p", "pulled_at": "2026-09-26 23:00"}])
+b3 = C.build(DATA3, 7, today=TODAY, now=NOW)
+aaa = [c for c in b3["competitors"] if c["username"] == "aaa"][0]
+check("engagement/1K comes from posts at ~24h once there are enough",
+      (aaa["eng_basis"], aaa["eng_per_1k"]), ("24h", round(400 / aaa["followers"] * 1000, 2)))
+check("without enough history it stays an estimate",
+      [c["eng_basis"] for c in b3["competitors"] if c["username"] == "bbb"], ["estimate"])
+check("a post with history carries its count trend",
+      [p["trend"] for p in aaa["posts"] if p["post_id"] == "a0"], [[100, 400]])
+check("and the age of each point, for the tooltip",
+      [p["trend_ages"] for p in aaa["posts"] if p["post_id"] == "a0"], [[5.0, 24.0]])
+check("the history loaded: no flag", b3["history_unavailable"], False)
+
+
+class HistoryDownStub(OrderStub):
+    """The history tab failed to load (and nothing was cached)."""
+
+    def source_status(self):
+        return {k: ("unavailable" if k == "competitor_history" and k in self.fetched else "ok")
+                for k in C.GAP_SOURCES + ("competitor_history",)}
+
+
+down = HistoryDownStub(dict(DATA, competitor_history=[]))
+b_down = C.build(down, 7, today=TODAY, now=NOW)
+check("build() touches the history tab before reading source_status",
+      "competitor_history" in down.fetched, True)
+check("a failed history read is not 'still collecting'", b_down["now"]["status"], "unavailable")
+check("and the payload says so", b_down["history_unavailable"], True)
+check("engagement falls back to the estimate",
+      {c["eng_basis"] for c in b_down["competitors"]}, {"estimate"})
+check("the gaps are unaffected", b_down["gaps"]["status"], "ok")
+check("the page reports the now-section state", b3["now"]["status"],
+      "ok" if CALIBRATED else "calibrating")
+
 print("-" * 62)
 print(f"{PASS}/{PASS + FAIL} passed")
 sys.exit(1 if FAIL else 0)
