@@ -89,6 +89,36 @@
   }
 
   // ---------- עכשיו אצל המתחרים ----------
+  function nowRow(it, isKan) {
+    var ageNow = it.age_now_h != null ? it.age_now_h : it.age_h;
+    var head = '<div class="hot-row-head"><span>' + (isKan ? "🔴 " : "") + KS.esc(it.name) + '</span>' +
+      '<span class="hot-time">בן ' + Math.round(ageNow) + ' שעות</span></div>';
+    var txt = '<div class="hot-trig">' + KS.esc(it.caption || "(ללא כיתוב)") +
+      '<br><span class="comp-muted">פי ' + it.ratio.toFixed(1) + ' מפוסט רגיל ' + (isKan ? "שלנו" : "של " + KS.esc(it.name)) +
+      ' בגיל ' + Math.round(it.age_h) + ' שעות · ' + KS.fmt(it.eng) + ' לייקים+תגובות</span></div>';
+    return it.url
+      ? '<a class="hot-row" href="' + KS.esc(it.url) + '" target="_blank" rel="noopener">' + head + txt + '</a>'
+      : '<div class="hot-row">' + head + txt + '</div>';
+  }
+
+  // "ואצלנו?" - אותו כלל על הפוסטים של כאן באינסטגרם
+  function kanBlock(k, th) {
+    k = k || { status: "building", items: [] };
+    var body;
+    if (k.status === "missing") {
+      body = '<div class="comp-warn">הפוסטים של כאן לא נמדדו בריצה האחרונה</div>';
+    } else if (k.status === "building") {
+      body = '<div class="comp-empty">נאסף. הספירות של כאן נכנסות להיסטוריה מאז שהחלק עלה; צריך לפחות ' + th.min_base +
+        ' פוסטים שלנו באותו גיל כדי להשוות, כיומיים.</div>';
+    } else if (!k.items.length) {
+      body = '<div class="comp-empty">אין כרגע פוסט שלנו שרץ פי ' + th.min_ratio + ' ומעלה מהרגיל שלנו.</div>';
+    } else {
+      body = k.items.map(function (it) { return nowRow(it, true); }).join("");
+    }
+    return '<div class="comp-now-kan"><div class="comp-now-kan-title">ואצלנו? · אינסטגרם, אותו כלל</div>' + body +
+      '<div class="comp-muted comp-now-kan-foot">כל הפלטפורמות, עם התראה בטלגרם: <a class="km-theme" href="/alerts">עמוד ההתראות</a></div></div>';
+  }
+
   function nowSection(data) {
     var n = data.now || { status: "building", items: [] };
     var th = nowThresholds(data);
@@ -105,18 +135,9 @@
     } else if (!n.items.length) {
       body = '<div class="comp-empty">אין כרגע פוסט שרץ פי ' + th.min_ratio + ' ומעלה מהרגיל של החשבון שלו.</div>';
     } else {
-      body = n.items.map(function (it) {
-        var ageNow = it.age_now_h != null ? it.age_now_h : it.age_h;
-        var head = '<div class="hot-row-head"><span>' + KS.esc(it.name) + '</span>' +
-          '<span class="hot-time">בן ' + Math.round(ageNow) + ' שעות</span></div>';
-        var txt = '<div class="hot-trig">' + KS.esc(it.caption || "(ללא כיתוב)") +
-          '<br><span class="comp-muted">פי ' + it.ratio.toFixed(1) + ' מפוסט רגיל של ' + KS.esc(it.name) +
-          ' בגיל ' + Math.round(it.age_h) + ' שעות · ' + KS.fmt(it.eng) + ' לייקים+תגובות</span></div>';
-        return it.url
-          ? '<a class="hot-row" href="' + KS.esc(it.url) + '" target="_blank" rel="noopener">' + head + txt + '</a>'
-          : '<div class="hot-row">' + head + txt + '</div>';
-      }).join("");
+      body = n.items.map(function (it) { return nowRow(it, false); }).join("");
     }
+    if (n.status === "ok") body += kanBlock(n.kan, th);
     var asOf = (n.status === "ok" && n.run_at) ? " נכון ל־" + hhmm(n.run_at) + "." : "";
     return '<div class="section-label"><span>🔥 עכשיו אצל המתחרים · ' + th.max_age_h + ' השעות האחרונות</span>' +
       '<b class="comp-beta">בהרצה</b><span></span></div>' +

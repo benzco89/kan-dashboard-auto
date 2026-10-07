@@ -49,8 +49,13 @@ spec `docs/superpowers/specs/2026-09-27-competitors-design.md`:
   followers, 3 above (uncapped, Kikar HaShabbat took 4/10; ynet would take 4/10
   under "cap small only"). Shown with a "בהרצה" badge and a caveat. An 08:05
   intraday run was added: the daily run writes no history, so the section was
-  stale 05:05-11:05. Open: re-run the calibration after a month; ynet can show
-  the same story twice (needs story clustering).
+  stale 05:05-11:05. "ואצלנו?" block in the same section: Kan's IG posts by
+  the same rule (top 3), text+link from two columns appended at the END of the
+  history tab (caption, permalink — Kan rows only; today's Kan post is not in
+  our sheet until the next 08:30 pull). Needs ~2 days of Kan history before
+  it can score (≥8 Kan posts at each age). Open: re-run the calibration after
+  a month; ynet can show the same story twice (needs story clustering); next
+  step is marking, per hot rival post, whether Kan has the story.
 - **4** — Telegram for missed stories, only after 2–3 weeks of logged
   candidates and a precision check (≥30 marked by Ben).
 

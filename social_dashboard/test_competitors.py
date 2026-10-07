@@ -323,6 +323,37 @@ check("a small account takes one slot - its hottest post",
 check("a large account takes up to three, hottest first",
       [i["post_id"] for i in large["items"]], ["hot2", "hot1", "hot0"])
 check("unknown followers count as small", len(unknown["items"]), C.NOW_CAP_SMALL)
+
+# "ואצלנו?" - the same rule on Kan's own posts
+KAN_OLD = []
+for i in range(10):
+    t0 = datetime(2026, 9, 19, 10) + timedelta(days=i % 7, hours=i)
+    KAN_OLD.append(hrow(f"ko{i}", "kan_news", (t0 + timedelta(hours=5)).strftime("%Y-%m-%d %H:%M"), 5, 200))
+C.NOW_CALIBRATED = True
+try:
+    k_building = C.now_at_rivals(H, [], {}, NOW)["kan"]
+    k_rows = HIST + KAN_OLD + [dict(hrow("k2", "kan_news", LAST, 4.8, 250), caption="רגיל", permalink="u2")]
+    k_meta = C.kan_post_meta([dict(r, caption="כותרת שלנו", permalink="u1") if r["post_id"] == "k1" else r
+                              for r in k_rows])
+    k_ok = C.now_at_rivals(C.history_by_post(k_rows), [], {}, NOW, None, k_meta)["kan"]
+    k_quiet = C.now_at_rivals(C.history_by_post([r for r in k_rows if r["post_id"] != "k1"]),
+                              [], {}, NOW)["kan"]
+    k_missing = C.now_at_rivals(C.history_by_post(
+        [r for r in HIST if r["username"] != "kan_news"] + KAN_OLD), [], {}, NOW)["kan"]
+finally:
+    C.NOW_CALIBRATED = CALIBRATED
+check("Kan without enough of its own history is still collecting", k_building["status"], "building")
+check("a Kan post far ahead of Kan's own normal at that age shows up, with its text and link",
+      [(i["post_id"], i["ratio"], i["caption"], i["url"], i["name"]) for i in k_ok["items"]],
+      [("k1", 25.0, "כותרת שלנו", "u1", "כאן חדשות")])
+check("a normal Kan post does not", k_quiet["status"], "ok")
+check("and a quiet run is an empty list, not 'collecting'", k_quiet["items"], [])
+check("Kan missing from the latest run is said, not hidden", k_missing["status"], "missing")
+check("the history's text wins over the sheet - today's post is not in the sheet yet",
+      C.kan_post_meta([{"post_id": "x", "username": "kan_news", "caption": "חדש", "permalink": "h"}],
+                      [{"media_id": "x", "caption": "ישן", "permalink": "s"}])["x"], ("חדש", "h"))
+check("a rival's history row never becomes Kan's text",
+      C.kan_post_meta([{"post_id": "y", "username": "aaa", "caption": "של מתחרה"}]), {})
 STALE_H = C.history_by_post([dict(r, pulled_at=r["pulled_at"].replace(LAST, "2026-09-27 01:05"))
                              for r in HIST if r["post_id"] != "stale"])
 C.NOW_CALIBRATED = True

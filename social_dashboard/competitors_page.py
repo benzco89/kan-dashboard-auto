@@ -66,6 +66,7 @@ NOW_TOP = 10
 NOW_SMALL_FOLLOWERS = 100_000
 NOW_CAP_SMALL = 1
 NOW_CAP_LARGE = 3
+NOW_KAN_TOP = 3           # "ואצלנו?": אותו כלל בדיוק על הפוסטים של כאן באינסטגרם
 NOW_HISTORY_DAYS = 7
 NOW_CALIBRATED = True
 NOW_STALE_H = 6           # ריצה אחרונה ישנה מזה: "עכשיו" כבר אינו עכשיו
@@ -443,12 +444,52 @@ def now_thresholds():
             "cap_large": NOW_CAP_LARGE}
 
 
+def kan_post_meta(rows, ig_rows=()):
+    """{post_id: (caption, permalink)} לפוסטים של כאן. קודם מהגיליון שלנו, ומעליו
+    מההיסטוריה - פוסט מהיום מגיע לגיליון רק במשיכה של מחר בבוקר."""
+    out = {}
+    for p in ig_rows:
+        pid = str(p.get("media_id") or p.get("post_id") or "").strip()
+        if pid:
+            out[pid] = (A._clean_caption(p.get("caption", ""))[:200], p.get("permalink", ""))
+    for r in rows:
+        pid = str(r.get("post_id", "")).strip()
+        if pid and str(r.get("username", "")).strip() == "kan_news" and (r.get("caption") or r.get("permalink")):
+            out[pid] = (A._clean_caption(r.get("caption", ""))[:200], r.get("permalink", ""))
+    return out
+
+
+def _now_item(pid, user, name, age, eng, med, n_base, since_run_h, caption, url):
+    return {"username": user, "name": name, "post_id": pid, "caption": caption, "url": url,
+            "age_h": age, "age_now_h": round(age + since_run_h, 1), "eng": eng,
+            "baseline": med, "ratio": round(eng / med, 1), "n_base": n_base}
+
+
+def now_at_kan(scored, ever_seen, since_run_h, kan_meta):
+    """"ואצלנו?" - אותו כלל על הפוסטים של כאן. building: הספירות של כאן עוד לא
+    מספיקות לבסיס; missing: כאן לא נמדדה בריצה האחרונה."""
+    mine = [x for x in scored if x[1] == "kan_news"]
+    if not mine:
+        return {"status": "missing" if ever_seen else "building", "items": []}
+    ready = [x for x in mine if len(x[4]) >= NOW_MIN_BASE]
+    if not ready:
+        return {"status": "building", "items": []}
+    items = []
+    for pid, user, age, eng, b in ready:
+        med = A._median(b)
+        if med and eng / med >= NOW_MIN_RATIO:
+            cap, url = kan_meta.get(pid, ("", ""))
+            items.append(_now_item(pid, user, "כאן חדשות", age, eng, med, len(b), since_run_h, cap, url))
+    items.sort(key=lambda x: -x["ratio"])
+    return {"status": "ok", "items": items[:NOW_KAN_TOP]}
+
+
 def account_cap(followers):
     """כמה פוסטים חשבון אחד יכול לתפוס ברשימה. מספר עוקבים לא ידוע נחשב קטן."""
     return NOW_CAP_LARGE if (followers or 0) >= NOW_SMALL_FOLLOWERS else NOW_CAP_SMALL
 
 
-def now_at_rivals(hist, comp_posts, names, now, followers=None):
+def now_at_rivals(hist, comp_posts, names, now, followers=None, kan_meta=None):
     """פוסטים של מתחרים, בני פחות מיממה בריצה האחרונה, שרצים מהר מהרגיל של
     החשבון שלהם באותו גיל. ההשוואה היא לאותו חשבון ולאותו גיל: פוסט בן 3 שעות
     אינו בר השוואה לפוסט בן יום, ווואלה אינה N12."""
@@ -470,21 +511,22 @@ def now_at_rivals(hist, comp_posts, names, now, followers=None):
     since_run_h = (now - latest_dt).total_seconds() / 3600
     by_user = posts_by_account(hist)
     meta = {str(p.get("post_id", "")): p for p in comp_posts}
-    items = []
+    # (post_id, user, age, eng, baseline) לכל פוסט צעיר בריצה האחרונה - כאן ומתחרים
+    scored = []
     for pid, obs in hist.items():
         pulled, age, eng, user = obs[-1]
-        if pulled != latest or age >= NOW_MAX_AGE_H or user == "kan_news":
+        if pulled == latest and age < NOW_MAX_AGE_H:
+            scored.append((pid, user, age, eng, baseline_at(by_user, user, pid, age)))
+    items = []
+    for pid, user, age, eng, b in scored:
+        if user == "kan_news":
             continue
-        b = baseline_at(by_user, user, pid, age)
         med = A._median(b) if len(b) >= NOW_MIN_BASE else 0
         if not med or eng / med < NOW_MIN_RATIO:
             continue
         p = meta.get(pid, {})
-        items.append({"username": user, "name": names.get(user, user), "post_id": pid,
-                      "caption": A._clean_caption(p.get("caption", ""))[:200],
-                      "url": p.get("permalink", ""), "age_h": age,
-                      "age_now_h": round(age + since_run_h, 1), "eng": eng,
-                      "baseline": med, "ratio": round(eng / med, 1), "n_base": len(b)})
+        items.append(_now_item(pid, user, names.get(user, user), age, eng, med, len(b), since_run_h,
+                               A._clean_caption(p.get("caption", ""))[:200], p.get("permalink", "")))
     items.sort(key=lambda x: -x["ratio"])
     shown, per_user = [], {}
     for it in items:
@@ -493,7 +535,8 @@ def now_at_rivals(hist, comp_posts, names, now, followers=None):
             continue
         per_user[u] = per_user.get(u, 0) + 1
         shown.append(it)
-    return dict(base, status="ok", run_at=latest, items=shown[:NOW_TOP])
+    kan = now_at_kan(scored, "kan_news" in by_user, since_run_h, kan_meta or {})
+    return dict(base, status="ok", run_at=latest, items=shown[:NOW_TOP], kan=kan)
 
 
 def eng_at_24h(posts):
@@ -621,7 +664,8 @@ def build(data, days, today=None, now=None):
                  "thresholds": now_thresholds()}
                 if history_unavailable else
                 now_at_rivals(hist, comp_posts, names, now,
-                              {c["username"]: c["followers"] for c in rows}))
+                              {c["username"]: c["followers"] for c in rows},
+                              kan_post_meta(data.get("competitor_history", []) or [], ig)))
     return {
         "range": days,
         "last_date": A._last_data_date(data),

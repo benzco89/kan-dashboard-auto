@@ -40,7 +40,11 @@ HISTORY_SHEET = "היסטוריית פוסטים מתחרים"
 CANDIDATES_SHEET = "מועמדי פערים"
 HISTORY_KEEP_DAYS = 7
 CANDIDATES_KEEP_DAYS = 30
-HISTORY_COLUMNS = ["post_id", "username", "posted_at", "pulled_at", "age_h", "likes", "comments"]
+# caption/permalink בסוף ומלאים רק בשורות של כאן: לפוסט מתחרה הטקסט כבר ב"פוסטים
+# מתחרים", ופוסט של כאן מהיום עוד לא הגיע לגיליון שלנו (נמשך פעם ביום ב-08:30).
+HISTORY_COLUMNS = ["post_id", "username", "posted_at", "pulled_at", "age_h", "likes", "comments",
+                   "caption", "permalink"]
+KAN_CAPTION_CHARS = 200
 # הלשוניות היחידות שהריצה רשאית לכתוב
 WRITTEN_TABS = (CANDIDATES_SHEET, CC.POSTS_SHEET, HISTORY_SHEET)
 # לשוניות של כאן - קריאה בלבד, לבדיקת הכיסוי
@@ -104,7 +108,9 @@ def kan_history_rows(ig_media, pulled_at):
         out.append({"post_id": str(m["id"]), "username": "kan_news", "posted_at": posted_at,
                     "pulled_at": pulled_at, "age_h": round(age, 1),
                     "likes": int(m.get("like_count") or 0),
-                    "comments": int(m.get("comments_count") or 0)})
+                    "comments": int(m.get("comments_count") or 0),
+                    "caption": str(m.get("caption") or "")[:KAN_CAPTION_CHARS],
+                    "permalink": str(m.get("permalink") or "")})
     return out
 
 
@@ -112,7 +118,7 @@ def fetch_kan_posts(own_ig):
     """50 האחרונים של כאן באינסטגרם ובפייסבוק: טקסט, תאריך, ובאינסטגרם גם ספירות להיסטוריה.
     קריאה אחת לכל פלטפורמה. 25 לא הספיקו: יום חדשות כבד עובר 25 פוסטי פייסבוק בין 08:30 ל-23:05."""
     ig = http_get_json(f"{CC.BASE}/{own_ig}/media", params={
-        "access_token": CC.ACCESS_TOKEN, "fields": "id,caption,timestamp,like_count,comments_count", "limit": 50})
+        "access_token": CC.ACCESS_TOKEN, "fields": "id,caption,permalink,timestamp,like_count,comments_count", "limit": 50})
     fb = http_get_json(f"{CC.BASE}/{PAGE_ID}/published_posts", params={
         "access_token": CC.ACCESS_TOKEN, "fields": "message,created_time", "limit": 50})
     for name, res in (("instagram", ig), ("facebook", fb)):
@@ -147,6 +153,14 @@ def append_log(sh, name, new_rows, columns, date_col, keep_days, now):
         ws.update([columns])
 
     header = ws.row_values(1)
+    missing = [c for c in columns if c not in header]
+    if missing:
+        # עמודה חדשה נוספת רק בסוף: השורות הקיימות נכתבו לפי מיקום, ועמודה שנדחפת
+        # באמצע הייתה מזיזה את כל מה שאחריה (התקרית של 26.7).
+        if ws.col_count < len(header) + len(missing):
+            ws.add_cols(len(header) + len(missing) - ws.col_count)
+        ws.update(values=[missing], range_name=gspread.utils.rowcol_to_a1(1, len(header) + 1))
+        header = header + missing
     values = [[r.get(h, "") for h in header] for r in new_rows]
     if values:
         ws.append_rows(values, value_input_option="RAW", insert_data_option="INSERT_ROWS")

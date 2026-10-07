@@ -41,7 +41,8 @@ check("post id is a string", h[0]["post_id"], "17")
 check("age at the pull, in hours", h[0]["age_h"], 4.5)
 check("counts and times are kept", (h[0]["likes"], h[0]["comments"], h[0]["posted_at"], h[0]["pulled_at"]),
       (10, 2, "2026-09-27 09:30", "2026-09-27 14:00"))
-check("columns cover every field", sorted(h[0]), sorted(CI.HISTORY_COLUMNS))
+check("a rival row fills the count columns - its text is in the posts tab", sorted(h[0]),
+      sorted(c for c in CI.HISTORY_COLUMNS if c not in ("caption", "permalink")))
 
 print("\nKan's fresh posts\n" + "-" * 62)
 k = CI.kan_fresh_rows(
@@ -130,6 +131,62 @@ check("Kan's IG counts enter the history as kan_news, dated in Israel",
        "likes": 10, "comments": 2})
 check("a hidden like count reads as 0", (kh[1]["likes"], kh[1]["comments"]), (0, 0))
 check("a post without an id is skipped", len(kh), 2)
+kc = CI.kan_history_rows([{"id": "k3", "timestamp": "2026-09-27T06:30:00+0000", "caption": "א" * 300,
+                           "permalink": "https://www.instagram.com/p/X/"}], "2026-09-27 14:00")[0]
+check("Kan's rows carry a capped caption and the link - today's post is not in our sheet yet",
+      (len(kc["caption"]), kc["permalink"]), (CI.KAN_CAPTION_CHARS, "https://www.instagram.com/p/X/"))
+check("a Kan row fills every column", sorted(kc), sorted(CI.HISTORY_COLUMNS))
+check("the new columns are at the end of the history",
+      CI.HISTORY_COLUMNS[:7], ["post_id", "username", "posted_at", "pulled_at", "age_h", "likes", "comments"])
+
+
+class FakeWS:
+    def __init__(self, rows, col_count):
+        self.rows, self.col_count = [list(r) for r in rows], col_count
+
+    def row_values(self, i):
+        return list(self.rows[i - 1])
+
+    def add_cols(self, n):
+        self.col_count += n
+
+    def update(self, values, range_name):
+        col = ord(range_name[0]) - ord("A")          # one header row, columns A-Z
+        assert range_name[1:] == "1" and col + len(values[0]) <= self.col_count
+        self.rows[0][col:col + len(values[0])] = values[0]
+
+    def append_rows(self, values, **kw):
+        self.rows += values
+
+    def col_values(self, i):
+        return [r[i - 1] if len(r) >= i else "" for r in self.rows]
+
+    def delete_rows(self, a, b):
+        del self.rows[a - 1:b]
+
+
+class FakeSH:
+    def __init__(self, ws):
+        self.ws = ws
+
+    def worksheet(self, name):
+        return self.ws
+
+
+OLD_HEADER = CI.HISTORY_COLUMNS[:7]
+ws = FakeWS([OLD_HEADER, ["r1", "aaa", "2026-09-27 09:00", "2026-09-27 11:05", "2.1", "10", "1"]], 7)
+CI.append_log(FakeSH(ws), CI.HISTORY_SHEET, [dict(kc, pulled_at="2026-09-27 14:00")],
+              CI.HISTORY_COLUMNS, "pulled_at", 7, NOW)
+check("the missing columns are added at the end, the old ones stay put",
+      ws.rows[0], CI.HISTORY_COLUMNS)
+check("an old row keeps every value in its column", ws.rows[1][:7],
+      ["r1", "aaa", "2026-09-27 09:00", "2026-09-27 11:05", "2.1", "10", "1"])
+check("a new row lands under the new header", (ws.rows[2][0], ws.rows[2][7][:3], ws.rows[2][8]),
+      ("k3", "אאא", "https://www.instagram.com/p/X/"))
+ws2 = FakeWS([["post_id", "username", "posted_at", "pulled_at", "age_h", "likes", "comments", "extra"]], 8)
+CI.append_log(FakeSH(ws2), CI.HISTORY_SHEET, [], CI.HISTORY_COLUMNS, "pulled_at", 7, NOW)
+check("a column added by hand stays where it is", ws2.rows[0][:8],
+      ["post_id", "username", "posted_at", "pulled_at", "age_h", "likes", "comments", "extra"])
 
 print("\nenvironment\n" + "-" * 62)
 # the FACEBOOK_PAGE_ID secret exists but is empty; the workflow still sets the
