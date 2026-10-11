@@ -67,6 +67,8 @@ a{ color:inherit; }
 .ranges{ display:flex; gap:4px; background:var(--console); border:1px solid var(--line); border-radius:7px; padding:3px; }
 .range{ font-family:ui-monospace,monospace; font-size:12px; font-weight:700; cursor:pointer; border-radius:5px; padding:5px 11px; color:var(--muted); background:transparent; border:none; }
 .range.active{ color:#fff; background:#ff3300; }
+.csv-btn{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; cursor:pointer; border-radius:7px; padding:6px 11px; color:var(--muted); background:var(--console); border:1px solid var(--line); font-family:'SimplerPro','Segoe UI',sans-serif; }
+.csv-btn:hover{ color:var(--text); border-color:var(--muted); }
 .iconbtn{ display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; cursor:pointer; color:var(--body); background:var(--chip); border:1px solid var(--line); border-radius:6px; }
 .iconbtn svg{ stroke:currentColor; }
 .ext-link{ display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; text-decoration:none; color:var(--muted); border:1px solid var(--line); border-radius:7px; padding:6px 12px; background:var(--console); }
