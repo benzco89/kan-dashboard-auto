@@ -76,6 +76,15 @@
     var thead = '<div class="thead" id="thead" style="display:grid;grid-template-columns:' + cols + ';gap:10px;"><span class="center">#</span><span>תוכן</span>' +
       thd("type", "סוג") + thd("views", "צפיות") + thd("likes", "לייקים") + thd("retweets", "ריטוויטים") + thd("replies", "תגובות") + thd("engagement", "% מעורבות") + '</div>';
     var LIMIT = 40;
+    var DASH = '<span style="color:var(--faint);">—</span>';
+    var n = function (v) { return v === null || v === undefined ? DASH : KS.fmt(v); };
+    // ריטווט: "צפיות" היא מה שעבר דרך הריטווט של כאן; המספר של הציוץ המלא
+    // מתחת לטקסט. שורה שנשמרה לפני שהתחלנו לשמור את המקור - בלי מספר.
+    var rtLine = function (p) {
+      if (!p.retweet_of) return "";
+      return '<span class="t-date">ריטווט של <bdi>@' + KS.esc(p.retweet_of) + '</bdi> · ' +
+        (p.orig_views === null || p.orig_views === undefined ? "הציוץ המלא לא נמדד" : KS.fmt(p.orig_views) + " צפיות בציוץ המלא") + '</span>';
+    };
     var rowOf = function (p, idx) {
       var rank = idx + 1;
       var rankStyle = rank <= 3 ? "color:var(--pf);font-weight:700;" : "color:var(--faint);";
@@ -83,13 +92,13 @@
       var hl = hlV ? "border-inline-start-color:var(--hi-views);background:var(--hi-views-bg);" : "";
       return '<a class="trow" href="' + KS.esc(p.url || "#") + '" target="_blank" rel="noopener" data-idx="' + idx + '" style="display:grid;grid-template-columns:' + cols + ';gap:10px;' + hl + '">' +
         '<span class="cell" style="' + rankStyle + '">' + rank + '</span>' +
-        '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + '</span><span class="t-date">' + KS.fmtDate(p.date) + '</span></span>' +
+        '<span style="min-width:0;"><span class="t-title">' + KS.esc(p.title) + '</span>' + rtLine(p) + '<span class="t-date">' + KS.fmtDate(p.date) + '</span></span>' +
         '<span class="center"><span class="tag" style="color:' + (TYPE_COLOR[p.type] || "var(--muted)") + ';">' + (TYPE_HE[p.type] || p.type) + '</span></span>' +
         '<span class="cell strong">' + KS.fmt(p.views) + '</span>' +
-        '<span class="cell">' + KS.fmt(p.likes) + '</span>' +
-        '<span class="cell">' + KS.fmt(p.retweets) + '</span>' +
-        '<span class="cell">' + KS.fmt(p.replies) + '</span>' +
-        '<span class="cell strong">' + p.engagement.toFixed(1) + '%</span></a>';
+        '<span class="cell">' + n(p.likes) + '</span>' +
+        '<span class="cell">' + n(p.retweets) + '</span>' +
+        '<span class="cell">' + n(p.replies) + '</span>' +
+        '<span class="cell strong">' + (p.engagement === null || p.engagement === undefined ? DASH : p.engagement.toFixed(1) + '%') + '</span></a>';
     };
     var ENG_KEY = "engagement";
     // ברירת מחדל אחידה עם שאר העמודים: דירוג לפי מעורבות
@@ -104,6 +113,7 @@
     }
     function openPostModal(p) {
       var mv = medOf("views");
+      if (p.retweet_of) return openRetweetModal(p);
       var hero = '<div class="km-hero">' +
         '<div><div class="v">' + KS.fmtFull(p.views) + '</div><div class="l">צפיות</div></div>' +
         '<div><div class="v">' + KS.fmtFull(p.likes) + '</div><div class="l">לייקים</div></div>' +
@@ -122,9 +132,27 @@
         bodyHtml: hero + inter + cmp + openBtn
       });
     }
+    function openRetweetModal(p) {
+      var full = p.orig_views === null || p.orig_views === undefined;
+      var hero = '<div class="km-hero">' +
+        '<div><div class="v">' + KS.fmtFull(p.views) + '</div><div class="l">צפיות דרך הריטווט של כאן</div></div>' +
+        '<div><div class="v">' + (full ? "—" : KS.fmtFull(p.orig_views)) + '</div><div class="l">צפיות בציוץ המלא</div></div>' +
+        '<div><div class="v">' + (p.orig_likes === null || p.orig_likes === undefined ? "—" : KS.fmtFull(p.orig_likes)) + '</div><div class="l">לייקים בציוץ המלא</div></div></div>';
+      var note = '<div class="panel-sub" style="margin:10px 0;">ציוץ של <bdi>@' + KS.esc(p.retweet_of) + '</bdi>, בריטווט של כאן חדשות. ' +
+        'המספר הראשון הוא המונה שמגיע עם הריטווט עצמו; X לא מתעד מה בדיוק הוא סופר.' +
+        (full ? ' הריטווט נשמר לפני שהתחלנו לשמור את מספרי הציוץ המלא.' : '') + '</div>';
+      var openBtn = p.url ? '<a class="km-open" href="' + KS.esc(p.url) + '" target="_blank" rel="noopener">פתח ב-X ↗</a>' : "";
+      KS.openModal({
+        iconHtml: KS.fillIcon("x", "#fff", 17), iconBg: "#000",
+        type: "X · ריטווט", title: p.title || "(ללא טקסט)", date: KS.fmtFullDate(p.date),
+        bodyHtml: hero + note + openBtn
+      });
+    }
     function cmpFn(a, b) {
       var key = sortState.key, dir = sortState.dir === "asc" ? 1 : -1;
       if (key === "type") return dir * String(a.type || "").localeCompare(String(b.type || ""));
+      var na = a[key] === null || a[key] === undefined, nb = b[key] === null || b[key] === undefined;
+      if (na || nb) return na === nb ? 0 : (na ? 1 : -1);
       return dir * ((Number(a[key]) || 0) - (Number(b[key]) || 0));
     }
     function buildRows(list) {

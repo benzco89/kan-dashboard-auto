@@ -40,7 +40,7 @@ def distributions(data, days):
     start, end, _p1, _p2 = A._window(days)
     print("\n============ DISTRIBUTIONS - %d days (%s..%s) ============" % (days, start, end))
     for plat in A._ALERT_PLATFORMS:
-        posts = A._norm_posts(data[plat], plat, start, end)
+        posts = A._norm_posts(A._own_tweets(data[plat]) if plat == "twitter" else data[plat], plat, start, end)
         print("\n### %s  (%d posts with views>0)" % (plat, len(posts)))
         med_v = A._median([p["views"] for p in posts])
         line("views", [p["views"] for p in posts])

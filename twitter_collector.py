@@ -143,6 +143,29 @@ def classify_media(tweet):
     return "Text"
 
 
+RETWEET_COLUMNS = ["retweet_of", "orig_tweet_id", "orig_views", "orig_likes"]
+
+
+def retweet_fields(tweet):
+    """עמודות הריטווט: מי הכותב המקורי וכמה צפיות ולייקים יש לציוץ המקורי.
+
+    על ריטווט GetXAPI מחזיר עטיפה עם מונה צפיות משלה (~1,100, 0 לייקים) ואת
+    הציוץ המקורי ב-retweeted_tweet. העטיפה נשארת ב-views כמו שהייתה, והמספרים
+    של המקור - אלה שמופיעים ב-X - נשמרים כאן (ריצה 38129405158: גרובייס
+    1,106 בעטיפה מול 32,613 במקור). ציוץ רגיל מקבל עמודות ריקות.
+    """
+    orig = tweet.get("retweeted_tweet")
+    if not isinstance(orig, dict) or not orig:
+        return dict.fromkeys(RETWEET_COLUMNS, "")
+    author = orig.get("author") or {}
+    return {
+        "retweet_of": author.get("userName") or author.get("screen_name") or "",
+        "orig_tweet_id": tweet_id_of(orig),
+        "orig_views": int(orig.get("viewCount", 0) or 0),
+        "orig_likes": int(orig.get("likeCount", 0) or 0),
+    }
+
+
 def tweet_id_of(tweet):
     """חילוץ מזהה הציוץ (שדה ישיר או מתוך ה-URL)"""
     for key in ("id", "tweetId", "id_str", "rest_id"):
@@ -219,6 +242,7 @@ def fetch_twitter_data():
             "engagement_rate": engagement_rate,
             "permalink": t.get("url", "") or (f"https://x.com/{USERNAME}/status/{tid}" if tid else ""),
             "pulled_at": datetime.now(IL_TZ).strftime("%Y-%m-%d %H:%M"),
+            **retweet_fields(t),
         })
 
     print(f"📊 {len(rows)} tweets in the last {DAYS_BACK} days")
@@ -258,12 +282,17 @@ def save_to_sheets(new_df):
     if not existing_df.empty and "tweet_id" in existing_df.columns:
         new_df["tweet_id"] = new_df["tweet_id"].astype(str)
         existing_df["tweet_id"] = existing_df["tweet_id"].astype(str)
+        # get_all_records מחזיר מזהה כ-int, ו-int של 19 ספרות נכתב חזרה כמספר
+        # עשרוני ומאבד ספרות. כמו tweet_id - תמיד מחרוזת.
+        if "orig_tweet_id" in existing_df.columns:
+            existing_df["orig_tweet_id"] = existing_df["orig_tweet_id"].astype(str)
 
         # הגנה מפני כשלי API רגעיים: 0 חדש לא דורס ערך חיובי קיים
         new_df, suspicious_cols = backfill_zero_metrics(
             new_df, existing_df, key="tweet_id",
             cols=["views", "likes", "retweets", "replies", "quotes",
-                  "bookmarks", "total_engagement", "engagement_rate"]
+                  "bookmarks", "total_engagement", "engagement_rate",
+                  "orig_views", "orig_likes"]
         )
 
         # חישוב דלתא לצפיות
@@ -288,6 +317,12 @@ def save_to_sheets(new_df):
         new_df["views_delta"] = 0
         final_df = new_df
         suspicious_cols = []
+
+    # סדר עמודות: מה שכבר בגיליון נשאר במקומו, עמודות חדשות רק בסוף.
+    # בלי זה עמודות הריטווט נכנסות לפני views_delta ומזיזות אותה.
+    head = [c for c in existing_df.columns if c in final_df.columns] if not existing_df.empty else []
+    head = head or [c for c in final_df.columns if c not in RETWEET_COLUMNS]
+    final_df = final_df[head + [c for c in final_df.columns if c not in head]]
 
     # ניקוי ומיון
     final_df = final_df.sort_values(by="date", ascending=False)
