@@ -1,0 +1,35 @@
+name: Probe Twitter retweet fields (read-only)
+
+# מה GetXAPI מחזיר על ריטווט: בגיליון כל ריטווט מקבל ~1,100 צפיות ו-0 לייקים,
+# בלי קשר לציוץ המקורי. הבדיקה מדפיסה את שדות העטיפה ואת הציוץ המקונן.
+# קריאה בלבד: לא נוגע בגוגל שיטס, הפלט הגולמי ב-artifact. ידני בלבד.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run the retweet probe
+        env:
+          GETXAPI_KEY: ${{ secrets.GETXAPI_KEY }}
+        run: python twitter_retweet_probe.py
+
+      - name: Upload the raw responses
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: twitter-retweet-probe-${{ github.run_id }}
+          path: twitter_retweet_probe/
+          if-no-files-found: warn
