@@ -36,13 +36,20 @@
       '<div><div class="k">צפיות בתקופה</div><div class="v">' + KS.fmtHtml(p.views) + '</div></div></div>' +
       KS.sparkSvg(p.spark, p.color) + '</a>';
   }
+  // ריטווט: הצפיות בשורה הן מה שעבר דרך הריטווט של כאן; הציוץ המלא בשורה נפרדת
+  function rtMeta(c) {
+    if (!c.retweet_of) return "";
+    return '<span class="meta">ריטווט של <bdi>@' + KS.esc(c.retweet_of) + '</bdi> · ' +
+      (c.orig_views === null || c.orig_views === undefined ? "הציוץ המלא לא נמדד" : KS.fmt(c.orig_views) + " צפיות בציוץ המלא") + '</span>';
+  }
+
   function topRow(c, i) {
     var p = PIC[c.platform];
     return '<a class="toprow" href="' + KS.esc(c.url || "#") + '" target="_blank" rel="noopener">' +
       '<span class="rank">' + (i + 1) + '</span>' +
       '<span class="pic" style="background:' + p.c + ';">' + KS.fillIcon(p.icon, "#fff", 16) + '</span>' +
       '<span class="txt"><span class="title">' + KS.esc(c.title || "(ללא כותרת)") + '</span>' +
-      '<span class="meta">' + KS.fmt(c.views) + " צפיות · " + KS.esc(c.type) + (c.date ? " · " + KS.fmtDate(c.date) : "") + '</span></span>' +
+      '<span class="meta">' + KS.fmt(c.views) + (c.retweet_of ? " צפיות דרך הריטווט · " : " צפיות · ") + KS.esc(c.type) + (c.date ? " · " + KS.fmtDate(c.date) : "") + '</span>' + rtMeta(c) + '</span>' +
       '<span class="tag" style="color:' + p.c + ';">' + KS.esc(c.type) + '</span></a>';
   }
 

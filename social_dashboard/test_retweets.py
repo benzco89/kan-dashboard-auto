@@ -2,10 +2,13 @@
 
 Its `views` is the retweet wrapper's own counter, ~1,100 whatever the original
 did (Grovais: 1,104 here, 32,613 on X; probe run 38129405158). Ranked as Kan's
-content it filled the overview's "חלשים" list — 6 of 8 slots over 30 days.
-Now it stays out of every total, ranking and alert, and the Twitter page lists
-it apart with the original's numbers. Rows saved before `orig_views` existed
-are caught by the "RT @" prefix and show no number rather than a wrong one.
+content it filled the overview's "חלשים" list — 6 of 8 slots over 30 days —
+with a number nobody could match against X.
+The row now stays in the lists with both numbers: `views` is what came through
+Kan's retweet, `orig_views` the whole tweet. Its interactions are not Kan's
+(0 likes, the original's retweet count), so they stay out of the interaction
+totals and show as a dash. Rows saved before `orig_views` existed are caught by
+the "RT @" prefix and show no whole-tweet number rather than a wrong one.
 
     python social_dashboard/test_retweets.py
 """
@@ -55,25 +58,34 @@ check("RT mentioned mid-text is not a retweet", aggregate._is_retweet(tweet("5",
 check("_own_tweets keeps order, drops both kinds", [r["tweet_id"] for r in aggregate._own_tweets(rows)], ["1", "2"])
 check("_own_tweets on None", aggregate._own_tweets(None), [])
 
-print("the retweet row shown on the Twitter page")
-r = aggregate._retweet_row(NEW_RT)
-check("author", r["author"], "daniel_grovais")
-check("text without the RT prefix", r["title"], "תיעוד: ראש ישיבת")
-check("original's views, not the wrapper's 1,106", r["views"], 32613)
-check("original's likes", r["likes"], 276)
-r = aggregate._retweet_row(OLD_RT)
-check("old row: author from the text", r["author"], "gilicohen10")
-check("old row: no number, not the wrapper's and not 0", (r["views"], r["likes"]), (None, None))
-r = aggregate._retweet_row(tweet("6", "RT @gilicohen10: הפרויקט המלא https://t.co/RNgT2J0KDY ב-@ReshetBet https://t.co/x", 1, likes=0))
-check("links removed, so the RTL line does not flip", r["title"], "הפרויקט המלא ב-@ReshetBet")
+print("what a list row shows for a retweet")
+r = aggregate._retweet_info(NEW_RT)
+check("author", r["retweet_of"], "daniel_grovais")
+check("the whole tweet's views", r["orig_views"], 32613)
+check("the whole tweet's likes", r["orig_likes"], 276)
+r = aggregate._retweet_info(OLD_RT)
+check("old row: author from the text", r["retweet_of"], "gilicohen10")
+check("old row: no whole-tweet number, not 0", (r["orig_views"], r["orig_likes"]), (None, None))
+check("own tweet: nothing", aggregate._retweet_info(OWN_A), {"retweet_of": "", "orig_views": None, "orig_likes": None})
+check("title drops the RT prefix", aggregate._tweet_title(NEW_RT), "תיעוד: ראש ישיבת")
+check("title drops links, so the RTL line does not flip",
+      aggregate._tweet_title(tweet("6", "RT @gilicohen10: הפרויקט המלא https://t.co/RNgT2J0KDY ב-@ReshetBet https://t.co/x", 1)),
+      "הפרויקט המלא ב-@ReshetBet")
+check("own tweet title untouched, links and all", aggregate._tweet_title(tweet("7", "ידיעה https://t.co/x", 1)), "ידיעה https://t.co/x")
 
 print("build_twitter")
-data = {"twitter": rows, "followers": []}
-page = aggregate.build_twitter(data, 7)
-check("ranked table: own tweets only", sorted(p["url"][-1] for p in page["posts"]), ["1", "2"])
-check("total views: own tweets only", page["kpis"]["views"]["value"], 13000)
-check("tweet count: own tweets only", page["summary"]["total"], 2)
-check("retweets listed apart", sorted(x["author"] for x in page["retweets"]), ["daniel_grovais", "gilicohen10"])
+page = aggregate.build_twitter({"twitter": rows, "followers": []}, 7)
+by = {p["url"][-1]: p for p in page["posts"]}
+check("retweets stay in the table", sorted(by), ["1", "2", "3", "4"])
+check("retweet row: views = through Kan's retweet", by["3"]["views"], 1106)
+check("retweet row: whole tweet alongside", (by["3"]["retweet_of"], by["3"]["orig_views"]), ("daniel_grovais", 32613))
+check("retweet row: interactions are not Kan's -> None",
+      (by["3"]["likes"], by["3"]["retweets"], by["3"]["engagement"]), (None, None, None))
+check("own row: interactions kept", (by["1"]["likes"], by["1"]["retweets"]), (5, 1))
+check("views KPI counts what came through the retweets", page["kpis"]["views"]["value"], 4000 + 9000 + 1106 + 1024)
+check("likes KPI: own tweets only", page["kpis"]["likes"]["value"], 10)
+check("retweets KPI: not the originals' counts", page["kpis"]["retweets"]["value"], 2)
+check("tweet count includes retweets", page["summary"]["total"], 4)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
