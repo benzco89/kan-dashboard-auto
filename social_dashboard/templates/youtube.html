@@ -80,6 +80,14 @@
     };
     var ENG_KEY = "eng";
     var sortState = { key: ENG_KEY, dir: "desc" };
+    // CSV: every row of the table as it stands (range, filter, sort)
+    var CSV_COLS = [
+      ["תאריך", "date"], ["סוג", function (r) { return r.type === "Short" ? "Short" : "סרטון"; }], ["כותרת", "title"],
+      ["צפיות", "views"], ["לייקים", "likes"], ["תגובות", "comments"], ["% לייקים", "like_rate"], ["% תגובות", "comment_rate"],
+      ["% מעורבות", "engagement"], ["אורך", "duration"],
+      ["צפיות עד היום (בדיקה שבועית)", function (r) { return r.lifetime_checked && r.lifetime_checked !== "0" ? r.views_lifetime : ""; }],
+      ["קישור", "url"]
+    ];
     var displayList = [];
 
     function medOf(key) {
@@ -153,11 +161,12 @@
       '<div class="table"><div class="table-head"><div><div class="panel-title">סרטונים מדורגים לפי מעורבות</div>' +
       '<div class="panel-sub">' + data.summary.total + ' סרטונים · ' + rl + ' · לחצו על סרטון לפירוט מלא</div></div>' +
       '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">' +
-      '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
+      KS.csvButton("csv-export") + '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span>' +
       '<span><span class="sq" style="background:var(--hi-alt);"></span>מעורבות גבוהה</span></div></div></div>' +
       '<div class="table-scroll">' + thead + '<div id="tbl-body">' + rows + '</div></div></div>';
     KS.wireCharts();
+    document.getElementById("csv-export").addEventListener("click", function () { KS.downloadCSV("youtube", data.range, CSV_COLS, displayList); });
     function wireShowAll() {
       var sa = document.getElementById("tbl-showall");
       if (sa) sa.addEventListener("click", function () { document.getElementById("tbl-more").style.display = ""; sa.style.display = "none"; });

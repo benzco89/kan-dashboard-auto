@@ -18,6 +18,7 @@
     comment: '<path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 9 9 0 0 1-4-1L3 21l1.9-5A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/>',
     share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>',
     save: '<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
+    download: '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>',
     heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 1 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/>',
     video: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/>',
     users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>',
@@ -486,6 +487,36 @@
       'בדוק את ההרצה היומית ב-GitHub Actions.</div></div>';
   }
 
+  // ---- CSV export: the table as it stands (current range, filter and sort,
+  // every row — not just the 40 on screen). The BOM makes Excel open Hebrew as
+  // UTF-8; without it the file opens as gibberish.
+  function csvCell(v) {
+    if (v === null || v === undefined) return "";
+    var s = String(v);
+    // a caption that starts with = + - @ is a formula to Excel (tweets often
+    // open with @handle); numbers are left alone so negatives stay numbers
+    if (typeof v === "string" && /^[=+\-@]/.test(s)) s = "'" + s;
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  // cols: [[header, key | function(row)], ...]
+  function downloadCSV(name, range, cols, rows) {
+    var lines = [cols.map(function (c) { return csvCell(c[0]); }).join(",")];
+    rows.forEach(function (r) {
+      lines.push(cols.map(function (c) { return csvCell(typeof c[1] === "function" ? c[1](r) : r[c[1]]); }).join(","));
+    });
+    var today = new Date().toISOString().slice(0, 10);
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+    a.download = "kan_" + name + "_" + range + "d_" + today + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+  }
+  function csvButton(id) {
+    return '<button id="' + id + '" class="csv-btn" type="button" title="כל השורות בטווח, בסדר המיון הנוכחי">' +
+      strokeIcon("download", 14) + '<span>ייצוא CSV</span></button>';
+  }
+
   // expose helpers
   window.KanSocial = app;
   window.KS = {
@@ -493,6 +524,7 @@
     fillIcon: fillIcon, strokeIcon: strokeIcon, chart: chart, wireCharts: wireCharts, donutSvg: donutSvg, sparkSvg: sparkSvg,
     openModal: openModal, closeModal: closeModal, kmCell: kmCell, kmSection: kmSection, kmCmp: kmCmp, kmRetention: kmRetention,
     kmAnalysis: kmAnalysis, aiDot: aiDot, accountDaily: accountDaily, term: term, staleBanner: staleBanner,
+    downloadCSV: downloadCSV, csvButton: csvButton,
     RANGE_LABEL: RANGE_LABEL, FILL: FILL
   };
 })();

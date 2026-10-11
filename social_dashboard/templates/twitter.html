@@ -103,6 +103,14 @@
     var ENG_KEY = "engagement";
     // ברירת מחדל אחידה עם שאר העמודים: דירוג לפי מעורבות
     var sortState = { key: ENG_KEY, dir: "desc" };
+    // CSV: every row of the table as it stands (range, filter, sort)
+    var CSV_COLS = [
+      ["תאריך", "date"], ["סוג", function (r) { return TYPE_HE[r.type] || r.type; }], ["טקסט", "title"],
+      ["ריטווט של (חשבון)", "retweet_of"],
+      ["צפיות", "views"], ["צפיות בציוץ המלא (ריטווט)", "orig_views"],
+      ["לייקים", "likes"], ["ריטוויטים", "retweets"], ["תגובות", "replies"], ["ציטוטים", "quotes"], ["סימניות", "bookmarks"],
+      ["% מעורבות", "engagement"], ["קישור", "url"]
+    ];
     var displayList = [];
 
     function medOf(key) {
@@ -186,10 +194,11 @@
       '<div class="table"><div class="table-head"><div><div class="panel-title">ציוצים מדורגים</div>' +
       '<div class="panel-sub">' + data.summary.total + ' ציוצים · ' + rl + ' · לחצו על ציוץ לפירוט מלא</div></div>' +
       '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">' +
-      '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
+      KS.csvButton("csv-export") + '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span></div></div></div>' +
       '<div class="table-scroll">' + thead + '<div id="tbl-body">' + rows + '</div></div></div>';
     KS.wireCharts();
+    document.getElementById("csv-export").addEventListener("click", function () { KS.downloadCSV("twitter", data.range, CSV_COLS, displayList); });
     function wireShowAll() {
       var sa = document.getElementById("tbl-showall");
       if (sa) sa.addEventListener("click", function () { document.getElementById("tbl-more").style.display = ""; sa.style.display = "none"; });

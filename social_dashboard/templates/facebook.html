@@ -94,6 +94,20 @@
     };
     var ENG_KEY = "engagement";
     var sortState = { key: ENG_KEY, dir: "desc" };
+    // CSV: every row of the table as it stands (range, filter, sort)
+    var CSV_COLS = [
+      ["תאריך", "date"], ["סוג", function (r) { return ({ Reels: "ריל", Videos: "וידאו", Images: "תמונה", Links: "קישור" })[r.type] || r.type; }],
+      ["כותרת", "title"], ["רשת ב׳", function (r) { return r.reshetb ? "כן" : ""; }],
+      ["צפיות", "views"], ["חשיפה", "reach"], ["רגשות (סה״כ)", "likes"],
+      ["👍 לייק", function (r) { return (r.likes || 0) - (r.love || 0) - (r.haha || 0) - (r.wow || 0) - (r.sad || 0) - (r.angry || 0); }],
+      ["❤️ אהבתי", "love"], ["😆 חחח", "haha"], ["😮 וואו", "wow"], ["😢 עצוב", "sad"], ["😡 כועס", "angry"],
+      ["תגובות", "comments"], ["שיתופים", "shares"], ["קליקים", "clicks"], ["% הקלקה", "click_rate"], ["% מעורבות", "engagement"],
+      ["צפייה ממוצעת (שנ׳)", function (r) { return r.avg_watch || ""; }], ["אורך (שנ׳)", function (r) { return r.duration_sec || ""; }],
+      ["% נשארו אחרי 3 שנ׳", function (r) { return r.duration_sec ? r.retention_3s : ""; }],
+      ["% נשארו עד הסוף", function (r) { return r.duration_sec ? r.retention_end : ""; }],
+      ["סה״כ דקות צפייה", function (r) { return r.total_watch_min || ""; }],
+      ["קישור", "url"]
+    ];
     var displayList = [];
     var srcFilter = "all";  // all | reshetb | news
     function bySource(list) {
@@ -192,11 +206,12 @@
           '<button class="range" data-src="reshetb">🎙 רשת ב\'</button>' +
           '<button class="range" data-src="news">בלי רשת ב\'</button></div>'
         : "") +
-      '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
+      KS.csvButton("csv-export") + '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span>' +
       '<span><span class="sq" style="background:var(--hi-alt);"></span>חשיפה גבוהה</span></div></div></div>' +
       '<div class="table-scroll">' + thead + '<div id="tbl-body">' + rows + '</div></div></div>';
     KS.wireCharts();
+    document.getElementById("csv-export").addEventListener("click", function () { KS.downloadCSV("facebook", data.range, CSV_COLS, displayList); });
     function wireShowAll() {
       var sa = document.getElementById("tbl-showall");
       if (sa) sa.addEventListener("click", function () { document.getElementById("tbl-more").style.display = ""; sa.style.display = "none"; });
