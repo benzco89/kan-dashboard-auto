@@ -136,6 +136,25 @@
     }
     var rows = buildRows(posts.slice().sort(cmpFn));
 
+    // ריטווטים: ציוצים של חשבונות אחרים. המספרים הם של הציוץ המקורי (כמו ב-X),
+    // ולכן הם לא נכנסים לסיכומים ולדירוג למעלה. שורות שנשמרו לפני שהתחלנו
+    // לשמור את המקור מקבלות "—" ולא 0.
+    function retweetsHtml(list) {
+      if (!list.length) return "";
+      var rcols = "1fr 96px 80px";
+      var num = function (v) { return v === null || v === undefined ? '<span style="color:var(--faint);">—</span>' : KS.fmt(v); };
+      var body = list.map(function (r) {
+        return '<a class="trow" href="' + KS.esc(r.url || "#") + '" target="_blank" rel="noopener" style="display:grid;grid-template-columns:' + rcols + ';gap:10px;">' +
+          '<span style="min-width:0;"><span class="t-title"><bdi>@' + KS.esc(r.author) + '</bdi>: ' + KS.esc(r.title) + '</span><span class="t-date">' + KS.fmtDate(r.date) + '</span></span>' +
+          '<span class="cell strong">' + num(r.views) + '</span>' +
+          '<span class="cell">' + num(r.likes) + '</span></a>';
+      }).join("");
+      return '<div class="table mb-m" style="margin-top:14px;"><div class="table-head"><div><div class="panel-title">ריטווטים</div>' +
+        '<div class="panel-sub">' + list.length + ' ריטווטים · ' + rl + ' · המספרים של הציוץ המקורי, לא נספרים בסיכומים ובדירוג של כאן</div></div></div>' +
+        '<div class="table-scroll"><div class="thead" style="display:grid;grid-template-columns:' + rcols + ';gap:10px;"><span>ציוץ מקורי</span><span class="center">צפיות</span><span class="center">לייקים</span></div>' +
+        body + '</div></div>';
+    }
+
     document.getElementById("main").innerHTML =
       '<div class="platform-head"><span class="pf-icon" style="background:#000;">' + KS.fillIcon("x", "#fff", 22) + '</span>' +
       '<div><h1>X (Twitter) Analytics</h1><p>ניתוח ביצועי חשבון X של כאן חדשות · ' + rl + '</p></div></div>' +
@@ -160,7 +179,8 @@
       '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">' +
       '<div id="rank-toggle" class="ranges" style="padding:2px;"><button class="range active" data-rk="top">מצליחים ביותר</button><button class="range" data-rk="bottom">פחות מצליחים</button></div>' +
       '<div class="table-legend"><span><span class="sq" style="background:var(--hi-views);"></span>צפיות גבוהות</span></div></div></div>' +
-      '<div class="table-scroll">' + thead + '<div id="tbl-body">' + rows + '</div></div></div>';
+      '<div class="table-scroll">' + thead + '<div id="tbl-body">' + rows + '</div></div></div>' +
+      retweetsHtml(data.retweets || []);
     KS.wireCharts();
     function wireShowAll() {
       var sa = document.getElementById("tbl-showall");

@@ -186,6 +186,40 @@ def _ig_type(v):
     return "Reel"
 
 
+def _is_retweet(row):
+    """A retweet row is someone else's tweet. Its `views` is the retweet wrapper's
+    own counter (~1,100, 0 likes) — not the original's views, which live in
+    `orig_views` (probe run 38129405158). Rows written before that column
+    existed are recognised by the "RT @" prefix X puts on a retweet's text."""
+    return bool(str(row.get("retweet_of") or "").strip()) or str(row.get("text") or "").startswith("RT @")
+
+
+def _own_tweets(rows):
+    """Kan's own tweets only — what every total, ranking and alert counts."""
+    return [r for r in rows or [] if not _is_retweet(r)]
+
+
+def _retweet_row(p):
+    """A retweet for the Twitter page, with the ORIGINAL tweet's numbers.
+    views/likes are None, not 0, on rows saved before orig_views existed —
+    those never had the number, and 0 would read as a real result."""
+    text = p.get("text", "") or ""
+    author, body = "", text
+    if text.startswith("RT @"):
+        author, _, body = text[4:].partition(":")
+    blank = lambda v: not str(v if v is not None else "").strip()
+    return {
+        "author": str(p.get("retweet_of") or "").strip() or author,
+        # a t.co link inside Hebrew text flips the line's direction and the
+        # ellipsis eats the start of the sentence instead of the end
+        "title": re.sub(r"\s*https?://\S+", "", body).strip(),
+        "date": (_parse_date(p.get("date")) or "").__str__() if p.get("date") else "",
+        "views": None if blank(p.get("orig_views")) else _int(p.get("orig_views")),
+        "likes": None if blank(p.get("orig_likes")) else _int(p.get("orig_likes")),
+        "url": p.get("permalink", ""),
+    }
+
+
 def _tw_type(v):
     s = (v or "").strip().lower()
     if "video" in s:
@@ -337,7 +371,7 @@ def _last_data_date(data):
 
 def build_overview(data, days):
     start, end, p_start, p_end = _window(days)
-    yt, fb, ig, tw = data["youtube"], data["facebook"], data["instagram"], data["twitter"]
+    yt, fb, ig, tw = data["youtube"], data["facebook"], data["instagram"], _own_tweets(data["twitter"])
     tt = data.get("tiktok", [])
     foll = data["followers"]
 
@@ -813,9 +847,13 @@ def build_instagram(data, days):
 
 def build_twitter(data, days):
     start, end, p_start, p_end = _window(days)
-    tw = data["twitter"]
+    tw = _own_tweets(data["twitter"])
     foll = data["followers"]
     cur = _filter(tw, "date", start, end)
+    # someone else's tweets: listed apart with the original's numbers, never in
+    # Kan's totals or ranking (one of them is 428K views of another account)
+    retweets = sorted((_retweet_row(p) for p in _filter(data["twitter"], "date", start, end) if _is_retweet(p)),
+                      key=lambda r: r["date"], reverse=True)
 
     dates, series = _daily(tw, "date", ["views"], start, end)
 
@@ -880,6 +918,7 @@ def build_twitter(data, days):
             "avg_engagement": round(avg_eng, 2),
         },
         "posts": posts,
+        "retweets": retweets,
     }
 
 
@@ -1100,7 +1139,7 @@ def _viral_collect(data, start, end):
          lambda p: _num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("shares"))),
         ("youtube", data["youtube"], "video_id", "title", "published_at", "video_url",
          lambda p: _num(p.get("likes")) + _num(p.get("comments"))),
-        ("twitter", data.get("twitter", []), "tweet_id", "text", "date", "permalink",
+        ("twitter", _own_tweets(data.get("twitter", [])), "tweet_id", "text", "date", "permalink",
          lambda p: _num(p.get("likes")) + _num(p.get("retweets")) + _num(p.get("replies")) + _num(p.get("quotes"))),
         ("tiktok", data.get("tiktok", []), "video_id", "title", "date", "permalink",
          lambda p: _num(p.get("likes")) + _num(p.get("comments")) + _num(p.get("shares")) + _num(p.get("saves"))),
@@ -1518,11 +1557,12 @@ def build_alerts(data, days):
     start, end, _p1, _p2 = _window(days)
     alerts = []
     for plat in _ALERT_PLATFORMS:
-        posts = _norm_posts(data[plat], plat, start, end)
+        rows = _own_tweets(data[plat]) if plat == "twitter" else data[plat]
+        posts = _norm_posts(rows, plat, start, end)
         alerts.extend(_post_alerts(posts, plat))
         # not from `posts`: _norm_posts drops anything with 0 views, and a post
         # that vanished hours after publishing is exactly the case that has none
-        alerts.extend(_vanished_alerts(data[plat], plat))
+        alerts.extend(_vanished_alerts(rows, plat))
         if plat == "instagram":
             alerts.extend(_ig_extra_alerts(posts))
     alerts.extend(_follower_alerts(data["followers"], days))
