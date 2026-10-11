@@ -1,0 +1,43 @@
+name: Export Instagram lifetime figures (read-only)
+
+# הגיליון קופא 7 ימים אחרי הפרסום. הייצוא הזה שואל את Graph מחדש על כל פוסט
+# בטווח ומחזיר את המספרים של היום, עם אותן פונקציות של הקולקטור.
+# קריאה בלבד: לא נוגע בגוגל שיטס, הפלט JSON ב-artifact. ידני בלבד.
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: 'מתאריך פרסום (YYYY-MM-DD)'
+        required: true
+      end:
+        description: 'עד תאריך פרסום (YYYY-MM-DD, כולל)'
+        required: true
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Pull the lifetime figures
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+        run: python ig_lifetime_export.py "${{ inputs.start }}" "${{ inputs.end }}"
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ig-lifetime-${{ inputs.start }}-${{ inputs.end }}
+          path: ig_lifetime/
+          if-no-files-found: warn
