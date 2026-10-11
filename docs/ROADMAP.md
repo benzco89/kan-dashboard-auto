@@ -83,6 +83,8 @@ bigger number than the API now returns, because `views` replaced `plays` /
 `impressions` mid-history. The tail is real; the aggregate across that boundary
 is not.
 
+**Re-measured 2026-10-11 on a full window, not a sample** (`ig_lifetime_export.py`, run `38147922437`): all 932 Instagram posts of 13/07–10/10, live vs the frozen sheet value. On the 846 posts at least 8 days old the per-post median is **+3.7%** (p90 +12.9%, 4.7% of posts above +20%) — the same as the sample — but the views-weighted total is **+7.6%** (reels +7.6%, photos +6.9%, carousels +9.5%), because the posts that keep growing are the big ones. Views, reach and shares never came back lower than the sheet; **saves did on 157 posts** (median −1, i.e. people un-saving — `saved` is a current count, not a cumulative one). 5 posts in the sheet no longer exist in the API. The export took one manual run, ~1,000 calls, no rate-limit trouble.
+
 **The cost is the open question.** YouTube answers 50 videos per call; Meta wants
 one call per post — 2,793 + 2,661 ≈ 5,500 a week. The Graph batch endpoint takes
 50 sub-requests per HTTP call, which brings it to ~110. Worth building that way
