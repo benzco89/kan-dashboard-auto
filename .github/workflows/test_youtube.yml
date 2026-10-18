@@ -1,0 +1,32 @@
+name: Test YouTube Only
+
+# מריץ רק את youtube_collector.py — בלי עוקבים, בלי שאר הרשתות ובלי טלגרם.
+# בטוח להרצה חוזרת באותו יום: הקולקטור בונה מחדש את "נתוני יוטיוב" ממוזג
+# לפי video_id ואין בו עמודות דלתא שהרצה שנייה הייתה דורסת (בניגוד
+# לפייסבוק/אינסטגרם). לכן זו הדרך להשלים יום שבו שלב היוטיוב נפל
+# ב-Daily Social Update, במקום להריץ את כל ה-workflow שוב.
+on:
+  workflow_dispatch:      # מאפשר הרצה ידנית בכפתור
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run YouTube Collector
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: python youtube_collector.py
