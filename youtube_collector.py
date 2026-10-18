@@ -97,14 +97,23 @@ def fetch_videos():
         
         ids_to_fetch = []
         for item in res['items']:
-            pub = datetime.strptime(item['contentDetails']['videoPublishedAt'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
-            if pub < cutoff_date: 
+            # סרטון פרטי / מתוזמן / שנמחק יושב ברשימת ההעלאות בלי videoPublishedAt.
+            # על פריט כזה הריצה קרסה ב-18/10 — מדלגים עליו, הוא לא ציבורי עדיין.
+            published = item['contentDetails'].get('videoPublishedAt')
+            if not published:
+                continue
+            pub = datetime.strptime(published, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
+            if pub < cutoff_date:
                 should_stop = True
                 break
             ids_to_fetch.append(item['contentDetails']['videoId'])
-        
-        if not ids_to_fetch: 
-            break
+
+        if not ids_to_fetch:
+            # עמוד שכולו פריטים בלי תאריך הוא לא סוף הרשימה
+            if should_stop or 'nextPageToken' not in res:
+                break
+            next_page = res['nextPageToken']
+            continue
 
         stats_res = youtube.videos().list(part="snippet,contentDetails,statistics,topicDetails", id=','.join(ids_to_fetch)).execute()
         
