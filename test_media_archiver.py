@@ -225,10 +225,11 @@ class FakeDrive:
     def ensure_folder(self, path):
         return f"folder:{path}"
 
-    def upload(self, local_path, name, parent_id):
+    def upload(self, local_path, name, parent_id, mimetype="video/mp4"):
         if self.fail_upload:
             raise RuntimeError("drive is down")
         self.uploaded.append(name)
+        self.last = (parent_id, mimetype)
         return {"id": f"drive:{name}", "bytes": 99}
 
     def shortcut(self, target_id, name, parent_id):
@@ -266,6 +267,67 @@ drive_ok2 = FakeDrive()
 check("גיליון שנופל: הפריט מדולג",
       ma.archive_item(dict(base_item), drive_ok2, ws4, FakeGeminiOK), None)
 check("אבל הקובץ כבר בדרייב - הצד שמתאושש", len(drive_ok2.uploaded), 1)
+
+print("\nסטוריז\n")
+
+
+class _GeminiSpy:
+    calls = 0
+
+    class models:
+        @staticmethod
+        def generate_content(**kw):
+            _GeminiSpy.calls += 1
+            raise RuntimeError("should not be called for a story")
+
+
+story = {"id": "1801", "platform": ma.STORY_PLATFORM,
+         "posted": ma.datetime(2026, 10, 27, 14, 5, tzinfo=ma.pytz.utc),
+         "permalink": "https://ig/s/1", "caption": "", "duration_sec": "",
+         "media_type": "IMAGE"}
+ws_s = FakeWorksheet([ma.INDEX_HEADER])
+drive_s = FakeDrive()
+row_s = ma.archive_item(dict(story), drive_s, ws_s, _GeminiSpy)
+check("סטורי-תמונה נשמרת כ-jpg", drive_s.uploaded[0].endswith(".jpg"), True)
+check("ומועלית כ-image/jpeg", drive_s.last[1], "image/jpeg")
+check("לתיקיית הסטוריז, לא לתיקיית התאריך של הפיד",
+      drive_s.last[0].startswith(f"folder:{ma.STORY_FOLDER}/"), True)
+check("בלי קריאה ל-Gemini - אין כיתוב לסווג", _GeminiSpy.calls, 0)
+check("ובלי קיצורי דרך לתוכנית או לקטגוריה", drive_s.shortcuts, [])
+check("והשורה נכתבה עם הפלטפורמה של סטורי",
+      row_s[ma.INDEX_HEADER.index("platform")], ma.STORY_PLATFORM)
+check("סטורי-וידאו נשמרת כ-mp4",
+      ma.drive_filename(dict(story, media_type="VIDEO")).endswith(".mp4"), True)
+
+_pages = [
+    {"data": [{"id": "a", "media_type": "IMAGE",
+               "timestamp": "2026-10-27T08:00:00+0000"},
+              {"id": "b", "media_type": "VIDEO",
+               "timestamp": "2026-10-27T09:00:00+0000"}],
+     "paging": {"cursors": {"after": "C1"}, "next": "https://x"}},
+    {"data": [{"id": "c", "media_type": "CAROUSEL_ALBUM",
+               "timestamp": "2026-10-27T10:00:00+0000"},
+              {"id": "d", "media_type": "VIDEO",
+               "timestamp": "2026-10-27T11:00:00+0000"}],
+     "paging": {"cursors": {"after": "C2"}}},
+]
+_seen_after = []
+
+
+def _fake_graph(url, params=None, **kw):
+    if url.endswith("/me"):
+        return {"instagram_business_account": {"id": "IG1"}}
+    _seen_after.append((params or {}).get("after"))
+    return _pages[len(_seen_after) - 1]
+
+
+_real_http = ma.http_get_json
+ma.http_get_json = _fake_graph
+_st = ma.discover_instagram_stories()
+ma.http_get_json = _real_http
+check("גילוי סטוריז מדפדף לדף השני", _seen_after, [None, "C1"])
+check("ושומר רק תמונה ווידאו", [s["id"] for s in _st], ["a", "b", "d"])
+check("וסוג המדיה נשמר על הפריט", _st[0]["media_type"], "IMAGE")
 
 print("\nניקוי URL משגיאות\n")
 
@@ -657,6 +719,16 @@ check("שורה שהקובץ שלה נעלם מדווחת", _res["missing"], ["b
 check("קובץ בלי שורה מדווח כיתום", _res["orphans"], ["c"])
 check("שורה שנגרעה אינה ממצא", "d" in _res["missing"], False)
 check("המעבר קורא בלבד - לא נכתב דבר", len(_res["missing"]) >= 0, True)
+
+class _MimeAuditDrive:
+    def list_files(self, mime=None):
+        return {"video/mp4": [{"id": "v"}], "image/jpeg": [{"id": "j"}]}.get(mime, [])
+
+
+_mixed = ma.audit_archive(_MimeAuditDrive(),
+                          FakeWS(_audit_rows(("v", ""), ("j", ""))))
+check("סטורי-תמונה בדרייב אינה נספרת כחסרה",
+      (_mixed["missing"], _mixed["orphans"]), ([], []))
 
 _clean = ma.audit_archive(_AuditDrive(["a"]), FakeWS(_audit_rows(("a", ""))))
 check("ארכיון תקין מחזיר שתי רשימות ריקות",

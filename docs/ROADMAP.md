@@ -596,6 +596,19 @@ green (`test_content_tags.py` 28, `test_drive_store.py` 12,
 unrelated, pre-existing working-tree edit to item 14 of this file that
 `git add docs/ROADMAP.md` swept in.
 
+### 18b. Instagram Stories in the archive, and the election cadence (2026-10-27)
+Stories are archived on every run since election day: `discover_instagram_stories`
+reads `/{ig}/stories` (paginated), keeps IMAGE and VIDEO, platform
+`instagram_story`, files under `סטוריז/YYYY/MM/DD` (images as `.jpg`), no Gemini
+classification and no shortcuts — a story has no caption in the API. The API
+only shows the last 24h, so a story missed for a day is gone for good. Pruned
+after 7 days like everything else.
+
+`kan-media-archiver-election.timer` adds :05/:35 runs on 27–28 Oct and until
+11:35 on 29 Oct, on top of the two-hourly timer; its dates are hard-coded so it
+stops by itself. Remove the unit from the VPS (and the file from
+`social_dashboard/deploy/`) any time after that.
+
 ---
 
 ## Closed — do not re-open

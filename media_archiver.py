@@ -165,11 +165,15 @@ def _parse_ts(ts):
     return datetime.fromisoformat(ts).astimezone(IL_TZ)
 
 
-def discover_instagram(hours=ARCHIVE_LOOKBACK_HOURS):
-    """רילסים מהחלון. media_url **לא** נשמר על הפריט - הוא נפתר בזמן ההורדה."""
+def _ig_account_id():
     res = http_get_json(f"{BASE}/me", params={
         "access_token": ACCESS_TOKEN, "fields": "instagram_business_account"})
-    ig_id = (res.get("instagram_business_account") or {}).get("id")
+    return (res.get("instagram_business_account") or {}).get("id")
+
+
+def discover_instagram(hours=ARCHIVE_LOOKBACK_HOURS):
+    """רילסים מהחלון. media_url **לא** נשמר על הפריט - הוא נפתר בזמן ההורדה."""
+    ig_id = _ig_account_id()
     if not ig_id:
         print("⚠️ לא הצלחתי לזהות את חשבון האינסטגרם")
         return []
@@ -206,6 +210,51 @@ def discover_instagram(hours=ARCHIVE_LOOKBACK_HOURS):
         if oldest_in_page is not None and oldest_in_page > cutoff:
             print(f"⚠️ אינסטגרם: הדף הכיל {len(data)} פריטים וכולם חדשים "
                   f"מהחיתוך - החלון של {hours} שעות לא כוסה במלואו (תוצאה חלקית)")
+    return out
+
+
+# סטוריז נכנסו לארכיון ביום הבחירות, 2026-10-27. הן נשמרות בתיקייה משלהן
+# ובלי סיווג Gemini: לסטורי אין כיתוב ב-API, אז אין על מה לסווג.
+STORY_PLATFORM = "instagram_story"
+STORY_FOLDER = "סטוריז"
+
+
+def discover_instagram_stories():
+    """הסטוריז שחיות עכשיו - תמונות וגם וידאו. אין כאן חלון שעות.
+
+    ה-API מחזיר רק סטוריז מ-24 השעות האחרונות, ואחרי זה הן נעלמות ממנו
+    לתמיד: סטורי שלא נמשכה תוך יממה אבודה. זה המרווח היחיד כאן - 12 ריצות
+    ביום רגיל. כן מדפדפים: ביום עמוס יש יותר סטוריז מדף אחד, ובניגוד לפיד
+    אין חלון שעות שמגביל כמה דפים יהיו.
+    """
+    ig_id = _ig_account_id()
+    if not ig_id:
+        print("⚠️ לא הצלחתי לזהות את חשבון האינסטגרם (סטוריז)")
+        return []
+    url = f"{BASE}/{ig_id}/stories"
+    params = {"access_token": ACCESS_TOKEN,
+              "fields": "id,media_type,timestamp,permalink", "limit": 100}
+    out = []
+    for _ in range(10):
+        res = http_get_json(url, params=params)
+        for m in res.get("data", []):
+            if m.get("media_type") not in ("VIDEO", "IMAGE"):
+                continue
+            try:
+                posted = _parse_ts(m.get("timestamp"))
+            except (ValueError, TypeError):
+                continue
+            out.append({
+                "id": str(m["id"]), "platform": STORY_PLATFORM,
+                "posted": posted, "permalink": m.get("permalink", ""),
+                "caption": "", "duration_sec": "",
+                "media_type": m["media_type"],
+            })
+        paging = res.get("paging") or {}
+        after = (paging.get("cursors") or {}).get("after")
+        if not paging.get("next") or not after:
+            break
+        params = dict(params, after=after)
     return out
 
 
@@ -329,7 +378,16 @@ def download_media(item, dest):
 def drive_filename(item):
     """תאריך, שעה, פלטפורמה ומזהה - כדי שקובץ יהיה מזוהה גם מחוץ לתיקייה שלו."""
     return (f"{item['posted'].strftime('%Y-%m-%d_%H%M')}_"
-            f"{item['platform']}_{item['id']}.mp4")
+            f"{item['platform']}_{item['id']}{media_ext(item)}")
+
+
+def media_ext(item):
+    """רק סטורי יכולה להיות תמונה - הפיד וטיקטוק מסוננים לווידאו בגילוי."""
+    return ".jpg" if item.get("media_type") == "IMAGE" else ".mp4"
+
+
+def media_mime(item):
+    return "image/jpeg" if media_ext(item) == ".jpg" else "video/mp4"
 
 
 def drive_url(file_id):
@@ -507,11 +565,16 @@ def archive_item(item, drive, ws, client):
         download_media(item, local)
         probe = probe_media(local)
 
+        is_story = item["platform"] == STORY_PLATFORM
         date_path = item["posted"].strftime("%Y/%m/%d")
-        upload = drive.upload(local, name, drive.ensure_folder(date_path))
+        if is_story:
+            date_path = f"{STORY_FOLDER}/{date_path}"
+        upload = drive.upload(local, name, drive.ensure_folder(date_path),
+                              mimetype=media_mime(item))
 
         tags = tag_item(item.get("caption"), item["platform"])
-        topic = classify_topic(client, item, tags["program"])
+        topic = (None if is_story
+                 else classify_topic(client, item, tags["program"]))
 
         folders = []
         if tags["program"]:
@@ -540,16 +603,28 @@ def archive_item(item, drive, ws, client):
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def run_archive(sh, drive, client, hours=ARCHIVE_LOOKBACK_HOURS):
-    ws, known = get_index(sh)
-    print(f"📋 {len(known)} פריטים כבר בארכיון")
-
+def discover_all(hours):
+    """הפיד חובה; טיקטוק וסטוריז best-effort - כשל שלהם לא מפיל את הריצה."""
     found = discover_instagram(hours)
     try:
         found += discover_tiktok(hours)
     except Exception as e:   # ספק לא-רשמי, best-effort - לא מפיל את אינסטגרם
         print(f"⚠️ משיכת טיקטוק נכשלה (מדלג): {_safe_exc_str(e)[:120]}")
-    print(f"🔎 {len(found)} סרטונים בחלון של {hours} שעות")
+    try:
+        stories = discover_instagram_stories()
+        print(f"📱 {len(stories)} סטוריז חיות")
+        found += stories
+    except Exception as e:
+        print(f"⚠️ משיכת סטוריז נכשלה (מדלג): {_safe_exc_str(e)[:120]}")
+    return found
+
+
+def run_archive(sh, drive, client, hours=ARCHIVE_LOOKBACK_HOURS):
+    ws, known = get_index(sh)
+    print(f"📋 {len(known)} פריטים כבר בארכיון")
+
+    found = discover_all(hours)
+    print(f"🔎 {len(found)} פריטים בחלון של {hours} שעות")
 
     fresh = filter_new(found, known)
     if not fresh:
@@ -692,7 +767,9 @@ def audit_archive(drive, ws):
         if r[i_file].strip() and not r[i_del].strip():
             live.add(r[i_file].strip())
 
-    on_drive = {f["id"] for f in drive.list_files(mime="video/mp4")}
+    # תמונות סטורי הן jpeg; בלעדיהן כל שורה של סטורי-תמונה הייתה "חסרה".
+    on_drive = {f["id"] for mime in ("video/mp4", "image/jpeg")
+                for f in drive.list_files(mime=mime)}
     missing = sorted(live - on_drive)
     orphans = sorted(on_drive - live)
     print(f"🔎 שלמות: {len(live)} שורות חיות, {len(on_drive)} קבצים בדרייב")
@@ -908,11 +985,7 @@ def main():
 
         if args.dry_run:
             known = peek_index(sh)
-            found = discover_instagram(args.hours)
-            try:
-                found += discover_tiktok(args.hours)
-            except Exception as e:
-                print(f"⚠️ משיכת טיקטוק נכשלה: {_safe_exc_str(e)[:120]}")
+            found = discover_all(args.hours)
             fresh = filter_new(found, known)
             print(f"\n🧪 מצב יבש: {len(found)} בחלון, {len(fresh)} חדשים")
             for i in fresh:

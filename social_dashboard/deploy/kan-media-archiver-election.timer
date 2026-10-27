@@ -1,0 +1,16 @@
+[Unit]
+Description=Election 2026: archive new video every 30 minutes, 27-29 Oct only
+
+[Timer]
+# Temporary, on top of kan-media-archiver.timer (which keeps its two-hourly
+# :20 runs). Same service, so the same dispatch and the same concurrency guard
+# in media_archiver.yml - overlapping runs queue, they never run in parallel.
+# Dates are hard-coded so it stops by itself; nothing to remember to undo.
+# Cost: a run that finds nothing new is three API calls (~$0.001 TikHub).
+Unit=kan-media-archiver.service
+OnCalendar=2026-10-27,28 *:05,35:00 Asia/Jerusalem
+OnCalendar=2026-10-29 00..11:05,35:00 Asia/Jerusalem
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

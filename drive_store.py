@@ -111,9 +111,9 @@ class DriveStore:
             body["parents"] = [parent]
         return self.svc.files().create(body=body, fields="id").execute()["id"]
 
-    def upload(self, local_path, name, parent_id):
+    def upload(self, local_path, name, parent_id, mimetype="video/mp4"):
         """העלאה מתחדשת (resumable) - קבצים כאן מגיעים לעשרות מגהבייט."""
-        media = MediaFileUpload(local_path, mimetype="video/mp4", resumable=True)
+        media = MediaFileUpload(local_path, mimetype=mimetype, resumable=True)
         res = self.svc.files().create(
             body={"name": name, "parents": [parent_id]},
             media_body=media, fields="id,size").execute()
