@@ -59,7 +59,12 @@ jobs:
       # ffprobe is not on the runner image (probe_fb_reel.yml found out the
       # hard way). Without it every row simply lacks width/height/kbps and
       # reconcile marks no preferred copy - the archive itself is unaffected.
+      # apt נתקע לפעמים חצי שעה (08:20 ב-2026-10-27: 35 דקות על השלב הזה
+      # לבד), וזה חוסם את התור כולו - concurrency מחזיק כל ריצה אחרת מאחוריו.
+      # הארכוב לא תלוי ב-ffprobe, אז עדיף ריצה בלי מדידה מאשר ריצה שלא קרתה.
       - name: Install ffmpeg
+        timeout-minutes: 3
+        continue-on-error: true
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
 
       - name: Run Media Archiver
