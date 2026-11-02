@@ -1,0 +1,32 @@
+name: Fetch post thumbnails (manual)
+
+# מוריד תמונות של פוסטים בפייסבוק ובאינסטגרם לדוח, עם ה-FACEBOOK_TOKEN של הפייפליין,
+# ומעלה אותן כ-artifact. קריאה בלבד: לא נוגע בגיליונות ולא בטלגרם.
+
+on:
+  workflow_dispatch:
+    inputs:
+      wanted:
+        description: "JSON list of posts to fetch (path in repo)"
+        required: true
+        default: "analysis/elections_2026/thumbs/wanted.json"
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+      - name: Fetch thumbnails
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+        run: python fetch_post_thumbs.py "${{ inputs.wanted }}" thumbs_out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: post-thumbs
+          path: thumbs_out
+          retention-days: 7
